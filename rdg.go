@@ -119,6 +119,7 @@ func (s RdgSession) RdgHandshake(next http.Handler) http.Handler {
 			rw.Writer.Flush()
 		} else if r.Method == MethodRDGIN {
 			if s.ConnIn == nil {
+				defer conn.Close()
 				s.ConnIn = conn
 				s.BufIn = rw.Reader
 				log.Printf("Opening RDGIN for client %s", conn.RemoteAddr().String())
@@ -148,7 +149,7 @@ func (s RdgSession) RdgHandshake(next http.Handler) http.Handler {
 					case PKT_TYPE_CHANNEL_CREATE:
 						server, port := readChannelCreateRequest(packet)
 						var err error
-						s.Remote, err = net.Dial("tcp", "localhost:3389")
+						s.Remote, err = net.Dial("tcp", net.JoinHostPort(server, strconv.Itoa(int(port))))
 						if err != nil {
 							log.Printf("Error connecting to %s, %d, %s", server, port, err)
 							return
@@ -246,9 +247,11 @@ func readCreateTunnelRequest(data []byte) (caps uint32, cookie string){
 	if fields == HTTP_TUNNEL_PACKET_FIELD_PAA_COOKIE {
 		var size uint16
 		binary.Read(r, binary.LittleEndian, &size)
-		// skip decoding paa for now
+		cookieB := make([]byte, size)
+		r.Read(cookieB)
+		cookie, _ = DecodeUTF16(cookieB)
 	}
-	log.Printf("Create tunnel caps: %d", caps)
+	log.Printf("Create tunnel caps: %d, cookie: %s", caps, cookie)
 	return
 }
 
@@ -354,6 +357,7 @@ func receiveDataPacket(conn net.Conn, data []byte) {
 }
 
 func sendDataPacket(conn net.Conn, w *bufio.Writer) {
+	defer conn.Close()
 	b1 := new(bytes.Buffer)
 	buf := make([]byte, 32767)
 	for {
