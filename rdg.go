@@ -155,9 +155,9 @@ func (s RdgSession) RdgHandshake(next http.Handler) http.Handler {
 							return
 						}
 						sendChannelCreateResponse(s.BufOut)
+						go sendDataPacket(s.Remote, s.BufOut)
 					case PKT_TYPE_DATA:
 						receiveDataPacket(s.Remote, packet)
-						go sendDataPacket(s.Remote, s.BufOut)
 					}
 				}
 			}
