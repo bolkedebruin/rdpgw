@@ -226,7 +226,7 @@ func handleWebsocketProtocol(conn *websocket.Conn)  {
 			remote.Close()
 			return
 		default:
-			log.Printf("Unknown packet type: %d (size: %d), %x", pt, sz)
+			log.Printf("Unknown packet type: %d (size: %d), %x", pt, sz, pkt)
 		}
 	}
 }
@@ -323,7 +323,7 @@ func handleLegacyProtocol(w http.ResponseWriter, r *http.Request) {
 					remote.Close()
 					break
 				default:
-					log.Printf("UNKNOWN PACKET (%d): %x", n, packet)
+					log.Printf("Unknown packet (size %d): %x", n, packet)
 				}
 			}
 		}
