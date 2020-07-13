@@ -41,10 +41,10 @@ func main() {
 	cfg.Certificates = append(cfg.Certificates, cert)
 	server := http.Server{
 		Addr:      ":" + strconv.Itoa(*port),
-		Handler:   Upgrade(nil),
 		TLSConfig: cfg,
 	}
-
+	http.HandleFunc("/remoteDesktopGateway/", handleGatewayProtocol)
+	
 	err = server.ListenAndServeTLS("", "")
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
