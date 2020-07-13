@@ -220,7 +220,8 @@ func handleWebsocketProtocol(conn *websocket.Conn)  {
 		case PKT_TYPE_DATA:
 			forwardDataPacket(remote, pkt)
 		case PKT_TYPE_KEEPALIVE:
-			conn.WriteMessage(mt, createPacket(PKT_TYPE_KEEPALIVE, []byte{}))
+			// do not write to make sure we do not create concurrency issues
+			// conn.WriteMessage(mt, createPacket(PKT_TYPE_KEEPALIVE, []byte{}))
 		case PKT_TYPE_CLOSE_CHANNEL:
 			remote.Close()
 			return
@@ -314,7 +315,8 @@ func handleLegacyProtocol(w http.ResponseWriter, r *http.Request) {
 				case PKT_TYPE_DATA:
 					forwardDataPacket(remote, packet)
 				case PKT_TYPE_KEEPALIVE:
-					s.ConnOut.Write(createPacket(PKT_TYPE_KEEPALIVE, []byte{}))
+					// avoid concurrency issues
+					// s.ConnOut.Write(createPacket(PKT_TYPE_KEEPALIVE, []byte{}))
 				case PKT_TYPE_CLOSE_CHANNEL:
 					s.ConnIn.Close()
 					s.ConnOut.Close()
