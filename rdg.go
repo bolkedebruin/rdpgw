@@ -619,8 +619,6 @@ func DecodeUTF16(b []byte) (string, error) {
 		return "", fmt.Errorf("must have even length byte slice")
 	}
 
-	b, _ = dropCR(b)
-	
 	u16s := make([]uint16, 1)
 	ret := &bytes.Buffer{}
 	b8buf := make([]byte, 4)
@@ -633,7 +631,11 @@ func DecodeUTF16(b []byte) (string, error) {
 		ret.Write(b8buf[:n])
 	}
 
-	return ret.String(), nil
+	bret := ret.Bytes()
+	if len(bret) > 0 && bret[len(bret)-1] == '\x00' {
+		bret = bret[:len(bret)-1]
+	}
+	return string(bret), nil
 }
 
 // UTF-16 endian byte order
