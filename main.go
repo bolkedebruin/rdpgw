@@ -3,6 +3,8 @@ package main
 import (
 	"crypto/tls"
 	"flag"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/prometheus/client_golang/prometheus"
 	"log"
 	"net/http"
 	"os"
@@ -42,9 +44,16 @@ func main() {
 	server := http.Server{
 		Addr:      ":" + strconv.Itoa(*port),
 		TLSConfig: cfg,
+		TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler)), // disable http2
 	}
+
 	http.HandleFunc("/remoteDesktopGateway/", handleGatewayProtocol)
-	
+	http.Handle("/metrics", promhttp.Handler())
+
+	prometheus.MustRegister(connectionCache)
+	prometheus.MustRegister(legacyConnections)
+	prometheus.MustRegister(websocketConnections)
+
 	err = server.ListenAndServeTLS("", "")
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)

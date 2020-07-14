@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"github.com/gorilla/websocket"
 	"github.com/patrickmn/go-cache"
+	"github.com/prometheus/client_golang/prometheus"
 	"io"
 	"log"
 	"math/rand"
@@ -15,7 +16,6 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"strconv"
-
 	"time"
 	"unicode/utf16"
 	"unicode/utf8"
@@ -84,6 +84,29 @@ const (
 	HTTP_TUNNEL_PACKET_FIELD_PAA_COOKIE = 0x1
 )
 
+var (
+	connectionCache = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Namespace: "rdpgw",
+			Name:      "connection_cache",
+			Help:      "The amount of connections in the cache",
+		})
+
+	websocketConnections = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Namespace: "rdpgw",
+			Name:      "websocket_connections",
+			Help:      "The count of websocket connections",
+		})
+
+	legacyConnections = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Namespace: "rdpgw",
+			Name:      "legacy_connections",
+			Help:      "The count of legacy https connections",
+		})
+)
+
 // HandshakeHeader is the interface that writes both upgrade request or
 // response headers into a given io.Writer.
 type HandshakeHeader interface {
@@ -129,6 +152,7 @@ var upgrader = websocket.Upgrader{}
 var c = cache.New(5*time.Minute, 10*time.Minute)
 
 func handleGatewayProtocol(w http.ResponseWriter, r *http.Request) {
+	connectionCache.Set(float64(c.ItemCount()))
 	if r.Method == MethodRDGOUT {
 		if r.Header.Get("Connection") != "upgrade" && r.Header.Get("Upgrade") != "websocket" {
 			handleLegacyProtocol(w, r)
@@ -154,6 +178,9 @@ func handleWebsocketProtocol(conn *websocket.Conn) {
 	index := 0
 
 	var remote net.Conn
+
+	websocketConnections.Inc()
+	defer websocketConnections.Dec()
 
 	for {
 		mt, msg, err := conn.ReadMessage()
@@ -217,8 +244,7 @@ func handleWebsocketProtocol(conn *websocket.Conn) {
 			// do not write to make sure we do not create concurrency issues
 			// conn.WriteMessage(mt, createPacket(PKT_TYPE_KEEPALIVE, []byte{}))
 		case PKT_TYPE_CLOSE_CHANNEL:
-			remote.Close()
-			return
+			break
 		default:
 			log.Printf("Unknown packet type: %d (size: %d), %x", pt, sz, pkt)
 		}
@@ -252,6 +278,9 @@ func handleLegacyProtocol(w http.ResponseWriter, r *http.Request) {
 
 		c.Set(connId, s, cache.DefaultExpiration)
 	} else if r.Method == MethodRDGIN {
+		legacyConnections.Inc()
+		defer legacyConnections.Dec()
+
 		var remote net.Conn
 
 		conn, rw, _ := Accept(w)
@@ -314,7 +343,6 @@ func handleLegacyProtocol(w http.ResponseWriter, r *http.Request) {
 				case PKT_TYPE_CLOSE_CHANNEL:
 					s.ConnIn.Close()
 					s.ConnOut.Close()
-					remote.Close()
 					break
 				default:
 					log.Printf("Unknown packet (size %d): %x", n, packet)
