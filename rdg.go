@@ -154,10 +154,10 @@ var c = cache.New(5*time.Minute, 10*time.Minute)
 func handleGatewayProtocol(w http.ResponseWriter, r *http.Request) {
 	connectionCache.Set(float64(c.ItemCount()))
 	if r.Method == MethodRDGOUT {
-		//if r.Header.Get("Connection") != "upgrade" && r.Header.Get("Upgrade") != "websocket" {
+		if r.Header.Get("Connection") != "upgrade" && r.Header.Get("Upgrade") != "websocket" {
 			handleLegacyProtocol(w, r)
 			return
-		//}
+		}
 		r.Method = "GET" // force
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
