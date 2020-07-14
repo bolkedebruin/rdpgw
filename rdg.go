@@ -619,6 +619,8 @@ func DecodeUTF16(b []byte) (string, error) {
 		return "", fmt.Errorf("must have even length byte slice")
 	}
 
+	b, _ = dropCR(b)
+	
 	u16s := make([]uint16, 1)
 	ret := &bytes.Buffer{}
 	b8buf := make([]byte, 4)
@@ -632,4 +634,43 @@ func DecodeUTF16(b []byte) (string, error) {
 	}
 
 	return ret.String(), nil
+}
+
+// UTF-16 endian byte order
+const (
+	unknownEndian = iota
+	bigEndian
+	littleEndian
+)
+
+// dropCREndian drops a terminal \r from the endian data.
+func dropCREndian(data []byte, t1, t2 byte) []byte {
+	if len(data) > 1 {
+		if data[len(data)-2] == t1 && data[len(data)-1] == t2 {
+			return data[0 : len(data)-2]
+		}
+	}
+	return data
+}
+
+// dropCRBE drops a terminal \r from the big endian data.
+func dropCRBE(data []byte) []byte {
+	return dropCREndian(data, '\x00', '\r')
+}
+
+// dropCRLE drops a terminal \r from the little endian data.
+func dropCRLE(data []byte) []byte {
+	return dropCREndian(data, '\r', '\x00')
+}
+
+// dropCR drops a terminal \r from the data.
+func dropCR(data []byte) ([]byte, int) {
+	var endian = unknownEndian
+	switch ld := len(data); {
+	case ld != len(dropCRLE(data)):
+		endian = littleEndian
+	case ld != len(dropCRBE(data)):
+		endian = bigEndian
+	}
+	return data, endian
 }
