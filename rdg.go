@@ -228,7 +228,7 @@ func handleWebsocketProtocol(conn *websocket.Conn) {
 			conn.WriteMessage(mt, msg)
 		case PKT_TYPE_CHANNEL_CREATE:
 			server, port := readChannelCreateRequest(pkt)
-			log.Printf("Establishing connection to RDP server: %s on port %d", server, port)
+			log.Printf("Establishing connection to RDP server: %s on port %d (%x)", server, port, server)
 			remote, err = net.DialTimeout(
 				"tcp",
 				net.JoinHostPort(server, strconv.Itoa(int(port))),
@@ -354,7 +354,7 @@ func handleLegacyProtocol(w http.ResponseWriter, r *http.Request) {
 					s.ConnOut.Write(msg)
 				case PKT_TYPE_CHANNEL_CREATE:
 					server, port := readChannelCreateRequest(pkt)
-					log.Printf("Establishing connection to RDP server: %s on port %d", server, port)
+					log.Printf("Establishing connection to RDP server: %s on port %d (%x)", server, port, server)
 					remote, err = net.DialTimeout(
 						"tcp",
 						net.JoinHostPort(server, strconv.Itoa(int(port))),
