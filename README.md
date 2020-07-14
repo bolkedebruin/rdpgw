@@ -17,10 +17,14 @@ including access policies.
 * Integrate Open Policy Agent
 * Integrate GOKRB5
 * Integrate uber-go/zap
+* Integrate prometheus
 * Research: TLS defragmentation 
 
 ## How to build
 go build rdg.go main.go http.go errors.go
 
 ## How to run
+Make sure you have a certificate and key file available. You can call those server.pem and key.pem and 
+put them in the same directory as your executable.
+
 ./rdg
