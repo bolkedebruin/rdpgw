@@ -188,7 +188,6 @@ func handleWebsocketProtocol(conn *websocket.Conn) {
 			log.Printf("Error read: %s", err)
 			break
 		}
-		log.Printf("Message type: %d, message: %x", mt, msg)
 
 		// check for fragments
 		var pt uint16
@@ -199,14 +198,14 @@ func handleWebsocketProtocol(conn *websocket.Conn) {
 			pt, sz, pkt, err = readHeader(msg)
 			if err != nil {
 				// fragment received
-				log.Printf("Received non websocket fragment")
+				// log.Printf("Received non websocket fragment")
 				fragment = true
 				index = copy(buf, msg)
 				continue
 			}
 			index = 0
 		} else {
-			log.Printf("Dealing with fragment")
+			//log.Printf("Dealing with fragment")
 			fragment = false
 			pt, sz, pkt, _ = readHeader(append(buf[:index], msg...))
 		}
@@ -229,11 +228,16 @@ func handleWebsocketProtocol(conn *websocket.Conn) {
 			conn.WriteMessage(mt, msg)
 		case PKT_TYPE_CHANNEL_CREATE:
 			server, port := readChannelCreateRequest(pkt)
-			remote, err = net.Dial("tcp", net.JoinHostPort(server, strconv.Itoa(int(port))))
+			log.Printf("Establishing connection to RDP server: %s on port %d", server, port)
+			remote, err = net.DialTimeout(
+				"tcp",
+				net.JoinHostPort(server, strconv.Itoa(int(port))),
+				time.Second * 15)
 			if err != nil {
 				log.Printf("Error connecting to %s, %d, %s", server, port, err)
 				return
 			}
+			log.Printf("Connection established")
 			msg := createChannelCreateResponse()
 			log.Printf("Create channel create response: %x", msg)
 			conn.WriteMessage(mt, msg)
@@ -325,19 +329,16 @@ func handleLegacyProtocol(w http.ResponseWriter, r *http.Request) {
 					pt, sz, pkt, err = readHeader(msg[:n])
 					if err != nil {
 						// fragment received
-						log.Printf("Received non websocket fragment")
 						fragment = true
 						index = copy(buf, msg[:n])
 						continue
 					}
 					index = 0
 				} else {
-					log.Printf("Dealing with fragment")
 					fragment = false
 					pt, sz, pkt, _ = readHeader(append(buf[:index], msg[:n]...))
 				}
 
-				log.Printf("Scanned packet got packet type %x size %d", pt, sz)
 				switch pt {
 				case PKT_TYPE_HANDSHAKE_REQUEST:
 					major, minor, _, auth := readHandshake(pkt)
@@ -353,12 +354,16 @@ func handleLegacyProtocol(w http.ResponseWriter, r *http.Request) {
 					s.ConnOut.Write(msg)
 				case PKT_TYPE_CHANNEL_CREATE:
 					server, port := readChannelCreateRequest(pkt)
-					var err error
-					remote, err = net.Dial("tcp", net.JoinHostPort(server, strconv.Itoa(int(port))))
+					log.Printf("Establishing connection to RDP server: %s on port %d", server, port)
+					remote, err = net.DialTimeout(
+						"tcp",
+						net.JoinHostPort(server, strconv.Itoa(int(port))),
+						time.Second * 15)
 					if err != nil {
 						log.Printf("Error connecting to %s, %d, %s", server, port, err)
 						return
 					}
+					log.Printf("Connection established")
 					msg := createChannelCreateResponse()
 					s.ConnOut.Write(msg)
 
@@ -577,10 +582,10 @@ func handleWebsocketData(rdp net.Conn, mt int, conn *websocket.Conn) {
 	defer rdp.Close()
 	b1 := new(bytes.Buffer)
 	buf := make([]byte, 4086)
+
 	for {
 		n, err := rdp.Read(buf)
 		binary.Write(b1, binary.LittleEndian, uint16(n))
-		log.Printf("RDP SIZE: %d", n)
 		if err != nil {
 			log.Printf("Error reading from conn %s", err)
 			break
