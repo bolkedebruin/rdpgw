@@ -217,7 +217,11 @@ func handleWebsocketProtocol(conn *websocket.Conn) {
 			log.Printf("Handshake response: %x", msg)
 			conn.WriteMessage(mt, msg)
 		case PKT_TYPE_TUNNEL_CREATE:
-			readCreateTunnelRequest(pkt)
+			_, cookie := readCreateTunnelRequest(pkt)
+			if _, found := tokens.Get(cookie); found == false {
+				log.Printf("Invalid PAA cookie: %s from %s", cookie, conn.RemoteAddr())
+				return
+			}
 			msg := createTunnelResponse()
 			log.Printf("Create tunnel response: %x", msg)
 			conn.WriteMessage(mt, msg)
