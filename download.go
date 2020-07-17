@@ -77,12 +77,6 @@ func handleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	q, err := json.MarshalIndent(resp, "", "    ")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
 	var data map[string]interface{}
 	if err := json.Unmarshal(*resp.IDTokenClaims, &data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
