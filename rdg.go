@@ -225,7 +225,7 @@ func handleWebsocketProtocol(conn *websocket.Conn) {
 				log.Printf("Invalid PAA cookie: %s from %s", cookie, conn.RemoteAddr())
 				return
 			}
-			host = strings.Replace(hostTemplate, "%%", data.(string), 1)
+			host = strings.Replace(conf.Server.HostTemplate, "%%", data.(string), 1)
 			msg := createTunnelResponse()
 			log.Printf("Create tunnel response: %x", msg)
 			conn.WriteMessage(mt, msg)
@@ -236,7 +236,7 @@ func handleWebsocketProtocol(conn *websocket.Conn) {
 			conn.WriteMessage(mt, msg)
 		case PKT_TYPE_CHANNEL_CREATE:
 			server, port := readChannelCreateRequest(pkt)
-			if overrideHost == true {
+			if conf.Server.EnableOverride == true {
 				log.Printf("Override allowed")
 				host = net.JoinHostPort(server, strconv.Itoa(int(port)))
 			}

@@ -8,10 +8,13 @@ import (
 	"golang.org/x/oauth2"
 	"log"
 	"math/rand"
+	"net"
 	"net/http"
 	"strings"
 	"time"
 )
+
+const state = "thisismystatebutshouldberandom"
 
 func handleRdpDownload(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie("RDPGWSESSIONV1")
@@ -38,7 +41,7 @@ func handleRdpDownload(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/x-rdp")
 	http.ServeContent(w, r, fn, time.Now(), strings.NewReader(
 		"full address:s:" + host + "\r\n"+
-			"gatewayhostname:s:" + gateway +"\r\n"+
+			"gatewayhostname:s:" + net.JoinHostPort(conf.Server.GatewayAddress, string(conf.Server.Port)) +"\r\n"+
 			"gatewaycredentialssource:i:5\r\n"+
 			"gatewayusagemethod:i:1\r\n"+
 			"gatewayaccesstoken:s:" + cookie.Value + "\r\n"))
@@ -95,7 +98,8 @@ func handleCallback(w http.ResponseWriter, r *http.Request) {
 		HttpOnly: true,
 	}
 
-	tokens.Set(token, data[claim].(string), cache.DefaultExpiration)
+	// TODO: make dynamic
+	tokens.Set(token, data["preferred_username"].(string), cache.DefaultExpiration)
 
 	http.SetCookie(w, &cookie)
 	http.Redirect(w, r, "/connect", http.StatusFound)
