@@ -27,6 +27,8 @@ func handleRdpDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	host := strings.Replace(viper.GetString("hostTemplate"), "%%", data.(string), 1)
+
 	// authenticated
 	seed := make([]byte, 16)
 	rand.Read(seed)
