@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"strconv"
+	"strings"
 	"time"
 	"unicode/utf16"
 	"unicode/utf8"
@@ -182,6 +183,7 @@ func handleWebsocketProtocol(conn *websocket.Conn) {
 	websocketConnections.Inc()
 	defer websocketConnections.Dec()
 
+	var host string
 	for {
 		mt, msg, err := conn.ReadMessage()
 		if err != nil {
@@ -218,10 +220,12 @@ func handleWebsocketProtocol(conn *websocket.Conn) {
 			conn.WriteMessage(mt, msg)
 		case PKT_TYPE_TUNNEL_CREATE:
 			_, cookie := readCreateTunnelRequest(pkt)
-			if _, found := tokens.Get(cookie); found == false {
+			data, found := tokens.Get(cookie)
+			if found == false {
 				log.Printf("Invalid PAA cookie: %s from %s", cookie, conn.RemoteAddr())
 				return
 			}
+			host = strings.Replace(hostTemplate, "%%", data.(string), 1)
 			msg := createTunnelResponse()
 			log.Printf("Create tunnel response: %x", msg)
 			conn.WriteMessage(mt, msg)
@@ -232,13 +236,17 @@ func handleWebsocketProtocol(conn *websocket.Conn) {
 			conn.WriteMessage(mt, msg)
 		case PKT_TYPE_CHANNEL_CREATE:
 			server, port := readChannelCreateRequest(pkt)
-			log.Printf("Establishing connection to RDP server: %s on port %d (%x)", server, port, server)
+			if overrideHost == true {
+				log.Printf("Override allowed")
+				host = net.JoinHostPort(server, strconv.Itoa(int(port)))
+			}
+			log.Printf("Establishing connection to RDP server: %s", host)
 			remote, err = net.DialTimeout(
 				"tcp",
-				net.JoinHostPort(server, strconv.Itoa(int(port))),
-				time.Second * 15)
+				host,
+				time.Second * 30)
 			if err != nil {
-				log.Printf("Error connecting to %s, %d, %s", server, port, err)
+				log.Printf("Error connecting to %s", host)
 				return
 			}
 			log.Printf("Connection established")
@@ -349,7 +357,11 @@ func handleLegacyProtocol(w http.ResponseWriter, r *http.Request) {
 					msg := handshakeResponse(major, minor, auth)
 					s.ConnOut.Write(msg)
 				case PKT_TYPE_TUNNEL_CREATE:
-					readCreateTunnelRequest(pkt)
+					_, cookie := readCreateTunnelRequest(pkt)
+					if _, found := tokens.Get(cookie); found == false {
+						log.Printf("Invalid PAA cookie: %s from %s", cookie, conn.RemoteAddr())
+						return
+					}
 					msg := createTunnelResponse()
 					s.ConnOut.Write(msg)
 				case PKT_TYPE_TUNNEL_AUTH:
