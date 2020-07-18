@@ -52,6 +52,7 @@ openId:
 caps:
  SmartCardAuth: false
  tokenAuth: true
+ # connection timeout in minutes, 0 is limitless
  idleTimeout: 10
  DisablePrinter: true
  DisablePort: true

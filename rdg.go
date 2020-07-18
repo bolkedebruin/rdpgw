@@ -450,11 +450,19 @@ func readHeader(data []byte) (packetType uint16, size uint32, packet []byte, err
 // HTTP_EXTENDED_AUTH_SSPI_NTLM is not supported in Linux
 // but could be in Windows. However the NTLM protocol is insecure
 func handshakeResponse(major byte, minor byte, auth uint16) []byte {
+	var caps uint16
+	if conf.Caps.SmartCardAuth {
+		caps = caps | HTTP_EXTENDED_AUTH_PAA
+	}
+	if conf.Caps.TokenAuth {
+		caps = caps | HTTP_EXTENDED_AUTH_PAA
+	}
+
 	buf := new(bytes.Buffer)
 	binary.Write(buf, binary.LittleEndian, uint32(0)) // error_code
 	buf.Write([]byte{major, minor})
 	binary.Write(buf, binary.LittleEndian, uint16(0))                                            // server version
-	binary.Write(buf, binary.LittleEndian, uint16(HTTP_EXTENDED_AUTH_PAA|HTTP_EXTENDED_AUTH_SC)) // extended auth
+	binary.Write(buf, binary.LittleEndian, uint16(caps)) // extended auth
 
 	return createPacket(PKT_TYPE_HANDSHAKE_RESPONSE, buf.Bytes())
 }
@@ -526,8 +534,37 @@ func createTunnelAuthResponse() []byte {
 	binary.Write(buf, binary.LittleEndian, uint16(0))                                                                                        // reserved
 
 	// flags
-	binary.Write(buf, binary.LittleEndian, uint32(HTTP_TUNNEL_REDIR_ENABLE_ALL)) // redir flags
-	binary.Write(buf, binary.LittleEndian, uint32(0))                            // timeout in minutes
+	var redir uint32
+	if conf.Caps.RedirectAll {
+		redir = HTTP_TUNNEL_REDIR_ENABLE_ALL
+	} else if conf.Caps.DisableRedirect {
+		redir = HTTP_TUNNEL_REDIR_DISABLE_ALL
+	} else {
+		if conf.Caps.DisableClipboard {
+			redir = redir | HTTP_TUNNEL_REDIR_DISABLE_CLIPBOARD
+		}
+		if conf.Caps.DisableDrive {
+			redir = redir | HTTP_TUNNEL_REDIR_DISABLE_DRIVE
+		}
+		if conf.Caps.DisablePnp {
+			redir = redir | HTTP_TUNNEL_REDIR_DISABLE_PNP
+		}
+		if conf.Caps.DisablePrinter {
+			redir = redir | HTTP_TUNNEL_REDIR_DISABLE_PRINTER
+		}
+		if conf.Caps.DisablePort {
+			redir = redir | HTTP_TUNNEL_REDIR_DISABLE_PORT
+		}
+	}
+
+	// idle timeout
+	timeout := conf.Caps.IdleTimeout
+	if timeout < 0 {
+		timeout = 0
+	}
+
+	binary.Write(buf, binary.LittleEndian, uint32(redir)) // redir flags
+	binary.Write(buf, binary.LittleEndian, uint32(timeout))                            // timeout in minutes
 
 	return createPacket(PKT_TYPE_TUNNEL_AUTH_RESPONSE, buf.Bytes())
 }
