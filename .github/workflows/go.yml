@@ -22,6 +22,9 @@ jobs:
     - name: Check out code into the Go module directory
       uses: actions/checkout@v2
 
+    - name: Install golint
+      run: go get -u golang.org/x/lint/golint
+
     - name: Build
       run: go build -v .
 

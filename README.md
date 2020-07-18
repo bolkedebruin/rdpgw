@@ -1,6 +1,8 @@
 GO Remote Desktop Gateway
 =========================
 
+![Go](https://github.com/bolkedebruin/rdpgw/workflows/Go/badge.svg)
+
 :star: Star us on GitHub — it helps!
 
 RDPGW is an implementation of the [Remote Desktop Gateway protocol](https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-tsgu/0007d661-a86d-4e8f-89f7-7f77f8824188).
@@ -12,19 +14,62 @@ on Kubernetes.
 RDPGW aims to provide a full open source replacement for MS Remote Desktop Gateway, 
 including access policies.
 
+## How to build
+```bash
+cd rdpgw
+go build -o rdpgw .
+```
+
+## Configuration
+By default the configuration is read from `rdpgw.yaml`. Below is a 
+template.
+
+```yaml
+# web server configuration. 
+server:
+ # TLS certificate files (required)
+ certFile: server.pem
+ keyFile: key.pem
+ # gateway address advertised in the rdp files
+ gatewayAddress: localhost
+ # port to listen on
+ port: 443
+ # list of acceptable desktop hosts to connect to
+ farmHosts:
+  - localhost:3389
+ # Allow the user to connect to any host (insecure)
+ enableOverride: false
+ # Set the desktop host to connect to filled in by the claims from oidc
+ hostTemplate: my-{{ preferred_username }}-host:3389
+
+# Open ID Connect specific settings (required)
+openId:
+ providerUrl: http://keycloak/auth/realms/test
+ clientId: rdpgw
+ clientSecret: your-secret
+
+# enabled / disabled capabilities
+caps:
+ SmartCardAuth: false
+ tokenAuth: true
+ idleTimeout: 10
+ DisablePrinter: true
+ DisablePort: true
+ DisablePnp: true
+ DisableDrive: true
+```
+
+## Use
+Point your browser to `https://your-gateway/connect`. After authentication
+and RDP file will download to your desktop. This file can be opened by one
+of the remote desktop clients and it will try to connect to the gateway and
+desktop host behind it.
+
 ## TODO
-* Integrate VIPER
 * Integrate Open Policy Agent
 * Integrate GOKRB5
 * Integrate uber-go/zap
 * Integrate prometheus
 * Research: TLS defragmentation 
 
-## How to build
-go build rdg.go main.go http.go errors.go
 
-## How to run
-Make sure you have a certificate and key file available. You can call those server.pem and key.pem and 
-put them in the same directory as your executable.
-
-./rdg

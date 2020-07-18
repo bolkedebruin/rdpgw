@@ -20,7 +20,6 @@ type OpenIDConfig struct {
 	ProviderUrl	 string
 	ClientId     string
 	ClientSecret string
-	CallbackHost string
 }
 
 type RDGCapsConfig struct {
