@@ -59,13 +59,13 @@ func main() {
 		log.Fatalf("Cannot get oidc provider: %s", err)
 	}
 	oidcConfig := &oidc.Config{
-		ClientID: viper.GetString("clientId"),
+		ClientID: conf.OpenId.ClientId,
 	}
 	verifier = provider.Verifier(oidcConfig)
 
 	oauthConfig = oauth2.Config{
-		ClientID: viper.GetString("clientId"),
-		ClientSecret: viper.GetString("clientSecret"),
+		ClientID: conf.OpenId.ClientId,
+		ClientSecret: conf.OpenId.ClientSecret,
 		RedirectURL: "https://" + conf.Server.GatewayAddress + "/callback",
 		Endpoint: provider.Endpoint(),
 		Scopes: []string{oidc.ScopeOpenID, "profile", "email"},

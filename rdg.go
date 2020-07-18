@@ -225,7 +225,12 @@ func handleWebsocketProtocol(conn *websocket.Conn) {
 				log.Printf("Invalid PAA cookie: %s from %s", cookie, conn.RemoteAddr())
 				return
 			}
-			host = strings.Replace(conf.Server.HostTemplate, "%%", data.(string), 1)
+			host = conf.Server.HostTemplate
+			for k, v := range data.(map[string]interface{}) {
+				if val, ok := v.(string); ok == true {
+					host = strings.Replace(host, "{{ " + k + " }}", val, 1)
+				}
+			}
 			msg := createTunnelResponse()
 			log.Printf("Create tunnel response: %x", msg)
 			conn.WriteMessage(mt, msg)

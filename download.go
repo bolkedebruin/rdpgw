@@ -4,11 +4,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"github.com/patrickmn/go-cache"
-	"github.com/spf13/viper"
 	"golang.org/x/oauth2"
 	"log"
 	"math/rand"
-	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -30,7 +28,12 @@ func handleRdpDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	host := strings.Replace(viper.GetString("hostTemplate"), "%%", data.(string), 1)
+	var host = conf.Server.HostTemplate
+	for k, v := range data.(map[string]interface{}) {
+		if val, ok := v.(string); ok == true {
+			host = strings.Replace(host, "{{ " + k + " }}", val, 1)
+		}
+	}
 
 	// authenticated
 	seed := make([]byte, 16)
@@ -41,7 +44,7 @@ func handleRdpDownload(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/x-rdp")
 	http.ServeContent(w, r, fn, time.Now(), strings.NewReader(
 		"full address:s:" + host + "\r\n"+
-			"gatewayhostname:s:" + net.JoinHostPort(conf.Server.GatewayAddress, string(conf.Server.Port)) +"\r\n"+
+			"gatewayhostname:s:" + conf.Server.GatewayAddress +"\r\n"+
 			"gatewaycredentialssource:i:5\r\n"+
 			"gatewayusagemethod:i:1\r\n"+
 			"gatewayaccesstoken:s:" + cookie.Value + "\r\n"))
@@ -99,7 +102,7 @@ func handleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// TODO: make dynamic
-	tokens.Set(token, data["preferred_username"].(string), cache.DefaultExpiration)
+	tokens.Set(token, data, cache.DefaultExpiration)
 
 	http.SetCookie(w, &cookie)
 	http.Redirect(w, r, "/connect", http.StatusFound)
