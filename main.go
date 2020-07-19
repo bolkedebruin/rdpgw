@@ -9,7 +9,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"golang.org/x/oauth2"
 	"log"
 	"net/http"
@@ -37,20 +36,7 @@ var ctx context.Context
 func main() {
 	// get config
 	cmd.PersistentFlags().StringVarP(&configFile, "conf", "c", "rdpgw.yaml",  "config file (json, yaml, ini)")
-
-	viper.SetConfigName("rdpgw")
-	viper.SetConfigFile(configFile)
-	viper.AddConfigPath(".")
-	viper.SetEnvPrefix("RDPGW")
-	viper.AutomaticEnv()
-
-	if err := viper.ReadInConfig(); err != nil {
-		log.Printf("No config file found (%s). Using defaults", err)
-	}
-
-	if err := viper.Unmarshal(&conf); err != nil {
-		log.Fatalf("Cannot unmarshal the config file; %s", err)
-	}
+	conf = config.Load(configFile)
 
 	// set oidc config
 	ctx = context.Background()
