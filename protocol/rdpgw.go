@@ -5,7 +5,6 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/patrickmn/go-cache"
 	"github.com/prometheus/client_golang/prometheus"
-	"io"
 	"log"
 	"net/http"
 	"time"
@@ -39,12 +38,6 @@ var (
 			Help:      "The count of legacy https connections",
 		})
 )
-
-// HandshakeHeader is the interface that writes both upgrade request or
-// response headers into a given io.Writer.
-type HandshakeHeader interface {
-	io.WriterTo
-}
 
 type SessionInfo struct {
 	ConnId           string
