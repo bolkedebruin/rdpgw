@@ -47,6 +47,7 @@ func handleRdpDownload(w http.ResponseWriter, r *http.Request) {
 			"gatewayhostname:s:" + conf.Server.GatewayAddress +"\r\n"+
 			"gatewaycredentialssource:i:5\r\n"+
 			"gatewayusagemethod:i:1\r\n"+
+			"gatewayprofileusagemethod:i:1\r\n"+
 			"gatewayaccesstoken:s:" + cookie.Value + "\r\n"))
 }
 

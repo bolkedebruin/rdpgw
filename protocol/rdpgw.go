@@ -7,15 +7,14 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"io"
 	"log"
-	"net"
 	"net/http"
 	"time"
 )
 
 const (
 	rdgConnectionIdKey = "Rdg-Connection-Id"
-	MethodRDGIN  = "RDG_IN_DATA"
-	MethodRDGOUT = "RDG_OUT_DATA"
+	MethodRDGIN        = "RDG_IN_DATA"
+	MethodRDGOUT       = "RDG_OUT_DATA"
 )
 
 var (
@@ -47,18 +46,17 @@ type HandshakeHeader interface {
 	io.WriterTo
 }
 
-type RdgSession struct {
-	ConnId        string
-	CorrelationId string
-	UserId        string
-	TransportIn   transport.Transport
-	TransportOut  transport.Transport
-	StateIn       int
-	StateOut      int
-	Remote        net.Conn
+type SessionInfo struct {
+	ConnId           string
+	CorrelationId    string
+	ClientGeneration string
+	TransportIn      transport.Transport
+	TransportOut     transport.Transport
+	RemoteAddress	 string
+	ProxyAddresses	 string
 }
 
-var DefaultSession RdgSession
+var DefaultSession SessionInfo
 
 var upgrader = websocket.Upgrader{}
 var c = cache.New(5*time.Minute, 10*time.Minute)
@@ -72,6 +70,9 @@ func init() {
 func HandleGatewayProtocol(w http.ResponseWriter, r *http.Request) {
 	connectionCache.Set(float64(c.ItemCount()))
 	if r.Method == MethodRDGOUT {
+		for name, value := range r.Header {
+			log.Printf("Header Name: %s Value: %s", name, value)
+		}
 		if r.Header.Get("Connection") != "upgrade" && r.Header.Get("Upgrade") != "websocket" {
 			handleLegacyProtocol(w, r)
 			return
@@ -103,14 +104,14 @@ func handleWebsocketProtocol(c *websocket.Conn) {
 // and RDG_OUT_DATA for server -> client data. The handshake procedure is a bit different
 // to ensure the connections do not get cached or terminated by a proxy prematurely.
 func handleLegacyProtocol(w http.ResponseWriter, r *http.Request) {
-	var s RdgSession
+	var s SessionInfo
 
 	connId := r.Header.Get(rdgConnectionIdKey)
 	x, found := c.Get(connId)
 	if !found {
-		s = RdgSession{ConnId: connId, StateIn: 0, StateOut: 0}
+		s = SessionInfo{ConnId: connId}
 	} else {
-		s = x.(RdgSession)
+		s = x.(SessionInfo)
 	}
 
 	log.Printf("Session %s, %t, %t", s.ConnId, s.TransportOut != nil, s.TransportIn != nil)

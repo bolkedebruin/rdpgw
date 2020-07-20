@@ -82,9 +82,11 @@ func (h *Handler) Process() error {
 				return errors.New("wrong state")
 			}
 			client := h.readTunnelAuthRequest(pkt)
-			if ok, _ := h.VerifyTunnelAuthFunc(client); !ok {
-				log.Printf("Invalid client name: %s", client)
-				return errors.New("invalid client name")
+			if h.VerifyTunnelAuthFunc != nil {
+				if ok, _ := h.VerifyTunnelAuthFunc(client); !ok {
+					log.Printf("Invalid client name: %s", client)
+					return errors.New("invalid client name")
+				}
 			}
 			msg := h.createTunnelAuthResponse()
 			h.TransportOut.WritePacket(msg)
@@ -117,7 +119,7 @@ func (h *Handler) Process() error {
 			go h.sendDataPacket()
 			h.State = SERVER_STATE_CHANNEL_CREATE
 		case PKT_TYPE_DATA:
-			if h.State != SERVER_STATE_CHANNEL_CREATE {
+			if h.State < SERVER_STATE_CHANNEL_CREATE {
 				log.Printf("Data received while in wrong state %d != %d", h.State, SERVER_STATE_CHANNEL_CREATE)
 				return errors.New("wrong state")
 			}
@@ -342,10 +344,8 @@ func readChannelCreateRequest(data []byte) (server string, port uint16) {
 	nameData := make([]byte, nameSize)
 	binary.Read(buf, binary.LittleEndian, &nameData)
 
-	log.Printf("Name data %q", nameData)
 	server, _ = DecodeUTF16(nameData)
 
-	log.Printf("Should connect to %s on port %d", server, port)
 	return
 }
 
