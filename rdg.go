@@ -6,15 +6,14 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"github.com/bolkedebruin/rdpgw/transport"
 	"github.com/gorilla/websocket"
 	"github.com/patrickmn/go-cache"
 	"github.com/prometheus/client_golang/prometheus"
 	"io"
 	"log"
-	"math/rand"
 	"net"
 	"net/http"
-	"net/http/httputil"
 	"strconv"
 	"strings"
 	"time"
@@ -118,8 +117,8 @@ type RdgSession struct {
 	ConnId        string
 	CorrelationId string
 	UserId        string
-	ConnIn        net.Conn
-	ConnOut       net.Conn
+	TransportIn   transport.HttpLayer
+	TransportOut  transport.HttpLayer
 	StateIn       int
 	StateOut      int
 	Remote        net.Conn
@@ -288,18 +287,18 @@ func handleLegacyProtocol(w http.ResponseWriter, r *http.Request) {
 		s = x.(RdgSession)
 	}
 
-	log.Printf("Session %s, %t, %t", s.ConnId, s.ConnOut != nil, s.ConnIn != nil)
+	log.Printf("Session %s, %t, %t", s.ConnId, s.TransportOut != nil, s.TransportIn != nil)
 
 	if r.Method == MethodRDGOUT {
-		conn, rw, err := Accept(w)
+		out, err := transport.NewLegacy(w)
 		if err != nil {
 			log.Printf("cannot hijack connection to support RDG OUT data channel: %s", err)
 			return
 		}
-		log.Printf("Opening RDGOUT for client %s", conn.RemoteAddr().String())
+		log.Printf("Opening RDGOUT for client %s", out.Conn.RemoteAddr().String())
 
-		s.ConnOut = conn
-		WriteAcceptSeed(rw.Writer, true)
+		s.TransportOut = out
+		out.SendAccept(true)
 
 		c.Set(connId, s, cache.DefaultExpiration)
 	} else if r.Method == MethodRDGIN {
@@ -308,31 +307,31 @@ func handleLegacyProtocol(w http.ResponseWriter, r *http.Request) {
 
 		var remote net.Conn
 
-		conn, rw, err := Accept(w)
+		in, err := transport.NewLegacy(w)
 		if err != nil {
 			log.Printf("cannot hijack connection to support RDG IN data channel: %s", err)
 			return
 		}
-		defer conn.Close()
+		defer in.Close()
 
-		if s.ConnIn == nil {
+		if s.TransportIn == nil {
 			fragment := false
 			index := 0
 			buf := make([]byte, 4096)
 
-			s.ConnIn = conn
+			s.TransportIn = in
 			c.Set(connId, s, cache.DefaultExpiration)
-			log.Printf("Opening RDGIN for client %s", conn.RemoteAddr().String())
-			WriteAcceptSeed(rw.Writer, false)
-			p := make([]byte, 32767)
-			rw.Reader.Read(p)
 
-			log.Printf("Reading packet from client %s", conn.RemoteAddr().String())
-			chunkScanner := httputil.NewChunkedReader(rw.Reader)
-			msg := make([]byte, 4096) // bufio.defaultBufSize
+			//log.Printf("Opening RDGIN for client %s", in.RemoteAddr().String())
+			in.SendAccept(false)
+
+			// read some initial data
+			in.Drain()
+
+			log.Printf("Reading packet from client %s", in.Conn.RemoteAddr().String())
 
 			for {
-				n, err := chunkScanner.Read(msg)
+				n, msg, err := in.ReadPacket()
 				if err == io.EOF || n == 0 {
 					break
 				}
@@ -360,19 +359,19 @@ func handleLegacyProtocol(w http.ResponseWriter, r *http.Request) {
 				case PKT_TYPE_HANDSHAKE_REQUEST:
 					major, minor, _, auth := readHandshake(pkt)
 					msg := handshakeResponse(major, minor, auth)
-					s.ConnOut.Write(msg)
+					s.TransportOut.WritePacket(msg)
 				case PKT_TYPE_TUNNEL_CREATE:
-					_, cookie := readCreateTunnelRequest(pkt)
-					if _, found := tokens.Get(cookie); found == false {
-						log.Printf("Invalid PAA cookie: %s from %s", cookie, conn.RemoteAddr())
+					readCreateTunnelRequest(pkt)
+					/*if _, found := tokens.Get(cookie); found == false {
+						log.Printf("Invalid PAA cookie: %s from %s", cookie, in.Conn.RemoteAddr())
 						return
-					}
+					}*/
 					msg := createTunnelResponse()
-					s.ConnOut.Write(msg)
+					s.TransportOut.WritePacket(msg)
 				case PKT_TYPE_TUNNEL_AUTH:
 					readTunnelAuthRequest(pkt)
 					msg := createTunnelAuthResponse()
-					s.ConnOut.Write(msg)
+					s.TransportOut.WritePacket(msg)
 				case PKT_TYPE_CHANNEL_CREATE:
 					server, port := readChannelCreateRequest(pkt)
 					log.Printf("Establishing connection to RDP server: %s on port %d (%x)", server, port, server)
@@ -386,19 +385,19 @@ func handleLegacyProtocol(w http.ResponseWriter, r *http.Request) {
 					}
 					log.Printf("Connection established")
 					msg := createChannelCreateResponse()
-					s.ConnOut.Write(msg)
+					s.TransportOut.WritePacket(msg)
 
 					// Make sure to start the flow from the RDP server first otherwise connections
 					// might hang eventually
-					go sendDataPacket(remote, s.ConnOut)
+					go sendDataPacket(remote, s.TransportOut)
 				case PKT_TYPE_DATA:
 					forwardDataPacket(remote, pkt)
 				case PKT_TYPE_KEEPALIVE:
 					// avoid concurrency issues
-					// s.ConnOut.Write(createPacket(PKT_TYPE_KEEPALIVE, []byte{}))
+					// s.TransportOut.Write(createPacket(PKT_TYPE_KEEPALIVE, []byte{}))
 				case PKT_TYPE_CLOSE_CHANNEL:
-					s.ConnIn.Close()
-					s.ConnOut.Close()
+					s.TransportIn.Close()
+					s.TransportOut.Close()
 					break
 				default:
 					log.Printf("Unknown packet (size %d): %x", sz, pkt[:n])
@@ -406,29 +405,6 @@ func handleLegacyProtocol(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-}
-
-// [MS-TSGU]: Terminal Services Gateway Server Protocol version 39.0
-// The server sends back the final status code 200 OK, and also a random entity body of limited size (100 bytes).
-// This enables a reverse proxy to start allowing data from the RDG server to the RDG client. The RDG server does
-// not specify an entity length in its response. It uses HTTP 1.0 semantics to send the entity body and closes the
-// connection after the last byte is sent.
-func WriteAcceptSeed(bw *bufio.Writer, doSeed bool) {
-	log.Printf("Writing accept")
-	bw.WriteString(HttpOK)
-	bw.WriteString("Date: " + time.Now().Format(time.RFC1123) + crlf)
-	if !doSeed {
-		bw.WriteString("Content-Length: 0" + crlf)
-	}
-	bw.WriteString(crlf)
-
-	if doSeed {
-		seed := make([]byte, 10)
-		rand.Read(seed)
-		// docs say it's a seed but 2019 responds with ab cd * 5
-		bw.Write(seed)
-	}
-	bw.Flush()
 }
 
 func readHeader(data []byte) (packetType uint16, size uint32, packet []byte, err error) {
@@ -654,7 +630,7 @@ func handleWebsocketData(rdp net.Conn, mt int, conn *websocket.Conn) {
 	}
 }
 
-func sendDataPacket(connIn net.Conn, connOut net.Conn) {
+func sendDataPacket(connIn net.Conn, connOut transport.HttpLayer) {
 	defer connIn.Close()
 	b1 := new(bytes.Buffer)
 	buf := make([]byte, 4086)
@@ -667,7 +643,7 @@ func sendDataPacket(connIn net.Conn, connOut net.Conn) {
 			break
 		}
 		b1.Write(buf[:n])
-		connOut.Write(createPacket(PKT_TYPE_DATA, b1.Bytes()))
+		connOut.WritePacket(createPacket(PKT_TYPE_DATA, b1.Bytes()))
 		b1.Reset()
 	}
 }
