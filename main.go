@@ -4,9 +4,9 @@ import (
 	"context"
 	"crypto/tls"
 	"github.com/bolkedebruin/rdpgw/config"
+	"github.com/bolkedebruin/rdpgw/protocol"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/patrickmn/go-cache"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/cobra"
 	"golang.org/x/oauth2"
@@ -89,14 +89,10 @@ func main() {
 		TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler)), // disable http2
 	}
 
-	http.HandleFunc("/remoteDesktopGateway/", handleGatewayProtocol)
+	http.HandleFunc("/remoteDesktopGateway/", protocol.HandleGatewayProtocol)
 	http.HandleFunc("/connect", handleRdpDownload)
 	http.Handle("/metrics", promhttp.Handler())
 	http.HandleFunc("/callback", handleCallback)
-
-	prometheus.MustRegister(connectionCache)
-	prometheus.MustRegister(legacyConnections)
-	prometheus.MustRegister(websocketConnections)
 
 	err = server.ListenAndServeTLS("", "")
 	if err != nil {

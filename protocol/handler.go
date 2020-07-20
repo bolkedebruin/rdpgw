@@ -20,19 +20,21 @@ type VerifyTunnelAuthFunc func(string) (bool, error)
 type VerifyServerFunc func(string) (bool, error)
 
 type Handler struct {
-	Transport            transport.Transport
+	TransportIn          transport.Transport
+	TransportOut		 transport.Transport
 	VerifyPAACookieFunc  VerifyPAACookieFunc
 	VerifyTunnelAuthFunc VerifyTunnelAuthFunc
 	VerifyServerFunc     VerifyServerFunc
 	SmartCardAuth        bool
 	TokenAuth            bool
 	ClientName           string
-	Remote				 net.Conn
+	Remote               net.Conn
 }
 
-func NewHandler(t transport.Transport) *Handler {
+func NewHandler(in transport.Transport, out transport.Transport) *Handler {
 	h := &Handler{
-		Transport: t,
+		TransportIn: in,
+		TransportOut: out,
 	}
 	return h
 }
@@ -49,8 +51,9 @@ func (h *Handler) Process() error {
 		case PKT_TYPE_HANDSHAKE_REQUEST:
 			major, minor, _, auth := readHandshake(pkt)
 			msg := h.handshakeResponse(major, minor, auth)
-			h.Transport.WritePacket(msg)
+			h.TransportOut.WritePacket(msg)
 		case PKT_TYPE_TUNNEL_CREATE:
+			log.Printf("Tunnel create")
 			_, cookie := readCreateTunnelRequest(pkt)
 			if h.VerifyPAACookieFunc != nil {
 				if ok, _ := h.VerifyPAACookieFunc(cookie); ok == false {
@@ -59,11 +62,13 @@ func (h *Handler) Process() error {
 				}
 			}
 			msg := createTunnelResponse()
-			h.Transport.WritePacket(msg)
+			h.TransportOut.WritePacket(msg)
+			log.Printf("Tunnel done")
 		case PKT_TYPE_TUNNEL_AUTH:
+			log.Printf("Tunnel auth")
 			h.readTunnelAuthRequest(pkt)
 			msg := h.createTunnelAuthResponse()
-			h.Transport.WritePacket(msg)
+			h.TransportOut.WritePacket(msg)
 		case PKT_TYPE_CHANNEL_CREATE:
 			server, port := readChannelCreateRequest(pkt)
 			log.Printf("Establishing connection to RDP server: %s on port %d (%x)", server, port, server)
@@ -77,7 +82,7 @@ func (h *Handler) Process() error {
 			}
 			log.Printf("Connection established")
 			msg := createChannelCreateResponse()
-			h.Transport.WritePacket(msg)
+			h.TransportOut.WritePacket(msg)
 
 			// Make sure to start the flow from the RDP server first otherwise connections
 			// might hang eventually
@@ -86,9 +91,10 @@ func (h *Handler) Process() error {
 			h.forwardDataPacket(pkt)
 		case PKT_TYPE_KEEPALIVE:
 			// avoid concurrency issues
-			// p.Transport.Write(createPacket(PKT_TYPE_KEEPALIVE, []byte{}))
+			// p.TransportIn.Write(createPacket(PKT_TYPE_KEEPALIVE, []byte{}))
 		case PKT_TYPE_CLOSE_CHANNEL:
-			h.Transport.Close()
+			h.TransportIn.Close()
+			h.TransportOut.Close()
 		default:
 			log.Printf("Unknown packet (size %d): %x", sz, pkt)
 		}
@@ -101,7 +107,7 @@ func (h *Handler) ReadMessage() (pt int, n int, msg []byte, err error) {
 	buf := make([]byte, 4096)
 
 	for {
-		size, pkt, err := h.Transport.ReadPacket()
+		size, pkt, err := h.TransportIn.ReadPacket()
 		if err != nil {
 			return 0, 0, []byte{0, 0}, err
 		}
@@ -337,7 +343,7 @@ func (h *Handler) sendDataPacket() {
 			break
 		}
 		b1.Write(buf[:n])
-		h.Transport.WritePacket(createPacket(PKT_TYPE_DATA, b1.Bytes()))
+		h.TransportOut.WritePacket(createPacket(PKT_TYPE_DATA, b1.Bytes()))
 		b1.Reset()
 	}
 }
