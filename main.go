@@ -78,7 +78,6 @@ func main() {
 		cfg.KeyLogWriter = w
 	}
 
-
 	cert, err := tls.LoadX509KeyPair(conf.Server.CertFile, conf.Server.KeyFile)
 	if err != nil {
 		log.Fatal(err)
