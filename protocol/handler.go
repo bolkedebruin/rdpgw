@@ -51,10 +51,10 @@ type HandlerConf struct {
 	TokenAuth            bool
 }
 
-func NewHandler(in transport.Transport, out transport.Transport, conf *HandlerConf) *Handler {
+func NewHandler(s *SessionInfo, conf *HandlerConf) *Handler {
 	h := &Handler{
-		TransportIn:          in,
-		TransportOut:         out,
+		TransportIn:          s.TransportIn,
+		TransportOut:         s.TransportOut,
 		State:                SERVER_STATE_INITIAL,
 		RedirectFlags:        makeRedirectFlags(conf.RedirectFlags),
 		IdleTimeout:          conf.IdleTimeout,
