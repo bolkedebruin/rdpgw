@@ -38,10 +38,11 @@ server:
  hosts:
   - localhost:3389
   - my-{{ preferred_username }}-host:3389
- # Allow the user to connect to any host (insecure)
- enableOverride: false
-
-# Open ID Connect specific settings (required)
+  # Allow the user to connect to any host (insecure)
+  - any 
+ # if true the server randomly selects a host to connect to
+ roundRobin: false 
+# Open ID Connect specific settings
 openId:
  providerUrl: http://keycloak/auth/realms/test
  clientId: rdpgw

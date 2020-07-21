@@ -17,7 +17,7 @@ type ServerConfig struct {
 	CertFile       string
 	KeyFile        string
 	Hosts          []string
-	EnableOverride bool
+	RoundRobin	   bool
 }
 
 type OpenIDConfig struct {
