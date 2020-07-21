@@ -12,9 +12,9 @@ import (
 	"time"
 )
 
-type VerifyPAACookieFunc func(string) (bool, error)
-type VerifyTunnelAuthFunc func(string) (bool, error)
-type VerifyServerFunc func(string) (bool, error)
+type VerifyTunnelCreate func(*SessionInfo, string) (bool, error)
+type VerifyTunnelAuthFunc func(*SessionInfo, string) (bool, error)
+type VerifyServerFunc func(*SessionInfo, string) (bool, error)
 
 type RedirectFlags struct {
 	Clipboard  bool
@@ -27,9 +27,10 @@ type RedirectFlags struct {
 }
 
 type Handler struct {
+	Session              *SessionInfo
 	TransportIn          transport.Transport
 	TransportOut         transport.Transport
-	VerifyPAACookieFunc  VerifyPAACookieFunc
+	VerifyTunnelCreate   VerifyTunnelCreate
 	VerifyTunnelAuthFunc VerifyTunnelAuthFunc
 	VerifyServerFunc     VerifyServerFunc
 	RedirectFlags        int
@@ -42,7 +43,7 @@ type Handler struct {
 }
 
 type HandlerConf struct {
-	VerifyPAACookieFunc  VerifyPAACookieFunc
+	VerifyTunnelCreate   VerifyTunnelCreate
 	VerifyTunnelAuthFunc VerifyTunnelAuthFunc
 	VerifyServerFunc     VerifyServerFunc
 	RedirectFlags        RedirectFlags
@@ -53,6 +54,7 @@ type HandlerConf struct {
 
 func NewHandler(s *SessionInfo, conf *HandlerConf) *Handler {
 	h := &Handler{
+		Session:              s,
 		TransportIn:          s.TransportIn,
 		TransportOut:         s.TransportOut,
 		State:                SERVER_STATE_INITIAL,
@@ -60,7 +62,7 @@ func NewHandler(s *SessionInfo, conf *HandlerConf) *Handler {
 		IdleTimeout:          conf.IdleTimeout,
 		SmartCardAuth:        conf.SmartCardAuth,
 		TokenAuth:            conf.TokenAuth,
-		VerifyPAACookieFunc:  conf.VerifyPAACookieFunc,
+		VerifyTunnelCreate:   conf.VerifyTunnelCreate,
 		VerifyServerFunc:     conf.VerifyServerFunc,
 		VerifyTunnelAuthFunc: conf.VerifyTunnelAuthFunc,
 	}
@@ -92,8 +94,8 @@ func (h *Handler) Process() error {
 				return errors.New("wrong state")
 			}
 			_, cookie := readCreateTunnelRequest(pkt)
-			if h.VerifyPAACookieFunc != nil {
-				if ok, _ := h.VerifyPAACookieFunc(cookie); !ok {
+			if h.VerifyTunnelCreate != nil {
+				if ok, _ := h.VerifyTunnelCreate(h.Session, cookie); !ok {
 					log.Printf("Invalid PAA cookie: %s", cookie)
 					return errors.New("invalid PAA cookie")
 				}
@@ -109,7 +111,7 @@ func (h *Handler) Process() error {
 			}
 			client := h.readTunnelAuthRequest(pkt)
 			if h.VerifyTunnelAuthFunc != nil {
-				if ok, _ := h.VerifyTunnelAuthFunc(client); !ok {
+				if ok, _ := h.VerifyTunnelAuthFunc(h.Session, client); !ok {
 					log.Printf("Invalid client name: %s", client)
 					return errors.New("invalid client name")
 				}
@@ -126,7 +128,7 @@ func (h *Handler) Process() error {
 			server, port := readChannelCreateRequest(pkt)
 			host := net.JoinHostPort(server, strconv.Itoa(int(port)))
 			if h.VerifyServerFunc != nil {
-				if ok, _ := h.VerifyServerFunc(host); !ok {
+				if ok, _ := h.VerifyServerFunc(h.Session, host); !ok {
 					log.Printf("Not allowed to connect to %s by policy handler", host)
 				}
 			}

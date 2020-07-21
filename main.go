@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"github.com/bolkedebruin/rdpgw/config"
 	"github.com/bolkedebruin/rdpgw/protocol"
+	"github.com/bolkedebruin/rdpgw/security"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/patrickmn/go-cache"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -89,6 +90,11 @@ func main() {
 		TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler)), // disable http2
 	}
 
+	// setup security
+	securityConfig := &security.Config{
+		Store: tokens,
+	}
+
 	// create the gateway
 	handlerConfig := protocol.HandlerConf{
 		IdleTimeout: conf.Caps.IdleTimeout,
@@ -103,6 +109,7 @@ func main() {
 			DisableAll: conf.Caps.DisableRedirect,
 			EnableAll: conf.Caps.RedirectAll,
 		},
+		VerifyTunnelCreate: securityConfig.VerifyPAAToken,
 	}
 	gw := protocol.Gateway{
 		HandlerConf: &handlerConfig,
