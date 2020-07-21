@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"github.com/bolkedebruin/rdpgw/api"
 	"github.com/bolkedebruin/rdpgw/config"
 	"github.com/bolkedebruin/rdpgw/protocol"
 	"github.com/bolkedebruin/rdpgw/security"
@@ -30,17 +31,13 @@ var (
 var tokens = cache.New(time.Minute *5, 10*time.Minute)
 var conf config.Configuration
 
-var verifier *oidc.IDTokenVerifier
-var oauthConfig oauth2.Config
-var ctx context.Context
-
 func main() {
 	// get config
 	cmd.PersistentFlags().StringVarP(&configFile, "conf", "c", "rdpgw.yaml",  "config file (json, yaml, ini)")
 	conf = config.Load(configFile)
 
 	// set oidc config
-	ctx = context.Background()
+	ctx := context.Background()
 	provider, err := oidc.NewProvider(ctx, conf.OpenId.ProviderUrl)
 	if err != nil {
 		log.Fatalf("Cannot get oidc provider: %s", err)
@@ -48,15 +45,25 @@ func main() {
 	oidcConfig := &oidc.Config{
 		ClientID: conf.OpenId.ClientId,
 	}
-	verifier = provider.Verifier(oidcConfig)
+	verifier := provider.Verifier(oidcConfig)
 
-	oauthConfig = oauth2.Config{
+	oauthConfig := oauth2.Config{
 		ClientID: conf.OpenId.ClientId,
 		ClientSecret: conf.OpenId.ClientSecret,
 		RedirectURL: "https://" + conf.Server.GatewayAddress + "/callback",
 		Endpoint: provider.Endpoint(),
 		Scopes: []string{oidc.ScopeOpenID, "profile", "email"},
 	}
+
+	api := &api.Config{
+		GatewayAddress: conf.Server.GatewayAddress,
+		OAuth2Config: &oauthConfig,
+		TokenVerifier: verifier,
+		TokenCache: tokens,
+		SessionKey: []byte(conf.Server.SessionKey),
+		Hosts: conf.Server.Hosts,
+	}
+	api.NewApi()
 
 	if conf.Server.CertFile == "" || conf.Server.KeyFile == "" {
 		log.Fatal("Both certfile and keyfile need to be specified")
@@ -115,9 +122,9 @@ func main() {
 	}
 
 	http.HandleFunc("/remoteDesktopGateway/", gw.HandleGatewayProtocol)
-	http.HandleFunc("/connect", handleRdpDownload)
+	http.Handle("/connect", api.Authenticated(http.HandlerFunc(api.HandleDownload)))
 	http.Handle("/metrics", promhttp.Handler())
-	http.HandleFunc("/callback", handleCallback)
+	http.HandleFunc("/callback", api.HandleCallback)
 
 	err = server.ListenAndServeTLS("", "")
 	if err != nil {

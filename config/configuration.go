@@ -18,6 +18,7 @@ type ServerConfig struct {
 	KeyFile        string
 	Hosts          []string
 	RoundRobin	   bool
+	SessionKey	   string
 }
 
 type OpenIDConfig struct {
