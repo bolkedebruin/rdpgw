@@ -39,6 +39,10 @@ var (
 		})
 )
 
+type Gateway struct {
+	HandlerConf *HandlerConf
+}
+
 type SessionInfo struct {
 	ConnId           string
 	CorrelationId    string
@@ -60,14 +64,11 @@ func init() {
 	prometheus.MustRegister(websocketConnections)
 }
 
-func HandleGatewayProtocol(w http.ResponseWriter, r *http.Request) {
+func (g *Gateway) HandleGatewayProtocol(w http.ResponseWriter, r *http.Request) {
 	connectionCache.Set(float64(c.ItemCount()))
 	if r.Method == MethodRDGOUT {
-		for name, value := range r.Header {
-			log.Printf("Header Name: %s Value: %s", name, value)
-		}
 		if r.Header.Get("Connection") != "upgrade" && r.Header.Get("Upgrade") != "websocket" {
-			handleLegacyProtocol(w, r)
+			g.handleLegacyProtocol(w, r)
 			return
 		}
 		r.Method = "GET" // force
@@ -78,25 +79,25 @@ func HandleGatewayProtocol(w http.ResponseWriter, r *http.Request) {
 		}
 		defer conn.Close()
 
-		handleWebsocketProtocol(conn)
+		g.handleWebsocketProtocol(conn)
 	} else if r.Method == MethodRDGIN {
-		handleLegacyProtocol(w, r)
+		g.handleLegacyProtocol(w, r)
 	}
 }
 
-func handleWebsocketProtocol(c *websocket.Conn) {
+func (g *Gateway) handleWebsocketProtocol(c *websocket.Conn) {
 	websocketConnections.Inc()
 	defer websocketConnections.Dec()
 
 	inout, _ := transport.NewWS(c)
-	handler := NewHandler(inout, inout)
+	handler := NewHandler(inout, inout, g.HandlerConf)
 	handler.Process()
 }
 
 // The legacy protocol (no websockets) uses an RDG_IN_DATA for client -> server
 // and RDG_OUT_DATA for server -> client data. The handshake procedure is a bit different
 // to ensure the connections do not get cached or terminated by a proxy prematurely.
-func handleLegacyProtocol(w http.ResponseWriter, r *http.Request) {
+func (g *Gateway) handleLegacyProtocol(w http.ResponseWriter, r *http.Request) {
 	var s SessionInfo
 
 	connId := r.Header.Get(rdgConnectionIdKey)
@@ -143,7 +144,7 @@ func handleLegacyProtocol(w http.ResponseWriter, r *http.Request) {
 			in.Drain()
 
 			log.Printf("Legacy handshake done for client %s", in.Conn.RemoteAddr().String())
-			handler := NewHandler(in, s.TransportOut)
+			handler := NewHandler(in, s.TransportOut, g.HandlerConf)
 			handler.Process()
 		}
 	}

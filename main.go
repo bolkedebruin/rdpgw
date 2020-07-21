@@ -89,7 +89,18 @@ func main() {
 		TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler)), // disable http2
 	}
 
-	http.HandleFunc("/remoteDesktopGateway/", protocol.HandleGatewayProtocol)
+	// create the gateway
+	handlerConfig := protocol.HandlerConf{
+		TokenAuth: true,
+		RedirectFlags: protocol.RedirectFlags{
+			Clipboard: true,
+		},
+	}
+	gw := protocol.Gateway{
+		HandlerConf: &handlerConfig,
+	}
+
+	http.HandleFunc("/remoteDesktopGateway/", gw.HandleGatewayProtocol)
 	http.HandleFunc("/connect", handleRdpDownload)
 	http.Handle("/metrics", promhttp.Handler())
 	http.HandleFunc("/callback", handleCallback)

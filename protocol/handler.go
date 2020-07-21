@@ -12,12 +12,19 @@ import (
 	"time"
 )
 
-// When should the client disconnect when idle in minutes
-var IdleTimeout = 0
-
 type VerifyPAACookieFunc func(string) (bool, error)
 type VerifyTunnelAuthFunc func(string) (bool, error)
 type VerifyServerFunc func(string) (bool, error)
+
+type RedirectFlags struct {
+	Clipboard  bool
+	Port       bool
+	Drive      bool
+	Printer    bool
+	Pnp        bool
+	disableAll bool
+	enableAll  bool
+}
 
 type Handler struct {
 	TransportIn          transport.Transport
@@ -25,6 +32,8 @@ type Handler struct {
 	VerifyPAACookieFunc  VerifyPAACookieFunc
 	VerifyTunnelAuthFunc VerifyTunnelAuthFunc
 	VerifyServerFunc     VerifyServerFunc
+	RedirectFlags        int
+	IdleTimeout          int
 	SmartCardAuth        bool
 	TokenAuth            bool
 	ClientName           string
@@ -32,11 +41,28 @@ type Handler struct {
 	State                int
 }
 
-func NewHandler(in transport.Transport, out transport.Transport) *Handler {
+type HandlerConf struct {
+	VerifyPAACookieFunc  VerifyPAACookieFunc
+	VerifyTunnelAuthFunc VerifyTunnelAuthFunc
+	VerifyServerFunc     VerifyServerFunc
+	RedirectFlags        RedirectFlags
+	IdleTimeout          int
+	SmartCardAuth        bool
+	TokenAuth            bool
+}
+
+func NewHandler(in transport.Transport, out transport.Transport, conf *HandlerConf) *Handler {
 	h := &Handler{
-		TransportIn:  in,
-		TransportOut: out,
-		State:        SERVER_STATE_INITIAL,
+		TransportIn:          in,
+		TransportOut:         out,
+		State:                SERVER_STATE_INITIAL,
+		RedirectFlags:        makeRedirectFlags(conf.RedirectFlags),
+		IdleTimeout:          conf.IdleTimeout,
+		SmartCardAuth:        conf.SmartCardAuth,
+		TokenAuth:            conf.TokenAuth,
+		VerifyPAACookieFunc:  conf.VerifyPAACookieFunc,
+		VerifyServerFunc:     conf.VerifyServerFunc,
+		VerifyTunnelAuthFunc: conf.VerifyTunnelAuthFunc,
 	}
 	return h
 }
@@ -55,8 +81,8 @@ func (h *Handler) Process() error {
 				log.Printf("Handshake attempted while in wrong state %d != %d", h.State, SERVER_STATE_INITIAL)
 				return errors.New("wrong state")
 			}
-			major, minor, _, auth := readHandshake(pkt)
-			msg := h.handshakeResponse(major, minor, auth)
+			major, minor, _, _ := readHandshake(pkt) // todo check if auth matches what the handler can do
+			msg := h.handshakeResponse(major, minor)
 			h.TransportOut.WritePacket(msg)
 			h.State = SERVER_STATE_HANDSHAKE
 		case PKT_TYPE_TUNNEL_CREATE:
@@ -189,7 +215,7 @@ func (h *Handler) ReadMessage() (pt int, n int, msg []byte, err error) {
 // Creates a packet the is a response to a handshake request
 // HTTP_EXTENDED_AUTH_SSPI_NTLM is not supported in Linux
 // but could be in Windows. However the NTLM protocol is insecure
-func (h *Handler) handshakeResponse(major byte, minor byte, auth uint16) []byte {
+func (h *Handler) handshakeResponse(major byte, minor byte) []byte {
 	var caps uint16
 	if h.SmartCardAuth {
 		caps = caps | HTTP_EXTENDED_AUTH_PAA
@@ -289,40 +315,13 @@ func (h *Handler) createTunnelAuthResponse() []byte {
 	binary.Write(buf, binary.LittleEndian, uint16(HTTP_TUNNEL_AUTH_RESPONSE_FIELD_REDIR_FLAGS|HTTP_TUNNEL_AUTH_RESPONSE_FIELD_IDLE_TIMEOUT)) // fields present
 	binary.Write(buf, binary.LittleEndian, uint16(0))                                                                                        // reserved
 
-	// flags
-	var redir uint32
-	/*
-		if conf.Caps.RedirectAll {
-			redir = HTTP_TUNNEL_REDIR_ENABLE_ALL
-		} else if conf.Caps.DisableRedirect {
-			redir = HTTP_TUNNEL_REDIR_DISABLE_ALL
-		} else {
-			if conf.Caps.DisableClipboard {
-				redir = redir | HTTP_TUNNEL_REDIR_DISABLE_CLIPBOARD
-			}
-			if conf.Caps.DisableDrive {
-				redir = redir | HTTP_TUNNEL_REDIR_DISABLE_DRIVE
-			}
-			if conf.Caps.DisablePnp {
-				redir = redir | HTTP_TUNNEL_REDIR_DISABLE_PNP
-			}
-			if conf.Caps.DisablePrinter {
-				redir = redir | HTTP_TUNNEL_REDIR_DISABLE_PRINTER
-			}
-			if conf.Caps.DisablePort {
-				redir = redir | HTTP_TUNNEL_REDIR_DISABLE_PORT
-			}
-		}
-	*/
-	redir = HTTP_TUNNEL_REDIR_ENABLE_ALL
-
 	// idle timeout
-	if IdleTimeout < 0 {
-		IdleTimeout = 0
+	if h.IdleTimeout < 0 {
+		h.IdleTimeout = 0
 	}
 
-	binary.Write(buf, binary.LittleEndian, uint32(redir))       // redir flags
-	binary.Write(buf, binary.LittleEndian, uint32(IdleTimeout)) // timeout in minutes
+	binary.Write(buf, binary.LittleEndian, uint32(h.RedirectFlags)) // redir flags
+	binary.Write(buf, binary.LittleEndian, uint32(h.IdleTimeout))   // timeout in minutes
 
 	return createPacket(PKT_TYPE_TUNNEL_AUTH_RESPONSE, buf.Bytes())
 }
@@ -404,4 +403,32 @@ func createPacket(pktType uint16, data []byte) (packet []byte) {
 	buf.Write(data)
 
 	return buf.Bytes()
+}
+
+func makeRedirectFlags(flags RedirectFlags) int {
+	var redir = 0
+
+	if flags.disableAll {
+		return HTTP_TUNNEL_REDIR_DISABLE_ALL
+	}
+	if flags.enableAll {
+		return HTTP_TUNNEL_REDIR_ENABLE_ALL
+	}
+
+	if !flags.Port {
+		redir = redir | HTTP_TUNNEL_REDIR_DISABLE_PORT
+	}
+	if !flags.Clipboard {
+		redir = redir | HTTP_TUNNEL_REDIR_DISABLE_CLIPBOARD
+	}
+	if !flags.Drive {
+		redir = redir | HTTP_TUNNEL_REDIR_DISABLE_DRIVE
+	}
+	if !flags.Pnp {
+		redir = redir | HTTP_TUNNEL_REDIR_DISABLE_PNP
+	}
+	if !flags.Printer {
+		redir = redir | HTTP_TUNNEL_REDIR_DISABLE_PRINTER
+	}
+	return redir
 }
