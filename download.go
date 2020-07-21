@@ -28,7 +28,9 @@ func handleRdpDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var host = conf.Server.HostTemplate
+	// do a round robin selection for now
+	rand.Seed(time.Now().Unix())
+	var host = conf.Server.Hosts[rand.Intn(len(conf.Server.Hosts))]
 	for k, v := range data.(map[string]interface{}) {
 		if val, ok := v.(string); ok == true {
 			host = strings.Replace(host, "{{ " + k + " }}", val, 1)
