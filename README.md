@@ -35,12 +35,11 @@ server:
  # port to listen on
  port: 443
  # list of acceptable desktop hosts to connect to
- farmHosts:
+ hosts:
   - localhost:3389
+  - my-{{ preferred_username }}-host:3389
  # Allow the user to connect to any host (insecure)
  enableOverride: false
- # Set the desktop host to connect to filled in by the claims from oidc
- hostTemplate: my-{{ preferred_username }}-host:3389
 
 # Open ID Connect specific settings (required)
 openId:
@@ -54,10 +53,11 @@ caps:
  tokenAuth: true
  # connection timeout in minutes, 0 is limitless
  idleTimeout: 10
- DisablePrinter: true
- DisablePort: true
- DisablePnp: true
- DisableDrive: true
+ EnablePrinter: true
+ EnablePort: true
+ EnablePnp: true
+ EnableDrive: true
+ EnableClipboard: true
 ```
 
 ## Use

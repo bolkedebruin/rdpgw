@@ -91,9 +91,17 @@ func main() {
 
 	// create the gateway
 	handlerConfig := protocol.HandlerConf{
-		TokenAuth: true,
+		IdleTimeout: conf.Caps.IdleTimeout,
+		TokenAuth: conf.Caps.TokenAuth,
+		SmartCardAuth: conf.Caps.SmartCardAuth,
 		RedirectFlags: protocol.RedirectFlags{
-			Clipboard: true,
+			Clipboard: conf.Caps.EnableClipboard,
+			Drive: conf.Caps.EnableDrive,
+			Printer: conf.Caps.EnablePrinter,
+			Port: conf.Caps.EnablePort,
+			Pnp: conf.Caps.EnablePnp,
+			DisableAll: conf.Caps.DisableRedirect,
+			EnableAll: conf.Caps.RedirectAll,
 		},
 	}
 	gw := protocol.Gateway{

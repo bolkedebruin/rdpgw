@@ -22,8 +22,8 @@ type RedirectFlags struct {
 	Drive      bool
 	Printer    bool
 	Pnp        bool
-	disableAll bool
-	enableAll  bool
+	DisableAll bool
+	EnableAll  bool
 }
 
 type Handler struct {
@@ -408,10 +408,10 @@ func createPacket(pktType uint16, data []byte) (packet []byte) {
 func makeRedirectFlags(flags RedirectFlags) int {
 	var redir = 0
 
-	if flags.disableAll {
+	if flags.DisableAll {
 		return HTTP_TUNNEL_REDIR_DISABLE_ALL
 	}
-	if flags.enableAll {
+	if flags.EnableAll {
 		return HTTP_TUNNEL_REDIR_ENABLE_ALL
 	}
 

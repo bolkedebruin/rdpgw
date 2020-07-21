@@ -16,28 +16,27 @@ type ServerConfig struct {
 	Port           int
 	CertFile       string
 	KeyFile        string
-	FarmHosts      []string
+	Hosts          []string
 	EnableOverride bool
-	HostTemplate   string
 }
 
 type OpenIDConfig struct {
-	ProviderUrl	 string
+	ProviderUrl  string
 	ClientId     string
 	ClientSecret string
 }
 
 type RDGCapsConfig struct {
-	SmartCardAuth    bool
-	TokenAuth        bool
-	IdleTimeout      int
-	RedirectAll      bool
-	DisableRedirect  bool
-	DisableClipboard bool
-	DisablePrinter   bool
-	DisablePort      bool
-	DisablePnp       bool
-	DisableDrive     bool
+	SmartCardAuth   bool
+	TokenAuth       bool
+	IdleTimeout     int
+	RedirectAll     bool
+	DisableRedirect bool
+	EnableClipboard bool
+	EnablePrinter   bool
+	EnablePort      bool
+	EnablePnp       bool
+	EnableDrive     bool
 }
 
 func init() {
