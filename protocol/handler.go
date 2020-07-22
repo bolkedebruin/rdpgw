@@ -79,6 +79,7 @@ func (h *Handler) Process() error {
 
 		switch pt {
 		case PKT_TYPE_HANDSHAKE_REQUEST:
+			log.Printf("Handshake")
 			if h.State != SERVER_STATE_INITIAL {
 				log.Printf("Handshake attempted while in wrong state %d != %d", h.State, SERVER_STATE_INITIAL)
 				return errors.New("wrong state")
@@ -88,6 +89,7 @@ func (h *Handler) Process() error {
 			h.TransportOut.WritePacket(msg)
 			h.State = SERVER_STATE_HANDSHAKE
 		case PKT_TYPE_TUNNEL_CREATE:
+			log.Printf("Tunnel create")
 			if h.State != SERVER_STATE_HANDSHAKE {
 				log.Printf("Tunnel create attempted while in wrong state %d != %d",
 					h.State, SERVER_STATE_HANDSHAKE)
@@ -104,6 +106,7 @@ func (h *Handler) Process() error {
 			h.TransportOut.WritePacket(msg)
 			h.State = SERVER_STATE_TUNNEL_CREATE
 		case PKT_TYPE_TUNNEL_AUTH:
+			log.Printf("Tunnel auth")
 			if h.State != SERVER_STATE_TUNNEL_CREATE {
 				log.Printf("Tunnel auth attempted while in wrong state %d != %d",
 					h.State, SERVER_STATE_TUNNEL_CREATE)
@@ -120,6 +123,7 @@ func (h *Handler) Process() error {
 			h.TransportOut.WritePacket(msg)
 			h.State = SERVER_STATE_TUNNEL_AUTHORIZE
 		case PKT_TYPE_CHANNEL_CREATE:
+			log.Printf("Channel create")
 			if h.State != SERVER_STATE_TUNNEL_AUTHORIZE {
 				log.Printf("Channel create attempted while in wrong state %d != %d",
 					h.State, SERVER_STATE_TUNNEL_AUTHORIZE)
@@ -163,6 +167,7 @@ func (h *Handler) Process() error {
 			// avoid concurrency issues
 			// p.TransportIn.Write(createPacket(PKT_TYPE_KEEPALIVE, []byte{}))
 		case PKT_TYPE_CLOSE_CHANNEL:
+			log.Printf("Close channel")
 			if h.State != SERVER_STATE_OPENED {
 				log.Printf("Channel closed while in wrong state %d != %d", h.State, SERVER_STATE_OPENED)
 				return errors.New("wrong state")
@@ -288,12 +293,11 @@ func createTunnelResponse() []byte {
 	binary.Write(buf, binary.LittleEndian, uint32(0))                                                                    // error code
 	binary.Write(buf, binary.LittleEndian, uint16(HTTP_TUNNEL_RESPONSE_FIELD_TUNNEL_ID|HTTP_TUNNEL_RESPONSE_FIELD_CAPS)) // fields present
 	binary.Write(buf, binary.LittleEndian, uint16(0))                                                                    // reserved
-	binary.Write(buf, binary.LittleEndian, uint16(0))                                                                    // reserved
 
-	// tunnel id ?
-	binary.Write(buf, binary.LittleEndian, uint32(15))
-	// caps ?
-	binary.Write(buf, binary.LittleEndian, uint32(2))
+	// tunnel id (when is it used?)
+	binary.Write(buf, binary.LittleEndian, uint32(10))
+	// caps, w2019 sends 63 -> windows client requests 63
+	binary.Write(buf, binary.LittleEndian, uint32(63))
 
 	return createPacket(PKT_TYPE_TUNNEL_RESPONSE, buf.Bytes())
 }
@@ -355,8 +359,11 @@ func createChannelCreateResponse() []byte {
 
 	binary.Write(buf, binary.LittleEndian, uint32(0)) // error code
 	//binary.Write(buf, binary.LittleEndian, uint16(HTTP_CHANNEL_RESPONSE_FIELD_CHANNELID | HTTP_CHANNEL_RESPONSE_FIELD_AUTHNCOOKIE | HTTP_CHANNEL_RESPONSE_FIELD_UDPPORT)) // fields present
-	binary.Write(buf, binary.LittleEndian, uint16(0)) // fields
+	binary.Write(buf, binary.LittleEndian, uint16(HTTP_CHANNEL_RESPONSE_FIELD_CHANNELID))
 	binary.Write(buf, binary.LittleEndian, uint16(0)) // reserved
+
+	// channel id is required for Windows clients
+	binary.Write(buf, binary.LittleEndian, uint32(1)) // channel id
 
 	// optional fields
 	// channel id uint32 (4)
