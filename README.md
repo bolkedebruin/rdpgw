@@ -42,23 +42,24 @@ server:
   - any 
  # if true the server randomly selects a host to connect to
  roundRobin: false 
+ # a random string of at least 32 characters to secure cookies on the client
+ sessionKey: thisisasessionkeyreplacethisjetzt
 # Open ID Connect specific settings
 openId:
  providerUrl: http://keycloak/auth/realms/test
  clientId: rdpgw
  clientSecret: your-secret
-
 # enabled / disabled capabilities
 caps:
- SmartCardAuth: false
+ smartCardAuth: false
  tokenAuth: true
  # connection timeout in minutes, 0 is limitless
  idleTimeout: 10
- EnablePrinter: true
- EnablePort: true
- EnablePnp: true
- EnableDrive: true
- EnableClipboard: true
+ enablePrinter: true
+ enablePort: true
+ enablePnp: true
+ enableDrive: true
+ enableClipboard: true
 ```
 
 ## Use
