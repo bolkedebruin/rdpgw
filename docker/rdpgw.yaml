@@ -4,7 +4,7 @@ server:
  certFile: /opt/rdpgw/server.pem
  keyFile: /opt/rdpgw/key.pem
  # gateway address advertised in the rdp files
- gatewayAddress: localhost
+ gatewayAddress: localhost:9443
  # port to listen on
  port: 9443
  # list of acceptable desktop hosts to connect to
