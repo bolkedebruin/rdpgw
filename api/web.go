@@ -171,5 +171,8 @@ func (c *Config) HandleDownload(w http.ResponseWriter, r *http.Request) {
 			"gatewaycredentialssource:i:5\r\n"+
 			"gatewayusagemethod:i:1\r\n"+
 			"gatewayprofileusagemethod:i:1\r\n"+
-			"gatewayaccesstoken:s:"+token+"\r\n"))
+			"gatewayaccesstoken:s:"+token+"\r\n"+
+			"networkautodetect:i:0\r\n"+
+			"bandwidthautodetect:i:1\r\n"+
+			"connection type:i:6\r\n"))
 }

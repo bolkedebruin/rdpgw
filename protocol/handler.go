@@ -69,6 +69,8 @@ func NewHandler(s *SessionInfo, conf *HandlerConf) *Handler {
 	return h
 }
 
+const tunnelId = 10
+
 func (h *Handler) Process() error {
 	for {
 		pt, sz, pkt, err := h.ReadMessage()
@@ -295,9 +297,9 @@ func createTunnelResponse() []byte {
 	binary.Write(buf, binary.LittleEndian, uint16(0))                                                                    // reserved
 
 	// tunnel id (when is it used?)
-	binary.Write(buf, binary.LittleEndian, uint32(10))
-	// caps, w2019 sends 63 -> windows client requests 63
-	binary.Write(buf, binary.LittleEndian, uint32(63))
+	binary.Write(buf, binary.LittleEndian, uint32(tunnelId))
+
+	binary.Write(buf, binary.LittleEndian, uint32(HTTP_CAPABILITY_IDLE_TIMEOUT))
 
 	return createPacket(PKT_TYPE_TUNNEL_RESPONSE, buf.Bytes())
 }
@@ -357,10 +359,9 @@ func readChannelCreateRequest(data []byte) (server string, port uint16) {
 func createChannelCreateResponse() []byte {
 	buf := new(bytes.Buffer)
 
-	binary.Write(buf, binary.LittleEndian, uint32(0)) // error code
-	//binary.Write(buf, binary.LittleEndian, uint16(HTTP_CHANNEL_RESPONSE_FIELD_CHANNELID | HTTP_CHANNEL_RESPONSE_FIELD_AUTHNCOOKIE | HTTP_CHANNEL_RESPONSE_FIELD_UDPPORT)) // fields present
-	binary.Write(buf, binary.LittleEndian, uint16(HTTP_CHANNEL_RESPONSE_FIELD_CHANNELID))
-	binary.Write(buf, binary.LittleEndian, uint16(0)) // reserved
+	binary.Write(buf, binary.LittleEndian, uint32(0))                                     // error code
+	binary.Write(buf, binary.LittleEndian, uint16(HTTP_CHANNEL_RESPONSE_FIELD_CHANNELID)) // fields present
+	binary.Write(buf, binary.LittleEndian, uint16(0))                                     // reserved
 
 	// channel id is required for Windows clients
 	binary.Write(buf, binary.LittleEndian, uint32(1)) // channel id
