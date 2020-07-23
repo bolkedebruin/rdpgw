@@ -1,0 +1,30 @@
+# web server configuration. 
+server:
+ # TLS certificate files (required)
+ certFile: /opt/rdpgw/server.pem
+ keyFile: /opt/rdpgw/key.pem
+ # gateway address advertised in the rdp files
+ gatewayAddress: localhost
+ # port to listen on
+ port: 9443
+ # list of acceptable desktop hosts to connect to
+ hosts:
+  - localhost:3389
+  - my-{{ preferred_username }}-host:3389
+  # Allow the user to connect to any host (insecure)
+  - any 
+ # if true the server randomly selects a host to connect to
+ sessionKey: dmednafbqwuffb3qfnfnesfuibdoqdb2qbi
+ roundRobin: false 
+# Open ID Connect specific settings
+openId:
+ providerUrl: http://keycloak:8080/auth/realms/master
+ clientId: rdpgw
+ clientSecret: 9defc114-616d-40b3-a9cd-661488f09e5e
+caps:
+ tokenAuth: true
+ idleTimeout: 10
+ DisablePrinter: true
+ DisablePort: true
+ DisablePnp: true
+ DisableDrive: true
