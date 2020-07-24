@@ -61,6 +61,7 @@ func main() {
 		TokenVerifier: verifier,
 		TokenGenerator: security.GeneratePAAToken,
 		SessionKey: []byte(conf.Server.SessionKey),
+		SessionEncryptionKey: []byte(conf.Server.SessionEncryptionKey),
 		Hosts: conf.Server.Hosts,
 		NetworkAutoDetect: conf.Client.NetworkAutoDetect,
 		UsernameTemplate: conf.Client.UsernameTemplate,

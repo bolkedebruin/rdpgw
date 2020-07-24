@@ -24,18 +24,19 @@ const (
 type TokenGeneratorFunc func(string, string) (string, error)
 
 type Config struct {
-	SessionKey          []byte
-	TokenGenerator      TokenGeneratorFunc
-	OAuth2Config        *oauth2.Config
-	store               *sessions.CookieStore
-	TokenVerifier       *oidc.IDTokenVerifier
-	stateStore          *cache.Cache
-	Hosts               []string
-	GatewayAddress      string
-	UsernameTemplate    string
-	NetworkAutoDetect   int
-	BandwidthAutoDetect int
-	ConnectionType      int
+	SessionKey           []byte
+	SessionEncryptionKey []byte
+	TokenGenerator       TokenGeneratorFunc
+	OAuth2Config         *oauth2.Config
+	store                *sessions.CookieStore
+	TokenVerifier        *oidc.IDTokenVerifier
+	stateStore           *cache.Cache
+	Hosts                []string
+	GatewayAddress       string
+	UsernameTemplate     string
+	NetworkAutoDetect    int
+	BandwidthAutoDetect  int
+	ConnectionType       int
 }
 
 func (c *Config) NewApi() {
@@ -45,7 +46,7 @@ func (c *Config) NewApi() {
 	if len(c.Hosts) < 1 {
 		log.Fatal("Not enough hosts to connect to specified")
 	}
-	c.store = sessions.NewCookieStore(c.SessionKey)
+	c.store = sessions.NewCookieStore(c.SessionKey, c.SessionEncryptionKey)
 	c.stateStore = cache.New(time.Minute*2, 5*time.Minute)
 }
 

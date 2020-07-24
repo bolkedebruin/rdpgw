@@ -10,17 +10,18 @@ type Configuration struct {
 	OpenId   OpenIDConfig
 	Caps     RDGCapsConfig
 	Security SecurityConfig
-	Client	 ClientConfig
+	Client   ClientConfig
 }
 
 type ServerConfig struct {
-	GatewayAddress string
-	Port           int
-	CertFile       string
-	KeyFile        string
-	Hosts          []string
-	RoundRobin     bool
-	SessionKey     string
+	GatewayAddress       string
+	Port                 int
+	CertFile             string
+	KeyFile              string
+	Hosts                []string
+	RoundRobin           bool
+	SessionKey           string
+	SessionEncryptionKey string
 }
 
 type OpenIDConfig struct {

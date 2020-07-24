@@ -42,9 +42,10 @@ server:
   - any 
  # if true the server randomly selects a host to connect to
  roundRobin: false 
- # a random string of at least 32 characters to secure cookies on the client
+ # a random strings of at least 32 characters to secure cookies on the client
  # make sure to share this across the different pods
  sessionKey: thisisasessionkeyreplacethisjetzt
+ sessionEncryptionKey: thisisasessionkeyreplacethisnunu!
 # Open ID Connect specific settings
 openId:
  providerUrl: http://keycloak/auth/realms/test

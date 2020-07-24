@@ -100,7 +100,7 @@ func (h *Handler) Process() error {
 			_, cookie := readCreateTunnelRequest(pkt)
 			if h.VerifyTunnelCreate != nil {
 				if ok, _ := h.VerifyTunnelCreate(h.Session, cookie); !ok {
-					log.Printf("Invalid PAA cookie: %s", cookie)
+					log.Printf("Invalid PAA cookie received")
 					return errors.New("invalid PAA cookie")
 				}
 			}
@@ -284,7 +284,6 @@ func readCreateTunnelRequest(data []byte) (caps uint32, cookie string) {
 		r.Read(cookieB)
 		cookie, _ = DecodeUTF16(cookieB)
 	}
-	log.Printf("Create tunnel caps: %d, cookie: %s", caps, cookie)
 	return
 }
 
