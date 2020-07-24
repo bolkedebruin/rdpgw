@@ -12,24 +12,30 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
 
 const (
 	RdpGwSession = "RDPGWSESSION"
-	PAAToken     = "PAAToken"
 )
 
+type TokenGeneratorFunc func(string, string) (string, error)
+
 type Config struct {
-	SessionKey     []byte
-	TokenCache     *cache.Cache
-	OAuth2Config   *oauth2.Config
-	store          *sessions.CookieStore
-	TokenVerifier  *oidc.IDTokenVerifier
-	stateStore     *cache.Cache
-	Hosts          []string
-	GatewayAddress string
+	SessionKey          []byte
+	TokenGenerator      TokenGeneratorFunc
+	OAuth2Config        *oauth2.Config
+	store               *sessions.CookieStore
+	TokenVerifier       *oidc.IDTokenVerifier
+	stateStore          *cache.Cache
+	Hosts               []string
+	GatewayAddress      string
+	UsernameTemplate    string
+	NetworkAutoDetect   int
+	BandwidthAutoDetect int
+	ConnectionType      int
 }
 
 func (c *Config) NewApi() {
@@ -86,22 +92,18 @@ func (c *Config) HandleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	seed := make([]byte, 16)
-	rand.Read(seed)
-	token := hex.EncodeToString(seed)
-
 	session, err := c.store.Get(r, RdpGwSession)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	session.Values[PAAToken] = token
+	session.Values["preferred_username"] = data["preferred_username"]
+	session.Values["authenticated"] = true
 
 	if err = session.Save(r, w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
-	c.TokenCache.Set(token, data, cache.DefaultExpiration)
 
 	http.Redirect(w, r, url, http.StatusFound)
 }
@@ -114,13 +116,8 @@ func (c *Config) Authenticated(next http.Handler) http.Handler {
 			return
 		}
 
-		found := false
-		token := session.Values[PAAToken]
-		if token != nil {
-			_, found = c.TokenCache.Get(token.(string))
-		}
-
-		if !found {
+		found := session.Values["authenticated"]
+		if found == nil || !found.(bool) {
 			seed := make([]byte, 16)
 			rand.Read(seed)
 			state := hex.EncodeToString(seed)
@@ -140,22 +137,33 @@ func (c *Config) HandleDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token := session.Values[PAAToken].(string)
-	data, found := c.TokenCache.Get(token)
-	if found == false {
+	userName := session.Values["preferred_username"]
+	if userName == nil || userName.(string) == "" {
 		// This shouldnt happen if the Authenticated handler is used to wrap this func
-		log.Printf("Found expired or non existent session: %s", token)
-		http.Error(w, errors.New("cannot find token").Error(), http.StatusInternalServerError)
+		log.Printf("Found expired or non existent session")
+		http.Error(w, errors.New("cannot find session").Error(), http.StatusInternalServerError)
 		return
 	}
 
 	// do a round robin selection for now
 	rand.Seed(time.Now().Unix())
-	var host = c.Hosts[rand.Intn(len(c.Hosts))]
-	for k, v := range data.(map[string]interface{}) {
-		if val, ok := v.(string); ok == true {
-			host = strings.Replace(host, "{{ "+k+" }}", val, 1)
+	host := c.Hosts[rand.Intn(len(c.Hosts))]
+	host = strings.Replace(host, "{{ preferred_username }}", userName.(string), 1)
+
+	user := userName.(string)
+	if c.UsernameTemplate != "" {
+		user = strings.Replace(c.UsernameTemplate, "{{ username }}", user, 1)
+		if c.UsernameTemplate == user {
+			log.Printf("Invalid username template. %s == %s", c.UsernameTemplate, user)
+			http.Error(w, errors.New("invalid server configuration").Error(), http.StatusInternalServerError)
+			return
 		}
+	}
+
+	token, err := c.TokenGenerator(user, host)
+	if err != nil {
+		log.Printf("Cannot generate token for user %s due to %s", user, err)
+		http.Error(w, errors.New("unable to generate gateway credentials").Error(), http.StatusInternalServerError)
 	}
 
 	// authenticated
@@ -172,7 +180,8 @@ func (c *Config) HandleDownload(w http.ResponseWriter, r *http.Request) {
 			"gatewayusagemethod:i:1\r\n"+
 			"gatewayprofileusagemethod:i:1\r\n"+
 			"gatewayaccesstoken:s:"+token+"\r\n"+
-			"networkautodetect:i:0\r\n"+
-			"bandwidthautodetect:i:1\r\n"+
-			"connection type:i:6\r\n"))
+			"networkautodetect:i:"+strconv.Itoa(c.NetworkAutoDetect)+"\r\n"+
+			"bandwidthautodetect:i:"+strconv.Itoa(c.BandwidthAutoDetect)+"\r\n"+
+			"connection type:i:"+strconv.Itoa(c.ConnectionType)+"\r\n"+
+			"username:s:"+user+"\r\n"))
 }

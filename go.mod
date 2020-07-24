@@ -4,6 +4,7 @@ go 1.14
 
 require (
 	github.com/coreos/go-oidc/v3 v3.0.0-alpha.1
+	github.com/dgrijalva/jwt-go/v4 v4.0.0-preview1
 	github.com/gorilla/sessions v1.2.0
 	github.com/gorilla/websocket v1.4.2
 	github.com/patrickmn/go-cache v2.1.0+incompatible

@@ -6,9 +6,11 @@ import (
 )
 
 type Configuration struct {
-	Server ServerConfig
-	OpenId OpenIDConfig
-	Caps   RDGCapsConfig
+	Server   ServerConfig
+	OpenId   OpenIDConfig
+	Caps     RDGCapsConfig
+	Security SecurityConfig
+	Client	 ClientConfig
 }
 
 type ServerConfig struct {
@@ -17,8 +19,8 @@ type ServerConfig struct {
 	CertFile       string
 	KeyFile        string
 	Hosts          []string
-	RoundRobin	   bool
-	SessionKey	   string
+	RoundRobin     bool
+	SessionKey     string
 }
 
 type OpenIDConfig struct {
@@ -40,10 +42,26 @@ type RDGCapsConfig struct {
 	EnableDrive     bool
 }
 
+type SecurityConfig struct {
+	EnableOpenId        bool
+	TokenSigningKey     string
+	PassTokenAsPassword bool
+}
+
+type ClientConfig struct {
+	NetworkAutoDetect   int
+	BandwidthAutoDetect int
+	ConnectionType      int
+	UsernameTemplate    string
+}
+
 func init() {
 	viper.SetDefault("server.certFile", "server.pem")
 	viper.SetDefault("server.keyFile", "key.pem")
 	viper.SetDefault("server.port", 443)
+	viper.SetDefault("security.enableOpenId", true)
+	viper.SetDefault("client.networkAutoDetect", 1)
+	viper.SetDefault("client.bandwidthAutoDetect", 1)
 }
 
 func Load(configFile string) Configuration {
@@ -56,11 +74,15 @@ func Load(configFile string) Configuration {
 	viper.AutomaticEnv()
 
 	if err := viper.ReadInConfig(); err != nil {
-		log.Printf("No config file found (%s). Using defaults", err)
+		log.Fatalf("No config file found (%s)", err)
 	}
 
 	if err := viper.Unmarshal(&conf); err != nil {
 		log.Fatalf("Cannot unmarshal the config file; %s", err)
+	}
+
+	if len(conf.Security.TokenSigningKey) < 32 {
+		log.Fatalf("Token signing key not long enough")
 	}
 
 	return conf

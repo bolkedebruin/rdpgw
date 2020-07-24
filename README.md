@@ -43,6 +43,7 @@ server:
  # if true the server randomly selects a host to connect to
  roundRobin: false 
  # a random string of at least 32 characters to secure cookies on the client
+ # make sure to share this across the different pods
  sessionKey: thisisasessionkeyreplacethisjetzt
 # Open ID Connect specific settings
 openId:
@@ -60,6 +61,17 @@ caps:
  enablePnp: true
  enableDrive: true
  enableClipboard: true
+client:
+  usernameTemplate: "{{ username }}@bla.com"
+  # rdp file settings see: 
+  # https://docs.microsoft.com/en-us/windows-server/remote/remote-desktop-services/clients/rdp-files
+  networkAutoDetect: 0
+  bandwidthAutoDetect: 1
+  ConnectionType: 6
+security:
+  # a random string of at least 32 characters to secure cookies on the client
+  # make sure to share this amongst different pods
+  tokenSigningKey: thisisasessionkeyreplacethisjetzt
 ```
 
 ## Use

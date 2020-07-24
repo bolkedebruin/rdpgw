@@ -8,7 +8,6 @@ import (
 	"github.com/bolkedebruin/rdpgw/protocol"
 	"github.com/bolkedebruin/rdpgw/security"
 	"github.com/coreos/go-oidc/v3/oidc"
-	"github.com/patrickmn/go-cache"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/cobra"
 	"golang.org/x/oauth2"
@@ -16,7 +15,6 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"time"
 )
 
 var cmd = &cobra.Command{
@@ -28,13 +26,15 @@ var (
 	configFile	string
 )
 
-var tokens = cache.New(time.Minute *5, 10*time.Minute)
 var conf config.Configuration
 
 func main() {
 	// get config
 	cmd.PersistentFlags().StringVarP(&configFile, "conf", "c", "rdpgw.yaml",  "config file (json, yaml, ini)")
 	conf = config.Load(configFile)
+
+	// set security keys
+	security.SigningKey = []byte(conf.Security.TokenSigningKey)
 
 	// set oidc config
 	ctx := context.Background()
@@ -59,9 +59,13 @@ func main() {
 		GatewayAddress: conf.Server.GatewayAddress,
 		OAuth2Config: &oauthConfig,
 		TokenVerifier: verifier,
-		TokenCache: tokens,
+		TokenGenerator: security.GeneratePAAToken,
 		SessionKey: []byte(conf.Server.SessionKey),
 		Hosts: conf.Server.Hosts,
+		NetworkAutoDetect: conf.Client.NetworkAutoDetect,
+		UsernameTemplate: conf.Client.UsernameTemplate,
+		BandwidthAutoDetect: conf.Client.BandwidthAutoDetect,
+		ConnectionType: conf.Client.ConnectionType,
 	}
 	api.NewApi()
 
@@ -96,11 +100,6 @@ func main() {
 		TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler)), // disable http2
 	}
 
-	// setup security
-	securityConfig := &security.Config{
-		Store: tokens,
-	}
-
 	// create the gateway
 	handlerConfig := protocol.HandlerConf{
 		IdleTimeout: conf.Caps.IdleTimeout,
@@ -115,7 +114,7 @@ func main() {
 			DisableAll: conf.Caps.DisableRedirect,
 			EnableAll: conf.Caps.RedirectAll,
 		},
-		VerifyTunnelCreate: securityConfig.VerifyPAAToken,
+		VerifyTunnelCreate: security.VerifyPAAToken,
 	}
 	gw := protocol.Gateway{
 		HandlerConf: &handlerConfig,
