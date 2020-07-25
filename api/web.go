@@ -127,31 +127,27 @@ func (c *Config) Authenticated(next http.Handler) http.Handler {
 			return
 		}
 
-		next.ServeHTTP(w, r)
+		ctx := context.WithValue(r.Context(), "preferred_username", session.Values["preferred_username"])
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
 func (c *Config) HandleDownload(w http.ResponseWriter, r *http.Request) {
-	session, err := c.store.Get(r, RdpGwSession)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	ctx := r.Context()
+	userName, ok := ctx.Value("preferred_username").(string)
 
-	userName := session.Values["preferred_username"]
-	if userName == nil || userName.(string) == "" {
-		// This shouldnt happen if the Authenticated handler is used to wrap this func
-		log.Printf("Found expired or non existent session")
-		http.Error(w, errors.New("cannot find session").Error(), http.StatusInternalServerError)
+	if !ok {
+		log.Printf("preferred_username not found in context")
+		http.Error(w, errors.New("cannot find session or user").Error(), http.StatusInternalServerError)
 		return
 	}
 
 	// do a round robin selection for now
 	rand.Seed(time.Now().Unix())
 	host := c.Hosts[rand.Intn(len(c.Hosts))]
-	host = strings.Replace(host, "{{ preferred_username }}", userName.(string), 1)
+	host = strings.Replace(host, "{{ preferred_username }}", userName, 1)
 
-	user := userName.(string)
+	user := userName
 	if c.UsernameTemplate != "" {
 		user = strings.Replace(c.UsernameTemplate, "{{ username }}", user, 1)
 		if c.UsernameTemplate == user {

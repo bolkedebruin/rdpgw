@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"errors"
 	"github.com/bolkedebruin/rdpgw/transport"
@@ -71,7 +72,7 @@ func NewHandler(s *SessionInfo, conf *HandlerConf) *Handler {
 
 const tunnelId = 10
 
-func (h *Handler) Process() error {
+func (h *Handler) Process(ctx context.Context) error {
 	for {
 		pt, sz, pkt, err := h.ReadMessage()
 		if err != nil {
