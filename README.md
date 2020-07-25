@@ -24,7 +24,7 @@ RDPGW wants to be secure when you set it up from the beginning. It does this by 
 Connect integration enabled by default. Cookies are encrypted and signed on the client side relying
 on [Gorilla Sessions](https://www.gorillatoolkit.org/pkg/sessions). PAA tokens (gateway access tokens)
 are generated and signed according to the JWT spec by using [jwt-go](https://github.com/dgrijalva/jwt-go)
-signed with a 512 bit HMAC. Hosts provided by the user are verified against what was provided by
+signed with a 256 bit HMAC. Hosts provided by the user are verified against what was provided by
 the server. Finally, the client's ip address needs to match the one it obtained the token with.
 
 ## How to build

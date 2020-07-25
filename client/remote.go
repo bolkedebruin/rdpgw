@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"strings"
 )
@@ -31,10 +32,10 @@ func EnrichContext(next http.Handler) http.Handler {
 			ctx = context.WithValue(ctx, ProxyAddressesCtx, proxies)
 		}
 
-		remote := r.Header.Get("REMOTE_ADDR")
-		ctx = context.WithValue(ctx, RemoteAddressCtx, remote)
+		ctx = context.WithValue(ctx, RemoteAddressCtx, r.RemoteAddr)
 		if h == "" {
-			ctx = context.WithValue(ctx, ClientIPCtx, remote)
+			clientIp, _, _ := net.SplitHostPort(r.RemoteAddr)
+			ctx = context.WithValue(ctx, ClientIPCtx, clientIp)
 		}
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})

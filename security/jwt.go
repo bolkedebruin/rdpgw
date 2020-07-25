@@ -36,7 +36,7 @@ func VerifyPAAToken(ctx context.Context, tokenString string) (bool, error) {
 	if c, ok := token.Claims.(*customClaims); ok && token.Valid {
 		s := getSessionInfo(ctx)
 		s.RemoteServer = c.RemoteServer
-		s.ClientIp = client.GetClientIp(ctx)
+		s.ClientIp = c.ClientIP
 		return true, nil
 	}
 
@@ -78,6 +78,7 @@ func GeneratePAAToken(ctx context.Context, username string, server string) (stri
 
 	c := customClaims{
 		RemoteServer: server,
+		ClientIP: client.GetClientIp(ctx),
 		StandardClaims: jwt.StandardClaims{
 			ExpiresAt: exp,
 			IssuedAt: now,
@@ -86,7 +87,7 @@ func GeneratePAAToken(ctx context.Context, username string, server string) (stri
 		},
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS512, c)
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, c)
 	if ss, err := token.SignedString(SigningKey); err != nil {
 		log.Printf("Cannot sign PAA token %s", err)
 		return "", err

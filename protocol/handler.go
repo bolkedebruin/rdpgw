@@ -78,7 +78,7 @@ func (h *Handler) Process(ctx context.Context) error {
 
 		switch pt {
 		case PKT_TYPE_HANDSHAKE_REQUEST:
-			log.Printf("Handshake")
+			log.Printf("Client handshake from %s", client.GetClientIp(ctx))
 			if h.State != SERVER_STATE_INITIAL {
 				log.Printf("Handshake attempted while in wrong state %d != %d", h.State, SERVER_STATE_INITIAL)
 				return errors.New("wrong state")
