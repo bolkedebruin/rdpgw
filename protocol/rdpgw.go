@@ -46,13 +46,11 @@ type Gateway struct {
 
 type SessionInfo struct {
 	ConnId           string
-	CorrelationId    string
-	ClientGeneration string
 	TransportIn      transport.Transport
 	TransportOut     transport.Transport
 	RemoteAddress	 string
-	ProxyAddresses	 string
-	UserName		 string
+	ProxyAddress	 string
+	RemoteServer	 string
 }
 
 var upgrader = websocket.Upgrader{}
@@ -65,9 +63,6 @@ func init() {
 }
 
 func (g *Gateway) HandleGatewayProtocol(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	connectionCache.Set(float64(c.ItemCount()))
 
 	var s *SessionInfo
@@ -79,6 +74,7 @@ func (g *Gateway) HandleGatewayProtocol(w http.ResponseWriter, r *http.Request) 
 	} else {
 		s = x.(*SessionInfo)
 	}
+	ctx := context.WithValue(r.Context(), "SessionInfo", s)
 
 	if r.Method == MethodRDGOUT {
 		if r.Header.Get("Connection") != "upgrade" && r.Header.Get("Upgrade") != "websocket" {

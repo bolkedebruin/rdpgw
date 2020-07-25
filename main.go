@@ -116,6 +116,7 @@ func main() {
 			EnableAll: conf.Caps.RedirectAll,
 		},
 		VerifyTunnelCreate: security.VerifyPAAToken,
+		VerifyServerFunc: security.VerifyServerFunc,
 	}
 	gw := protocol.Gateway{
 		HandlerConf: &handlerConfig,

@@ -19,9 +19,10 @@ import (
 
 const (
 	RdpGwSession = "RDPGWSESSION"
+	MaxAge 		 = 120
 )
 
-type TokenGeneratorFunc func(string, string) (string, error)
+type TokenGeneratorFunc func(context.Context, string, string) (string, error)
 
 type Config struct {
 	SessionKey           []byte
@@ -99,6 +100,7 @@ func (c *Config) HandleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	session.Options.MaxAge = MaxAge
 	session.Values["preferred_username"] = data["preferred_username"]
 	session.Values["authenticated"] = true
 
@@ -157,7 +159,7 @@ func (c *Config) HandleDownload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	token, err := c.TokenGenerator(user, host)
+	token, err := c.TokenGenerator(ctx, user, host)
 	if err != nil {
 		log.Printf("Cannot generate token for user %s due to %s", user, err)
 		http.Error(w, errors.New("unable to generate gateway credentials").Error(), http.StatusInternalServerError)
