@@ -19,6 +19,14 @@ RDPGW provides multi factor authentication out of the box with OpenID Connect in
 you can integrate your remote desktops with Keycloak, Okta, Google, Azure, Apple or Facebook 
 if you want. 
 
+## Security
+RDPGW wants to be secure when you set it up from the beginning. It does this by having OpenID
+Connect integration enabled by default. Cookies are encrypted and signed on the client side relying
+on [Gorilla Sessions](https://www.gorillatoolkit.org/pkg/sessions). PAA tokens (gateway access tokens)
+are generated and signed according to the JWT spec by using [jwt-go](https://github.com/dgrijalva/jwt-go)
+signed with a 512 bit HMAC. Hosts provided by the user are verified against what was provided by
+the server.
+
 ## How to build
 ```bash
 cd rdpgw
