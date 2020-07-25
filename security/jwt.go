@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/bolkedebruin/rdpgw/client"
 	"github.com/bolkedebruin/rdpgw/protocol"
 	"github.com/dgrijalva/jwt-go/v4"
 	"log"
@@ -15,6 +16,7 @@ var ExpiryTime time.Duration = 5
 
 type customClaims struct {
 	RemoteServer string `json:"remoteServer"`
+	ClientIP	 string `json:"clientIp"`
 	jwt.StandardClaims
 }
 
@@ -34,6 +36,7 @@ func VerifyPAAToken(ctx context.Context, tokenString string) (bool, error) {
 	if c, ok := token.Claims.(*customClaims); ok && token.Valid {
 		s := getSessionInfo(ctx)
 		s.RemoteServer = c.RemoteServer
+		s.ClientIp = client.GetClientIp(ctx)
 		return true, nil
 	}
 
@@ -48,7 +51,13 @@ func VerifyServerFunc(ctx context.Context, host string) (bool, error) {
 	}
 
 	if s.RemoteServer != host {
-		log.Printf("Client host %s does not match token host %s", host, s.RemoteServer)
+		log.Printf("Client specified host %s does not match token host %s", host, s.RemoteServer)
+		return false, nil
+	}
+
+	if s.ClientIp != client.GetClientIp(ctx) {
+		log.Printf("Current client ip address %s does not match token client ip %s",
+			client.GetClientIp(ctx), s.ClientIp)
 		return false, nil
 	}
 

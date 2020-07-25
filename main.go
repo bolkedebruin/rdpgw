@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"github.com/bolkedebruin/rdpgw/api"
+	"github.com/bolkedebruin/rdpgw/client"
 	"github.com/bolkedebruin/rdpgw/config"
 	"github.com/bolkedebruin/rdpgw/protocol"
 	"github.com/bolkedebruin/rdpgw/security"
@@ -122,8 +123,8 @@ func main() {
 		HandlerConf: &handlerConfig,
 	}
 
-	http.HandleFunc("/remoteDesktopGateway/", gw.HandleGatewayProtocol)
-	http.Handle("/connect", api.Authenticated(http.HandlerFunc(api.HandleDownload)))
+	http.Handle("/remoteDesktopGateway/", client.EnrichContext(http.HandlerFunc(gw.HandleGatewayProtocol)))
+	http.Handle("/connect", client.EnrichContext(api.Authenticated(http.HandlerFunc(api.HandleDownload))))
 	http.Handle("/metrics", promhttp.Handler())
 	http.HandleFunc("/callback", api.HandleCallback)
 

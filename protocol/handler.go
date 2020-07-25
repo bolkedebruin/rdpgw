@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"github.com/bolkedebruin/rdpgw/client"
 	"io"
 	"log"
 	"net"
@@ -96,7 +97,7 @@ func (h *Handler) Process(ctx context.Context) error {
 			_, cookie := readCreateTunnelRequest(pkt)
 			if h.VerifyTunnelCreate != nil {
 				if ok, _ := h.VerifyTunnelCreate(ctx, cookie); !ok {
-					log.Printf("Invalid PAA cookie received")
+					log.Printf("Invalid PAA cookie received from client %s", client.GetClientIp(ctx))
 					return errors.New("invalid PAA cookie")
 				}
 			}
