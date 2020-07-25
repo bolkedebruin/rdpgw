@@ -14,6 +14,11 @@ on Kubernetes.
 RDPGW aims to provide a full open source replacement for MS Remote Desktop Gateway, 
 including access policies.
 
+## Multi Factor Authentication (MFA)
+RDPGW provides multi factor authentication out of the box with OpenID Connect integration. Thus
+you can integrate your remote desktops with Keycloak, Okta, Google, Azure, Apple or Facebook 
+if you want. 
+
 ## How to build
 ```bash
 cd rdpgw
@@ -87,5 +92,6 @@ desktop host behind it.
 * Integrate uber-go/zap
 * Integrate prometheus
 * Research: TLS defragmentation 
+* Improve Web Interface
 
 
