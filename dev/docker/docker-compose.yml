@@ -1,4 +1,4 @@
-version: '3'
+version: '3.4'
 
 volumes:
   mysql_data:
@@ -7,8 +7,8 @@ volumes:
 
 services:
   keycloak:
-      image: jboss/keycloak
-      hostname: keycloak.local
+      image: quay.io/keycloak/keycloak:11.0.0
+      hostname: keycloak
       volumes:
         - ${PWD}/realm-export.json:/export/realm-export.json
       environment:
@@ -17,7 +17,15 @@ services:
         KEYCLOAK_IMPORT: /export/realm-export.json
       ports:
         - 8080:8080
+      restart: on-failure
+      healthcheck:
+        test: ["CMD", "curl", "-f", "http://localhost:8080/auth"]
+        interval: 30s
+        timeout: 3s
+        retries: 10
+        start_period: 5s
   xrdp:
+      hostname: xrdp
       image: rattydave/docker-ubuntu-xrdp-mate-custom:20.04
       ports:
         - 3389:3389

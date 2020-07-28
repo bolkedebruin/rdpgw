@@ -4,18 +4,18 @@ server:
  gatewayAddress: localhost:9443
  port: 9443
  hosts:
-  - localhost:3389
+  - xrdp:3389
  roundRobin: false 
- sessionKey: thisisasessionkeyreplacethisjetzt
- sessionEncryptionKey: thisisasessionkeyreplacethisnunu!
+ sessionKey: thisisasessionkeyreplacethisjetz
+ sessionEncryptionKey: thisisasessionkeyreplacethisnunu
 openId:
- providerUrl: http://keycloak:8080/auth/realms/master
+ providerUrl: http://keycloak:8080/auth/realms/rdpgw
  clientId: rdpgw
- clientSecret: 9defc114-616d-40b3-a9cd-661488f09e5e
+ clientSecret: 01cd304c-6f43-4480-9479-618eb6fd578f
 client:
  usernameTemplate: "{{ username }}"
  networkAutoDetect: 0
  bandwidthAutoDetect: 1
  ConnectionType: 6
 security:
-  tokenSigningKey: thisisasessionkeyreplacethisjetzt
+  tokenSigningKey: prettypleasereplacemeinproductio
