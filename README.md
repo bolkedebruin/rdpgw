@@ -87,6 +87,16 @@ security:
   # make sure to share this amongst different pods
   tokenSigningKey: thisisasessionkeyreplacethisjetzt
 ```
+## Local tests
+```bash
+cd dev/docker
+docker-compose build
+docker-compose up
+```
+Allow your browser to run on unsecure localhost.
+For chrome
+chrome://flags/#allow-insecure-localhost
+Use admin:admin user password combination whenever asked.
 
 ## Use
 Point your browser to `https://your-gateway/connect`. After authentication
