@@ -225,7 +225,7 @@ func (h *Handler) ReadMessage() (pt int, n int, msg []byte, err error) {
 func (h *Handler) handshakeResponse(major byte, minor byte) []byte {
 	var caps uint16
 	if h.SmartCardAuth {
-		caps = caps | HTTP_EXTENDED_AUTH_PAA
+		caps = caps | HTTP_EXTENDED_AUTH_SC
 	}
 	if h.TokenAuth {
 		caps = caps | HTTP_EXTENDED_AUTH_PAA
