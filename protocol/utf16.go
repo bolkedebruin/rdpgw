@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"unicode/utf16"
 	"unicode/utf8"
@@ -29,4 +30,13 @@ func DecodeUTF16(b []byte) (string, error) {
 		bret = bret[:len(bret)-1]
 	}
 	return string(bret), nil
+}
+
+func EncodeUTF16(s string) []byte {
+	ret := new(bytes.Buffer)
+	enc := utf16.Encode([]rune(s))
+	for c := range enc {
+		binary.Write(ret, binary.LittleEndian, enc[c])
+	}
+	return ret.Bytes()
 }
