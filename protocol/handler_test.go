@@ -12,6 +12,8 @@ const (
 	HandshakeResponseLen = HeaderLen + 10
 	TunnelCreateRequestLen = HeaderLen + 8 // + dynamic
 	TunnelCreateResponseLen = HeaderLen + 18
+	TunnelAuthLen = HeaderLen + 2 // + dynamic
+	TunnelAuthResponseLen = HeaderLen + 16
 )
 
 func verifyPacketHeader(data []byte , expPt uint16, expSize uint32) (uint16, uint32, []byte, error) {
@@ -112,5 +114,48 @@ func TestTunnelCreation(t *testing.T) {
 	}
 	if !((caps & HTTP_CAPABILITY_IDLE_TIMEOUT) == HTTP_CAPABILITY_IDLE_TIMEOUT) {
 		t.Fatalf("tunnelResponse failed got caps %d, expected %d", caps, caps | HTTP_CAPABILITY_IDLE_TIMEOUT)
+	}
+}
+
+func TestTunnelAuth(t *testing.T) {
+	client := ClientConfig{}
+	s := &SessionInfo{}
+	hc := &HandlerConf{
+		TokenAuth: true,
+		IdleTimeout: 10,
+		RedirectFlags: RedirectFlags{
+			Clipboard: true,
+		},
+	}
+	h := NewHandler(s, hc)
+	name := "test_name"
+
+	data := client.tunnelAuthRequest(name)
+	_, _, pkt, err := verifyPacketHeader(data, PKT_TYPE_TUNNEL_AUTH, uint32(TunnelAuthLen + len(name) * 2))
+	if err != nil {
+		t.Fatalf("verifyHeader failed: %s", err)
+	}
+
+	n := h.readTunnelAuthRequest(pkt)
+	if n != name {
+		t.Fatalf("readTunnelAuthRequest failed got name %s, expected %s", n, name)
+	}
+
+	data = h.createTunnelAuthResponse()
+	_, _, pkt, err = verifyPacketHeader(data, PKT_TYPE_TUNNEL_AUTH_RESPONSE, TunnelAuthResponseLen)
+	if err != nil {
+		t.Fatalf("verifyHeader failed: %s", err)
+	}
+	flags, timeout, err := client.tunnelAuthResponse(pkt)
+	if err != nil {
+		t.Fatalf("tunnel auth error %s", err)
+	}
+	if (flags & HTTP_TUNNEL_REDIR_DISABLE_CLIPBOARD) == HTTP_TUNNEL_REDIR_DISABLE_CLIPBOARD {
+		t.Fatalf("tunnelAuthResponse failed got flags %d, expected %d",
+			flags, flags | HTTP_TUNNEL_REDIR_DISABLE_CLIPBOARD)
+	}
+	if int(timeout) != hc.IdleTimeout {
+		t.Fatalf("tunnelAuthResponse failed got timeout %d, expected %d",
+			timeout, hc.IdleTimeout)
 	}
 }

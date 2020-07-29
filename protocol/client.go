@@ -114,3 +114,37 @@ func (c *ClientConfig) tunnelResponse(data []byte) (tunnelId uint32, caps uint32
 
 	return
 }
+
+func (c *ClientConfig) tunnelAuthRequest(name string) []byte {
+	utf16name := EncodeUTF16(name)
+	size := uint16(len(utf16name))
+
+	buf := new(bytes.Buffer)
+	binary.Write(buf, binary.LittleEndian, size)
+	buf.Write(utf16name)
+
+	return createPacket(PKT_TYPE_TUNNEL_AUTH, buf.Bytes())
+}
+
+func (c *ClientConfig) tunnelAuthResponse(data []byte) (flags uint32, timeout uint32, err error) {
+	var errorCode uint32
+	var fields uint16
+
+	r := bytes.NewReader(data)
+	binary.Read(r, binary.LittleEndian, &errorCode)
+	binary.Read(r, binary.LittleEndian, &fields)
+	r.Seek(2, io.SeekCurrent)
+
+	if (fields & HTTP_TUNNEL_AUTH_RESPONSE_FIELD_REDIR_FLAGS) == HTTP_TUNNEL_AUTH_RESPONSE_FIELD_REDIR_FLAGS {
+		binary.Read(r, binary.LittleEndian, &flags)
+	}
+	if (fields & HTTP_TUNNEL_AUTH_RESPONSE_FIELD_IDLE_TIMEOUT) == HTTP_TUNNEL_AUTH_RESPONSE_FIELD_IDLE_TIMEOUT {
+		binary.Read(r, binary.LittleEndian, &timeout)
+	}
+
+	if errorCode > 0 {
+		return 0, 0, fmt.Errorf("tunnel auth error %d", errorCode)
+	}
+
+	return
+}
