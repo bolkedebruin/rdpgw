@@ -7,20 +7,20 @@ import (
 )
 
 const (
-	HeaderLen = 8
-	HandshakeRequestLen = HeaderLen + 6
-	HandshakeResponseLen = HeaderLen + 10
-	TunnelCreateRequestLen = HeaderLen + 8 // + dynamic
+	HeaderLen               = 8
+	HandshakeRequestLen     = HeaderLen + 6
+	HandshakeResponseLen    = HeaderLen + 10
+	TunnelCreateRequestLen  = HeaderLen + 8 // + dynamic
 	TunnelCreateResponseLen = HeaderLen + 18
-	TunnelAuthLen = HeaderLen + 2 // + dynamic
-	TunnelAuthResponseLen = HeaderLen + 16
+	TunnelAuthLen           = HeaderLen + 2 // + dynamic
+	TunnelAuthResponseLen   = HeaderLen + 16
 )
 
-func verifyPacketHeader(data []byte , expPt uint16, expSize uint32) (uint16, uint32, []byte, error) {
+func verifyPacketHeader(data []byte, expPt uint16, expSize uint32) (uint16, uint32, []byte, error) {
 	pt, size, pkt, err := readHeader(data)
 
 	if pt != expPt {
-		return 0,0, []byte{}, fmt.Errorf("readHeader failed, expected packet type %d got %d", expPt, pt)
+		return 0, 0, []byte{}, fmt.Errorf("readHeader failed, expected packet type %d got %d", expPt, pt)
 	}
 
 	if size != expSize {
@@ -38,6 +38,11 @@ func TestHandshake(t *testing.T) {
 	client := ClientConfig{
 		PAAToken: "abab",
 	}
+	s := &SessionInfo{}
+	hc := &ServerConf{
+		TokenAuth: true,
+	}
+	h := NewServer(s, hc)
 
 	data := client.handshakeRequest()
 
@@ -49,22 +54,15 @@ func TestHandshake(t *testing.T) {
 
 	log.Printf("pkt: %x", pkt)
 
-	major, minor, version, extAuth := readHandshake(pkt)
+	major, minor, version, extAuth := h.handshakeRequest(pkt)
 	if major != MajorVersion || minor != MinorVersion || version != Version {
-		t.Fatalf("readHandshake failed got version %d.%d protocol %d, expected %d.%d protocol %d",
+		t.Fatalf("handshakeRequest failed got version %d.%d protocol %d, expected %d.%d protocol %d",
 			major, minor, version, MajorVersion, MinorVersion, Version)
 	}
 
 	if !((extAuth & HTTP_EXTENDED_AUTH_PAA) == HTTP_EXTENDED_AUTH_PAA) {
-		t.Fatalf("readHandshake failed got ext auth %d, expected %d", extAuth, extAuth | HTTP_EXTENDED_AUTH_PAA)
+		t.Fatalf("handshakeRequest failed got ext auth %d, expected %d", extAuth, extAuth|HTTP_EXTENDED_AUTH_PAA)
 	}
-
-	s := &SessionInfo{}
-	hc := &HandlerConf{
-		TokenAuth: true,
-	}
-
-	h := NewHandler(s, hc)
 
 	data = h.handshakeResponse(0x0, 0x0)
 	_, _, pkt, err = verifyPacketHeader(data, PKT_TYPE_HANDSHAKE_RESPONSE, HandshakeResponseLen)
@@ -75,7 +73,7 @@ func TestHandshake(t *testing.T) {
 
 	caps, err := client.handshakeResponse(pkt)
 	if !((caps & HTTP_EXTENDED_AUTH_PAA) == HTTP_EXTENDED_AUTH_PAA) {
-		t.Fatalf("handshakeResponse failed got caps %d, expected %d", caps, caps | HTTP_EXTENDED_AUTH_PAA)
+		t.Fatalf("handshakeResponse failed got caps %d, expected %d", caps, caps|HTTP_EXTENDED_AUTH_PAA)
 	}
 }
 
@@ -83,23 +81,28 @@ func TestTunnelCreation(t *testing.T) {
 	client := ClientConfig{
 		PAAToken: "abab",
 	}
+	s := &SessionInfo{}
+	hc := &ServerConf{
+		TokenAuth: true,
+	}
+	h := NewServer(s, hc)
 
 	data := client.tunnelRequest()
 	_, _, pkt, err := verifyPacketHeader(data, PKT_TYPE_TUNNEL_CREATE,
-		uint32(TunnelCreateRequestLen + 2 + len(client.PAAToken)*2))
+		uint32(TunnelCreateRequestLen+2+len(client.PAAToken)*2))
 	if err != nil {
 		t.Fatalf("verifyHeader failed: %s", err)
 	}
 
-	caps, token := readCreateTunnelRequest(pkt)
+	caps, token := h.tunnelRequest(pkt)
 	if !((caps & HTTP_CAPABILITY_IDLE_TIMEOUT) == HTTP_CAPABILITY_IDLE_TIMEOUT) {
-		t.Fatalf("readCreateTunnelRequest failed got caps %d, expected %d", caps, caps | HTTP_CAPABILITY_IDLE_TIMEOUT)
+		t.Fatalf("tunnelRequest failed got caps %d, expected %d", caps, caps|HTTP_CAPABILITY_IDLE_TIMEOUT)
 	}
 	if token != client.PAAToken {
-		t.Fatalf("readCreateTunnelRequest failed got token %s, expected %s", token, client.PAAToken)
+		t.Fatalf("tunnelRequest failed got token %s, expected %s", token, client.PAAToken)
 	}
 
-	data = createTunnelResponse()
+	data = h.tunnelResponse()
 	_, _, pkt, err = verifyPacketHeader(data, PKT_TYPE_TUNNEL_RESPONSE, TunnelCreateResponseLen)
 	if err != nil {
 		t.Fatalf("verifyHeader failed: %s", err)
@@ -113,35 +116,35 @@ func TestTunnelCreation(t *testing.T) {
 		t.Fatalf("tunnelResponse failed tunnel id %d, expected %d", tid, tunnelId)
 	}
 	if !((caps & HTTP_CAPABILITY_IDLE_TIMEOUT) == HTTP_CAPABILITY_IDLE_TIMEOUT) {
-		t.Fatalf("tunnelResponse failed got caps %d, expected %d", caps, caps | HTTP_CAPABILITY_IDLE_TIMEOUT)
+		t.Fatalf("tunnelResponse failed got caps %d, expected %d", caps, caps|HTTP_CAPABILITY_IDLE_TIMEOUT)
 	}
 }
 
 func TestTunnelAuth(t *testing.T) {
 	client := ClientConfig{}
 	s := &SessionInfo{}
-	hc := &HandlerConf{
-		TokenAuth: true,
+	hc := &ServerConf{
+		TokenAuth:   true,
 		IdleTimeout: 10,
 		RedirectFlags: RedirectFlags{
 			Clipboard: true,
 		},
 	}
-	h := NewHandler(s, hc)
+	h := NewServer(s, hc)
 	name := "test_name"
 
 	data := client.tunnelAuthRequest(name)
-	_, _, pkt, err := verifyPacketHeader(data, PKT_TYPE_TUNNEL_AUTH, uint32(TunnelAuthLen + len(name) * 2))
+	_, _, pkt, err := verifyPacketHeader(data, PKT_TYPE_TUNNEL_AUTH, uint32(TunnelAuthLen+len(name)*2))
 	if err != nil {
 		t.Fatalf("verifyHeader failed: %s", err)
 	}
 
-	n := h.readTunnelAuthRequest(pkt)
+	n := h.tunnelAuthRequest(pkt)
 	if n != name {
-		t.Fatalf("readTunnelAuthRequest failed got name %s, expected %s", n, name)
+		t.Fatalf("tunnelAuthRequest failed got name %s, expected %s", n, name)
 	}
 
-	data = h.createTunnelAuthResponse()
+	data = h.tunnelAuthResponse()
 	_, _, pkt, err = verifyPacketHeader(data, PKT_TYPE_TUNNEL_AUTH_RESPONSE, TunnelAuthResponseLen)
 	if err != nil {
 		t.Fatalf("verifyHeader failed: %s", err)
@@ -152,7 +155,7 @@ func TestTunnelAuth(t *testing.T) {
 	}
 	if (flags & HTTP_TUNNEL_REDIR_DISABLE_CLIPBOARD) == HTTP_TUNNEL_REDIR_DISABLE_CLIPBOARD {
 		t.Fatalf("tunnelAuthResponse failed got flags %d, expected %d",
-			flags, flags | HTTP_TUNNEL_REDIR_DISABLE_CLIPBOARD)
+			flags, flags|HTTP_TUNNEL_REDIR_DISABLE_CLIPBOARD)
 	}
 	if int(timeout) != hc.IdleTimeout {
 		t.Fatalf("tunnelAuthResponse failed got timeout %d, expected %d",

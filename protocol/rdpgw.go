@@ -42,7 +42,7 @@ var (
 )
 
 type Gateway struct {
-	HandlerConf *HandlerConf
+	ServerConf *ServerConf
 }
 
 type SessionInfo struct {
@@ -102,12 +102,12 @@ func (g *Gateway) handleWebsocketProtocol(ctx context.Context, c *websocket.Conn
 	inout, _ := transport.NewWS(c)
 	s.TransportOut = inout
 	s.TransportIn = inout
-	handler := NewHandler(s, g.HandlerConf)
+	handler := NewServer(s, g.ServerConf)
 	handler.Process(ctx)
 }
 
 // The legacy protocol (no websockets) uses an RDG_IN_DATA for client -> server
-// and RDG_OUT_DATA for server -> client data. The handshake procedure is a bit different
+// and RDG_OUT_DATA for server -> client data. The handshakeRequest procedure is a bit different
 // to ensure the connections do not get cached or terminated by a proxy prematurely.
 func (g *Gateway) handleLegacyProtocol(w http.ResponseWriter, r *http.Request, s *SessionInfo) {
 	log.Printf("Session %s, %t, %t", s.ConnId, s.TransportOut != nil, s.TransportIn != nil)
@@ -145,8 +145,8 @@ func (g *Gateway) handleLegacyProtocol(w http.ResponseWriter, r *http.Request, s
 			// read some initial data
 			in.Drain()
 
-			log.Printf("Legacy handshake done for client %s", client.GetClientIp(r.Context()))
-			handler := NewHandler(s, g.HandlerConf)
+			log.Printf("Legacy handshakeRequest done for client %s", client.GetClientIp(r.Context()))
+			handler := NewServer(s, g.ServerConf)
 			handler.Process(r.Context())
 		}
 	}

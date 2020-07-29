@@ -103,7 +103,7 @@ func main() {
 	}
 
 	// create the gateway
-	handlerConfig := protocol.HandlerConf{
+	handlerConfig := protocol.ServerConf{
 		IdleTimeout: conf.Caps.IdleTimeout,
 		TokenAuth: conf.Caps.TokenAuth,
 		SmartCardAuth: conf.Caps.SmartCardAuth,
@@ -120,7 +120,7 @@ func main() {
 		VerifyServerFunc: security.VerifyServerFunc,
 	}
 	gw := protocol.Gateway{
-		HandlerConf: &handlerConfig,
+		ServerConf: &handlerConfig,
 	}
 
 	http.Handle("/remoteDesktopGateway/", client.EnrichContext(http.HandlerFunc(gw.HandleGatewayProtocol)))

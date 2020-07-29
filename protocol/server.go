@@ -27,7 +27,7 @@ type RedirectFlags struct {
 	EnableAll  bool
 }
 
-type Handler struct {
+type Server struct {
 	Session              *SessionInfo
 	VerifyTunnelCreate   VerifyTunnelCreate
 	VerifyTunnelAuthFunc VerifyTunnelAuthFunc
@@ -41,7 +41,7 @@ type Handler struct {
 	State                int
 }
 
-type HandlerConf struct {
+type ServerConf struct {
 	VerifyTunnelCreate   VerifyTunnelCreate
 	VerifyTunnelAuthFunc VerifyTunnelAuthFunc
 	VerifyServerFunc     VerifyServerFunc
@@ -51,8 +51,8 @@ type HandlerConf struct {
 	TokenAuth            bool
 }
 
-func NewHandler(s *SessionInfo, conf *HandlerConf) *Handler {
-	h := &Handler{
+func NewServer(s *SessionInfo, conf *ServerConf) *Server {
+	h := &Server{
 		State:				  SERVER_STATE_INITIAL,
 		Session:              s,
 		RedirectFlags:        makeRedirectFlags(conf.RedirectFlags),
@@ -68,9 +68,9 @@ func NewHandler(s *SessionInfo, conf *HandlerConf) *Handler {
 
 const tunnelId = 10
 
-func (h *Handler) Process(ctx context.Context) error {
+func (s *Server) Process(ctx context.Context) error {
 	for {
-		pt, sz, pkt, err := h.ReadMessage()
+		pt, sz, pkt, err := s.ReadMessage()
 		if err != nil {
 			log.Printf("Cannot read message from stream %s", err)
 			return err
@@ -78,89 +78,89 @@ func (h *Handler) Process(ctx context.Context) error {
 
 		switch pt {
 		case PKT_TYPE_HANDSHAKE_REQUEST:
-			log.Printf("Client handshake from %s", client.GetClientIp(ctx))
-			if h.State != SERVER_STATE_INITIAL {
-				log.Printf("Handshake attempted while in wrong state %d != %d", h.State, SERVER_STATE_INITIAL)
+			log.Printf("Client handshakeRequest from %s", client.GetClientIp(ctx))
+			if s.State != SERVER_STATE_INITIAL {
+				log.Printf("Handshake attempted while in wrong state %d != %d", s.State, SERVER_STATE_INITIAL)
 				return errors.New("wrong state")
 			}
-			major, minor, _, _ := readHandshake(pkt) // todo check if auth matches what the handler can do
-			msg := h.handshakeResponse(major, minor)
-			h.Session.TransportOut.WritePacket(msg)
-			h.State = SERVER_STATE_HANDSHAKE
+			major, minor, _, _ := s.handshakeRequest(pkt) // todo check if auth matches what the handler can do
+			msg := s.handshakeResponse(major, minor)
+			s.Session.TransportOut.WritePacket(msg)
+			s.State = SERVER_STATE_HANDSHAKE
 		case PKT_TYPE_TUNNEL_CREATE:
 			log.Printf("Tunnel create")
-			if h.State != SERVER_STATE_HANDSHAKE {
+			if s.State != SERVER_STATE_HANDSHAKE {
 				log.Printf("Tunnel create attempted while in wrong state %d != %d",
-					h.State, SERVER_STATE_HANDSHAKE)
+					s.State, SERVER_STATE_HANDSHAKE)
 				return errors.New("wrong state")
 			}
-			_, cookie := readCreateTunnelRequest(pkt)
-			if h.VerifyTunnelCreate != nil {
-				if ok, _ := h.VerifyTunnelCreate(ctx, cookie); !ok {
+			_, cookie := s.tunnelRequest(pkt)
+			if s.VerifyTunnelCreate != nil {
+				if ok, _ := s.VerifyTunnelCreate(ctx, cookie); !ok {
 					log.Printf("Invalid PAA cookie received from client %s", client.GetClientIp(ctx))
 					return errors.New("invalid PAA cookie")
 				}
 			}
-			msg := createTunnelResponse()
-			h.Session.TransportOut.WritePacket(msg)
-			h.State = SERVER_STATE_TUNNEL_CREATE
+			msg := s.tunnelResponse()
+			s.Session.TransportOut.WritePacket(msg)
+			s.State = SERVER_STATE_TUNNEL_CREATE
 		case PKT_TYPE_TUNNEL_AUTH:
 			log.Printf("Tunnel auth")
-			if h.State != SERVER_STATE_TUNNEL_CREATE {
+			if s.State != SERVER_STATE_TUNNEL_CREATE {
 				log.Printf("Tunnel auth attempted while in wrong state %d != %d",
-					h.State, SERVER_STATE_TUNNEL_CREATE)
+					s.State, SERVER_STATE_TUNNEL_CREATE)
 				return errors.New("wrong state")
 			}
-			client := h.readTunnelAuthRequest(pkt)
-			if h.VerifyTunnelAuthFunc != nil {
-				if ok, _ := h.VerifyTunnelAuthFunc(ctx, client); !ok {
+			client := s.tunnelAuthRequest(pkt)
+			if s.VerifyTunnelAuthFunc != nil {
+				if ok, _ := s.VerifyTunnelAuthFunc(ctx, client); !ok {
 					log.Printf("Invalid client name: %s", client)
 					return errors.New("invalid client name")
 				}
 			}
-			msg := h.createTunnelAuthResponse()
-			h.Session.TransportOut.WritePacket(msg)
-			h.State = SERVER_STATE_TUNNEL_AUTHORIZE
+			msg := s.tunnelAuthResponse()
+			s.Session.TransportOut.WritePacket(msg)
+			s.State = SERVER_STATE_TUNNEL_AUTHORIZE
 		case PKT_TYPE_CHANNEL_CREATE:
 			log.Printf("Channel create")
-			if h.State != SERVER_STATE_TUNNEL_AUTHORIZE {
+			if s.State != SERVER_STATE_TUNNEL_AUTHORIZE {
 				log.Printf("Channel create attempted while in wrong state %d != %d",
-					h.State, SERVER_STATE_TUNNEL_AUTHORIZE)
+					s.State, SERVER_STATE_TUNNEL_AUTHORIZE)
 				return errors.New("wrong state")
 			}
-			server, port := readChannelCreateRequest(pkt)
+			server, port := s.channelRequest(pkt)
 			host := net.JoinHostPort(server, strconv.Itoa(int(port)))
-			if h.VerifyServerFunc != nil {
-				if ok, _ := h.VerifyServerFunc(ctx, host); !ok {
+			if s.VerifyServerFunc != nil {
+				if ok, _ := s.VerifyServerFunc(ctx, host); !ok {
 					log.Printf("Not allowed to connect to %s by policy handler", host)
 					return errors.New("denied by security policy")
 				}
 			}
 			log.Printf("Establishing connection to RDP server: %s", host)
-			h.Remote, err = net.DialTimeout("tcp", host, time.Second*15)
+			s.Remote, err = net.DialTimeout("tcp", host, time.Second*15)
 			if err != nil {
 				log.Printf("Error connecting to %s, %s", host, err)
 				return err
 			}
 			log.Printf("Connection established")
-			msg := createChannelCreateResponse()
-			h.Session.TransportOut.WritePacket(msg)
+			msg := s.channelResponse()
+			s.Session.TransportOut.WritePacket(msg)
 
 			// Make sure to start the flow from the RDP server first otherwise connections
 			// might hang eventually
-			go h.sendDataPacket()
-			h.State = SERVER_STATE_CHANNEL_CREATE
+			go s.sendDataPacket()
+			s.State = SERVER_STATE_CHANNEL_CREATE
 		case PKT_TYPE_DATA:
-			if h.State < SERVER_STATE_CHANNEL_CREATE {
-				log.Printf("Data received while in wrong state %d != %d", h.State, SERVER_STATE_CHANNEL_CREATE)
+			if s.State < SERVER_STATE_CHANNEL_CREATE {
+				log.Printf("Data received while in wrong state %d != %d", s.State, SERVER_STATE_CHANNEL_CREATE)
 				return errors.New("wrong state")
 			}
-			h.State = SERVER_STATE_OPENED
-			h.forwardDataPacket(pkt)
+			s.State = SERVER_STATE_OPENED
+			s.forwardDataPacket(pkt)
 		case PKT_TYPE_KEEPALIVE:
 			// keepalives can be received while the channel is not open yet
-			if h.State < SERVER_STATE_CHANNEL_CREATE {
-				log.Printf("Keepalive received while in wrong state %d != %d", h.State, SERVER_STATE_CHANNEL_CREATE)
+			if s.State < SERVER_STATE_CHANNEL_CREATE {
+				log.Printf("Keepalive received while in wrong state %d != %d", s.State, SERVER_STATE_CHANNEL_CREATE)
 				return errors.New("wrong state")
 			}
 
@@ -168,26 +168,26 @@ func (h *Handler) Process(ctx context.Context) error {
 			// p.TransportIn.Write(createPacket(PKT_TYPE_KEEPALIVE, []byte{}))
 		case PKT_TYPE_CLOSE_CHANNEL:
 			log.Printf("Close channel")
-			if h.State != SERVER_STATE_OPENED {
-				log.Printf("Channel closed while in wrong state %d != %d", h.State, SERVER_STATE_OPENED)
+			if s.State != SERVER_STATE_OPENED {
+				log.Printf("Channel closed while in wrong state %d != %d", s.State, SERVER_STATE_OPENED)
 				return errors.New("wrong state")
 			}
-			h.Session.TransportIn.Close()
-			h.Session.TransportOut.Close()
-			h.State = SERVER_STATE_CLOSED
+			s.Session.TransportIn.Close()
+			s.Session.TransportOut.Close()
+			s.State = SERVER_STATE_CLOSED
 		default:
 			log.Printf("Unknown packet (size %d): %x", sz, pkt)
 		}
 	}
 }
 
-func (h *Handler) ReadMessage() (pt int, n int, msg []byte, err error) {
+func (s *Server) ReadMessage() (pt int, n int, msg []byte, err error) {
 	fragment := false
 	index := 0
 	buf := make([]byte, 4096)
 
 	for {
-		size, pkt, err := h.Session.TransportIn.ReadPacket()
+		size, pkt, err := s.Session.TransportIn.ReadPacket()
 		if err != nil {
 			return 0, 0, []byte{0, 0}, err
 		}
@@ -219,15 +219,15 @@ func (h *Handler) ReadMessage() (pt int, n int, msg []byte, err error) {
 	}
 }
 
-// Creates a packet the is a response to a handshake request
+// Creates a packet the is a response to a handshakeRequest request
 // HTTP_EXTENDED_AUTH_SSPI_NTLM is not supported in Linux
 // but could be in Windows. However the NTLM protocol is insecure
-func (h *Handler) handshakeResponse(major byte, minor byte) []byte {
+func (s *Server) handshakeResponse(major byte, minor byte) []byte {
 	var caps uint16
-	if h.SmartCardAuth {
+	if s.SmartCardAuth {
 		caps = caps | HTTP_EXTENDED_AUTH_SC
 	}
-	if h.TokenAuth {
+	if s.TokenAuth {
 		caps = caps | HTTP_EXTENDED_AUTH_PAA
 	}
 
@@ -240,22 +240,7 @@ func (h *Handler) handshakeResponse(major byte, minor byte) []byte {
 	return createPacket(PKT_TYPE_HANDSHAKE_RESPONSE, buf.Bytes())
 }
 
-func readHeader(data []byte) (packetType uint16, size uint32, packet []byte, err error) {
-	// header needs to be 8 min
-	if len(data) < 8 {
-		return 0, 0, nil, errors.New("header too short, fragment likely")
-	}
-	r := bytes.NewReader(data)
-	binary.Read(r, binary.LittleEndian, &packetType)
-	r.Seek(4, io.SeekStart)
-	binary.Read(r, binary.LittleEndian, &size)
-	if len(data) < int(size) {
-		return packetType, size, data[8:], errors.New("data incomplete, fragment received")
-	}
-	return packetType, size, data[8:], nil
-}
-
-func readHandshake(data []byte) (major byte, minor byte, version uint16, extAuth uint16) {
+func (s *Server) handshakeRequest(data []byte) (major byte, minor byte, version uint16, extAuth uint16) {
 	r := bytes.NewReader(data)
 	binary.Read(r, binary.LittleEndian, &major)
 	binary.Read(r, binary.LittleEndian, &minor)
@@ -266,7 +251,7 @@ func readHandshake(data []byte) (major byte, minor byte, version uint16, extAuth
 	return
 }
 
-func readCreateTunnelRequest(data []byte) (caps uint32, cookie string) {
+func (s *Server) tunnelRequest(data []byte) (caps uint32, cookie string) {
 	var fields uint16
 
 	r := bytes.NewReader(data)
@@ -285,7 +270,7 @@ func readCreateTunnelRequest(data []byte) (caps uint32, cookie string) {
 	return
 }
 
-func createTunnelResponse() []byte {
+func (s *Server) tunnelResponse() []byte {
 	buf := new(bytes.Buffer)
 
 	binary.Write(buf, binary.LittleEndian, uint16(0))                                                                    // server version
@@ -301,7 +286,7 @@ func createTunnelResponse() []byte {
 	return createPacket(PKT_TYPE_TUNNEL_RESPONSE, buf.Bytes())
 }
 
-func (h *Handler) readTunnelAuthRequest(data []byte) string {
+func (s *Server) tunnelAuthRequest(data []byte) string {
 	buf := bytes.NewReader(data)
 
 	var size uint16
@@ -313,7 +298,7 @@ func (h *Handler) readTunnelAuthRequest(data []byte) string {
 	return clientName
 }
 
-func (h *Handler) createTunnelAuthResponse() []byte {
+func (s *Server) tunnelAuthResponse() []byte {
 	buf := new(bytes.Buffer)
 
 	binary.Write(buf, binary.LittleEndian, uint32(0))                                                                                        // error code
@@ -321,17 +306,17 @@ func (h *Handler) createTunnelAuthResponse() []byte {
 	binary.Write(buf, binary.LittleEndian, uint16(0))                                                                                        // reserved
 
 	// idle timeout
-	if h.IdleTimeout < 0 {
-		h.IdleTimeout = 0
+	if s.IdleTimeout < 0 {
+		s.IdleTimeout = 0
 	}
 
-	binary.Write(buf, binary.LittleEndian, uint32(h.RedirectFlags)) // redir flags
-	binary.Write(buf, binary.LittleEndian, uint32(h.IdleTimeout))   // timeout in minutes
+	binary.Write(buf, binary.LittleEndian, uint32(s.RedirectFlags)) // redir flags
+	binary.Write(buf, binary.LittleEndian, uint32(s.IdleTimeout))   // timeout in minutes
 
 	return createPacket(PKT_TYPE_TUNNEL_AUTH_RESPONSE, buf.Bytes())
 }
 
-func readChannelCreateRequest(data []byte) (server string, port uint16) {
+func (s *Server) channelRequest(data []byte) (server string, port uint16) {
 	buf := bytes.NewReader(data)
 
 	var resourcesSize byte
@@ -353,7 +338,7 @@ func readChannelCreateRequest(data []byte) (server string, port uint16) {
 	return
 }
 
-func createChannelCreateResponse() []byte {
+func (s *Server) channelResponse() []byte {
 	buf := new(bytes.Buffer)
 
 	binary.Write(buf, binary.LittleEndian, uint32(0))                                     // error code
@@ -372,7 +357,7 @@ func createChannelCreateResponse() []byte {
 	return createPacket(PKT_TYPE_CHANNEL_RESPONSE, buf.Bytes())
 }
 
-func (h *Handler) forwardDataPacket(data []byte) {
+func (s *Server) forwardDataPacket(data []byte) {
 	buf := bytes.NewReader(data)
 
 	var cblen uint16
@@ -380,36 +365,24 @@ func (h *Handler) forwardDataPacket(data []byte) {
 	pkt := make([]byte, cblen)
 	binary.Read(buf, binary.LittleEndian, &pkt)
 
-	h.Remote.Write(pkt)
+	s.Remote.Write(pkt)
 }
 
-func (h *Handler) sendDataPacket() {
-	defer h.Remote.Close()
+func (s *Server) sendDataPacket() {
+	defer s.Remote.Close()
 	b1 := new(bytes.Buffer)
 	buf := make([]byte, 4086)
 	for {
-		n, err := h.Remote.Read(buf)
+		n, err := s.Remote.Read(buf)
 		binary.Write(b1, binary.LittleEndian, uint16(n))
 		if err != nil {
 			log.Printf("Error reading from conn %s", err)
 			break
 		}
 		b1.Write(buf[:n])
-		h.Session.TransportOut.WritePacket(createPacket(PKT_TYPE_DATA, b1.Bytes()))
+		s.Session.TransportOut.WritePacket(createPacket(PKT_TYPE_DATA, b1.Bytes()))
 		b1.Reset()
 	}
-}
-
-func createPacket(pktType uint16, data []byte) (packet []byte) {
-	size := len(data) + 8
-	buf := new(bytes.Buffer)
-
-	binary.Write(buf, binary.LittleEndian, uint16(pktType))
-	binary.Write(buf, binary.LittleEndian, uint16(0)) // reserved
-	binary.Write(buf, binary.LittleEndian, uint32(size))
-	buf.Write(data)
-
-	return buf.Bytes()
 }
 
 func makeRedirectFlags(flags RedirectFlags) int {
