@@ -10,6 +10,62 @@ import (
 	"net"
 )
 
+type RedirectFlags struct {
+	Clipboard  bool
+	Port       bool
+	Drive      bool
+	Printer    bool
+	Pnp        bool
+	DisableAll bool
+	EnableAll  bool
+}
+
+type SessionInfo struct {
+	ConnId           string
+	TransportIn      transport.Transport
+	TransportOut     transport.Transport
+	RemoteServer	 string
+	ClientIp		 string
+}
+
+func readMessage(in transport.Transport) (pt int, n int, msg []byte, err error) {
+	fragment := false
+	index := 0
+	buf := make([]byte, 4096)
+
+	for {
+		size, pkt, err := in.ReadPacket()
+		if err != nil {
+			return 0, 0, []byte{0, 0}, err
+		}
+
+		// check for fragments
+		var pt uint16
+		var sz uint32
+		var msg []byte
+
+		if !fragment {
+			pt, sz, msg, err = readHeader(pkt[:size])
+			if err != nil {
+				fragment = true
+				index = copy(buf, pkt[:size])
+				continue
+			}
+			index = 0
+		} else {
+			fragment = false
+			pt, sz, msg, err = readHeader(append(buf[:index], pkt[:size]...))
+			// header is corrupted even after defragmenting
+			if err != nil {
+				return 0, 0, []byte{0, 0}, err
+			}
+		}
+		if !fragment {
+			return int(pt), int(sz), msg, nil
+		}
+	}
+}
+
 func createPacket(pktType uint16, data []byte) (packet []byte) {
 	size := len(data) + 8
 	buf := new(bytes.Buffer)

@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
-	"github.com/bolkedebruin/rdpgw/client"
+	"github.com/bolkedebruin/rdpgw/common"
 	"io"
 	"log"
 	"net"
@@ -16,16 +16,6 @@ import (
 type VerifyTunnelCreate func(context.Context, string) (bool, error)
 type VerifyTunnelAuthFunc func(context.Context, string) (bool, error)
 type VerifyServerFunc func(context.Context, string) (bool, error)
-
-type RedirectFlags struct {
-	Clipboard  bool
-	Port       bool
-	Drive      bool
-	Printer    bool
-	Pnp        bool
-	DisableAll bool
-	EnableAll  bool
-}
 
 type Server struct {
 	Session              *SessionInfo
@@ -70,7 +60,7 @@ const tunnelId = 10
 
 func (s *Server) Process(ctx context.Context) error {
 	for {
-		pt, sz, pkt, err := s.ReadMessage()
+		pt, sz, pkt, err := readMessage(s.Session.TransportIn)
 		if err != nil {
 			log.Printf("Cannot read message from stream %s", err)
 			return err
@@ -78,7 +68,7 @@ func (s *Server) Process(ctx context.Context) error {
 
 		switch pt {
 		case PKT_TYPE_HANDSHAKE_REQUEST:
-			log.Printf("Client handshakeRequest from %s", client.GetClientIp(ctx))
+			log.Printf("Client handshakeRequest from %s", common.GetClientIp(ctx))
 			if s.State != SERVER_STATE_INITIAL {
 				log.Printf("Handshake attempted while in wrong state %d != %d", s.State, SERVER_STATE_INITIAL)
 				return errors.New("wrong state")
@@ -97,7 +87,7 @@ func (s *Server) Process(ctx context.Context) error {
 			_, cookie := s.tunnelRequest(pkt)
 			if s.VerifyTunnelCreate != nil {
 				if ok, _ := s.VerifyTunnelCreate(ctx, cookie); !ok {
-					log.Printf("Invalid PAA cookie received from client %s", client.GetClientIp(ctx))
+					log.Printf("Invalid PAA cookie received from client %s", common.GetClientIp(ctx))
 					return errors.New("invalid PAA cookie")
 				}
 			}
@@ -177,44 +167,6 @@ func (s *Server) Process(ctx context.Context) error {
 			s.State = SERVER_STATE_CLOSED
 		default:
 			log.Printf("Unknown packet (size %d): %x", sz, pkt)
-		}
-	}
-}
-
-func (s *Server) ReadMessage() (pt int, n int, msg []byte, err error) {
-	fragment := false
-	index := 0
-	buf := make([]byte, 4096)
-
-	for {
-		size, pkt, err := s.Session.TransportIn.ReadPacket()
-		if err != nil {
-			return 0, 0, []byte{0, 0}, err
-		}
-
-		// check for fragments
-		var pt uint16
-		var sz uint32
-		var msg []byte
-
-		if !fragment {
-			pt, sz, msg, err = readHeader(pkt[:size])
-			if err != nil {
-				fragment = true
-				index = copy(buf, pkt[:size])
-				continue
-			}
-			index = 0
-		} else {
-			fragment = false
-			pt, sz, msg, err = readHeader(append(buf[:index], pkt[:size]...))
-			// header is corrupted even after defragmenting
-			if err != nil {
-				return 0, 0, []byte{0, 0}, err
-			}
-		}
-		if !fragment {
-			return int(pt), int(sz), msg, nil
 		}
 	}
 }

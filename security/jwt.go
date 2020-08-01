@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/bolkedebruin/rdpgw/client"
+	"github.com/bolkedebruin/rdpgw/common"
 	"github.com/bolkedebruin/rdpgw/protocol"
 	"github.com/dgrijalva/jwt-go/v4"
 	"log"
@@ -55,9 +55,9 @@ func VerifyServerFunc(ctx context.Context, host string) (bool, error) {
 		return false, nil
 	}
 
-	if s.ClientIp != client.GetClientIp(ctx) {
+	if s.ClientIp != common.GetClientIp(ctx) {
 		log.Printf("Current client ip address %s does not match token client ip %s",
-			client.GetClientIp(ctx), s.ClientIp)
+			common.GetClientIp(ctx), s.ClientIp)
 		return false, nil
 	}
 
@@ -78,7 +78,7 @@ func GeneratePAAToken(ctx context.Context, username string, server string) (stri
 
 	c := customClaims{
 		RemoteServer: server,
-		ClientIP: client.GetClientIp(ctx),
+		ClientIP:     common.GetClientIp(ctx),
 		StandardClaims: jwt.StandardClaims{
 			ExpiresAt: exp,
 			IssuedAt: now,

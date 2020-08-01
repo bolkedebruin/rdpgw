@@ -2,7 +2,7 @@ package protocol
 
 import (
 	"context"
-	"github.com/bolkedebruin/rdpgw/client"
+	"github.com/bolkedebruin/rdpgw/common"
 	"github.com/bolkedebruin/rdpgw/transport"
 	"github.com/gorilla/websocket"
 	"github.com/patrickmn/go-cache"
@@ -43,14 +43,6 @@ var (
 
 type Gateway struct {
 	ServerConf *ServerConf
-}
-
-type SessionInfo struct {
-	ConnId           string
-	TransportIn      transport.Transport
-	TransportOut     transport.Transport
-	RemoteServer	 string
-	ClientIp		 string
 }
 
 var upgrader = websocket.Upgrader{}
@@ -118,7 +110,7 @@ func (g *Gateway) handleLegacyProtocol(w http.ResponseWriter, r *http.Request, s
 			log.Printf("cannot hijack connection to support RDG OUT data channel: %s", err)
 			return
 		}
-		log.Printf("Opening RDGOUT for client %s", client.GetClientIp(r.Context()))
+		log.Printf("Opening RDGOUT for client %s", common.GetClientIp(r.Context()))
 
 		s.TransportOut = out
 		out.SendAccept(true)
@@ -139,13 +131,13 @@ func (g *Gateway) handleLegacyProtocol(w http.ResponseWriter, r *http.Request, s
 			s.TransportIn = in
 			c.Set(s.ConnId, s, cache.DefaultExpiration)
 
-			log.Printf("Opening RDGIN for client %s", client.GetClientIp(r.Context()))
+			log.Printf("Opening RDGIN for client %s", common.GetClientIp(r.Context()))
 			in.SendAccept(false)
 
 			// read some initial data
 			in.Drain()
 
-			log.Printf("Legacy handshakeRequest done for client %s", client.GetClientIp(r.Context()))
+			log.Printf("Legacy handshakeRequest done for client %s", common.GetClientIp(r.Context()))
 			handler := NewServer(s, g.ServerConf)
 			handler.Process(r.Context())
 		}

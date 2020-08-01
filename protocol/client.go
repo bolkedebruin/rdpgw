@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"github.com/bolkedebruin/rdpgw/transport"
 	"io"
+	"log"
 	"net"
 )
 
@@ -17,10 +17,67 @@ const (
 
 type ClientConfig struct {
 	SmartCardAuth bool
-	PAAToken	  string
-	NTLMAuth	  bool
-	GatewayConn	  transport.Transport
-	LocalConn	  net.Conn
+	PAAToken      string
+	NTLMAuth      bool
+	Session       *SessionInfo
+	LocalConn     net.Conn
+	Server        string
+	Port          int
+	Name          string
+}
+
+func (c *ClientConfig) ConnectAndForward() error {
+	c.Session.TransportOut.WritePacket(c.handshakeRequest())
+
+	for {
+		pt, sz, pkt, err := readMessage(c.Session.TransportIn)
+		if err != nil {
+			log.Printf("Cannot read message from stream %s", err)
+			return err
+		}
+
+		switch pt {
+		case PKT_TYPE_HANDSHAKE_RESPONSE:
+			caps, err := c.handshakeResponse(pkt)
+			if err != nil {
+				log.Printf("Cannot connect to %s due to %s", c.Server, err)
+				return err
+			}
+			log.Printf("Handshake response received. Caps: %d", caps)
+			c.Session.TransportOut.WritePacket(c.tunnelRequest())
+		case PKT_TYPE_TUNNEL_RESPONSE:
+			tid, caps, err := c.tunnelResponse(pkt)
+			if err != nil {
+				log.Printf("Cannot setup tunnel due to %s", err)
+				return err
+			}
+			log.Printf("Tunnel creation succesful. Tunnel id: %d and caps %d", tid, caps)
+			c.Session.TransportOut.WritePacket(c.tunnelAuthRequest())
+		case PKT_TYPE_TUNNEL_AUTH_RESPONSE:
+			flags, timeout, err := c.tunnelAuthResponse(pkt)
+			if err != nil {
+				log.Printf("Cannot do tunnel auth due to %s", err)
+				return err
+			}
+			log.Printf("Tunnel auth succesful. Flags: %d and timeout %d", flags, timeout)
+			c.Session.TransportOut.WritePacket(c.channelRequest())
+		case PKT_TYPE_CHANNEL_RESPONSE:
+			cid, err := c.channelResponse(pkt)
+			if err != nil {
+				log.Printf("Cannot do tunnel auth due to %s", err)
+				return err
+			}
+			if cid < 1 {
+				log.Printf("Channel id (%d) is smaller than 1. This doesnt work for Windows clients", cid)
+			}
+			log.Printf("Channel creation succesful. Channel id: %d", cid)
+			go forward(c.LocalConn, c.Session.TransportOut)
+		case PKT_TYPE_DATA:
+			receive(pkt, c.LocalConn)
+		default:
+			log.Printf("Unknown packet type received: %d size %d", pt, sz)
+		}
+	}
 }
 
 func (c *ClientConfig) handshakeRequest() []byte {
@@ -83,7 +140,7 @@ func (c *ClientConfig) tunnelRequest() []byte {
 
 	binary.Write(buf, binary.LittleEndian, caps)
 	binary.Write(buf, binary.LittleEndian, fields)
-	binary.Write(buf, binary.LittleEndian, uint16(0))   // reserved
+	binary.Write(buf, binary.LittleEndian, uint16(0)) // reserved
 
 	if len(c.PAAToken) > 0 {
 		utf16Token := EncodeUTF16(c.PAAToken)
@@ -119,8 +176,8 @@ func (c *ClientConfig) tunnelResponse(data []byte) (tunnelId uint32, caps uint32
 	return
 }
 
-func (c *ClientConfig) tunnelAuthRequest(name string) []byte {
-	utf16name := EncodeUTF16(name)
+func (c *ClientConfig) tunnelAuthRequest() []byte {
+	utf16name := EncodeUTF16(c.Name)
 	size := uint16(len(utf16name))
 
 	buf := new(bytes.Buffer)
@@ -153,14 +210,14 @@ func (c *ClientConfig) tunnelAuthResponse(data []byte) (flags uint32, timeout ui
 	return
 }
 
-func (c *ClientConfig) channelRequest(server string, port uint16) []byte {
-	utf16server := EncodeUTF16(server)
+func (c *ClientConfig) channelRequest() []byte {
+	utf16server := EncodeUTF16(c.Server)
 
 	buf := new(bytes.Buffer)
-	binary.Write(buf, binary.LittleEndian, []byte{0x01})	// amount of server names
-	binary.Write(buf, binary.LittleEndian, []byte{0x00})	// amount of alternate server names (range 0-3)
-	binary.Write(buf, binary.LittleEndian, uint16(port))
-	binary.Write(buf, binary.LittleEndian, uint16(3))		// protocol, must be 3
+	binary.Write(buf, binary.LittleEndian, []byte{0x01}) // amount of server names
+	binary.Write(buf, binary.LittleEndian, []byte{0x00}) // amount of alternate server names (range 0-3)
+	binary.Write(buf, binary.LittleEndian, uint16(c.Port))
+	binary.Write(buf, binary.LittleEndian, uint16(3)) // protocol, must be 3
 
 	binary.Write(buf, binary.LittleEndian, uint16(len(utf16server)))
 	buf.Write(utf16server)
