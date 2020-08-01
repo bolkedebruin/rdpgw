@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"github.com/bolkedebruin/rdpgw/transport"
 	"io"
+	"net"
 )
 
 const (
@@ -17,6 +19,8 @@ type ClientConfig struct {
 	SmartCardAuth bool
 	PAAToken	  string
 	NTLMAuth	  bool
+	GatewayConn	  transport.Transport
+	LocalConn	  net.Conn
 }
 
 func (c *ClientConfig) handshakeRequest() []byte {
@@ -147,4 +151,39 @@ func (c *ClientConfig) tunnelAuthResponse(data []byte) (flags uint32, timeout ui
 	}
 
 	return
+}
+
+func (c *ClientConfig) channelRequest(server string, port uint16) []byte {
+	utf16server := EncodeUTF16(server)
+
+	buf := new(bytes.Buffer)
+	binary.Write(buf, binary.LittleEndian, []byte{0x01})	// amount of server names
+	binary.Write(buf, binary.LittleEndian, []byte{0x00})	// amount of alternate server names (range 0-3)
+	binary.Write(buf, binary.LittleEndian, uint16(port))
+	binary.Write(buf, binary.LittleEndian, uint16(3))		// protocol, must be 3
+
+	binary.Write(buf, binary.LittleEndian, uint16(len(utf16server)))
+	buf.Write(utf16server)
+
+	return createPacket(PKT_TYPE_CHANNEL_CREATE, buf.Bytes())
+}
+
+func (c *ClientConfig) channelResponse(data []byte) (channelId uint32, err error) {
+	var errorCode uint32
+	var fields uint16
+
+	r := bytes.NewReader(data)
+	binary.Read(r, binary.LittleEndian, &errorCode)
+	binary.Read(r, binary.LittleEndian, &fields)
+	r.Seek(2, io.SeekCurrent)
+
+	if (fields & HTTP_CHANNEL_RESPONSE_FIELD_CHANNELID) == HTTP_CHANNEL_RESPONSE_FIELD_CHANNELID {
+		binary.Read(r, binary.LittleEndian, &channelId)
+	}
+
+	if errorCode > 0 {
+		return 0, fmt.Errorf("channel response error %d", errorCode)
+	}
+
+	return channelId, nil
 }

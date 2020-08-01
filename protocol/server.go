@@ -148,7 +148,7 @@ func (s *Server) Process(ctx context.Context) error {
 
 			// Make sure to start the flow from the RDP server first otherwise connections
 			// might hang eventually
-			go s.sendDataPacket()
+			go forward(s.Remote, s.Session.TransportOut)
 			s.State = SERVER_STATE_CHANNEL_CREATE
 		case PKT_TYPE_DATA:
 			if s.State < SERVER_STATE_CHANNEL_CREATE {
@@ -156,7 +156,7 @@ func (s *Server) Process(ctx context.Context) error {
 				return errors.New("wrong state")
 			}
 			s.State = SERVER_STATE_OPENED
-			s.forwardDataPacket(pkt)
+			receive(pkt, s.Remote)
 		case PKT_TYPE_KEEPALIVE:
 			// keepalives can be received while the channel is not open yet
 			if s.State < SERVER_STATE_CHANNEL_CREATE {
@@ -355,34 +355,6 @@ func (s *Server) channelResponse() []byte {
 	// length uint16
 
 	return createPacket(PKT_TYPE_CHANNEL_RESPONSE, buf.Bytes())
-}
-
-func (s *Server) forwardDataPacket(data []byte) {
-	buf := bytes.NewReader(data)
-
-	var cblen uint16
-	binary.Read(buf, binary.LittleEndian, &cblen)
-	pkt := make([]byte, cblen)
-	binary.Read(buf, binary.LittleEndian, &pkt)
-
-	s.Remote.Write(pkt)
-}
-
-func (s *Server) sendDataPacket() {
-	defer s.Remote.Close()
-	b1 := new(bytes.Buffer)
-	buf := make([]byte, 4086)
-	for {
-		n, err := s.Remote.Read(buf)
-		binary.Write(b1, binary.LittleEndian, uint16(n))
-		if err != nil {
-			log.Printf("Error reading from conn %s", err)
-			break
-		}
-		b1.Write(buf[:n])
-		s.Session.TransportOut.WritePacket(createPacket(PKT_TYPE_DATA, b1.Bytes()))
-		b1.Reset()
-	}
 }
 
 func makeRedirectFlags(flags RedirectFlags) int {

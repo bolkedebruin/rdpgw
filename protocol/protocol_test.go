@@ -14,6 +14,8 @@ const (
 	TunnelCreateResponseLen = HeaderLen + 18
 	TunnelAuthLen           = HeaderLen + 2 // + dynamic
 	TunnelAuthResponseLen   = HeaderLen + 16
+	ChannelCreateLen		= HeaderLen + 8 // + dynamic
+	ChannelResponseLen		= HeaderLen + 12
 )
 
 func verifyPacketHeader(data []byte, expPt uint16, expSize uint32) (uint16, uint32, []byte, error) {
@@ -160,5 +162,46 @@ func TestTunnelAuth(t *testing.T) {
 	if int(timeout) != hc.IdleTimeout {
 		t.Fatalf("tunnelAuthResponse failed got timeout %d, expected %d",
 			timeout, hc.IdleTimeout)
+	}
+}
+
+func TestChannelCreation(t *testing.T) {
+	client := ClientConfig{}
+	s := &SessionInfo{}
+	hc := &ServerConf{
+		TokenAuth:   true,
+		IdleTimeout: 10,
+		RedirectFlags: RedirectFlags{
+			Clipboard: true,
+		},
+	}
+	h := NewServer(s, hc)
+	server := "test_server"
+	port := uint16(3389)
+
+	data := client.channelRequest(server, port)
+	_, _, pkt, err := verifyPacketHeader(data, PKT_TYPE_CHANNEL_CREATE, uint32(ChannelCreateLen+len(server)*2))
+	if err != nil {
+		t.Fatalf("verifyHeader failed: %s", err)
+	}
+	hServer, hPort := h.channelRequest(pkt)
+	if hServer != server {
+		t.Fatalf("channelRequest failed got server %s, expected %s", hServer, server)
+	}
+	if hPort != port {
+		t.Fatalf("channelRequest failed got port %d, expected %d", hPort, port)
+	}
+
+	data = h.channelResponse()
+	_, _, pkt, err = verifyPacketHeader(data, PKT_TYPE_CHANNEL_RESPONSE, uint32(ChannelResponseLen))
+	if err != nil {
+		t.Fatalf("verifyHeader failed: %s", err)
+	}
+	channelId, err := client.channelResponse(pkt)
+	if err != nil {
+		t.Fatalf("channelResponse failed: %s", err)
+	}
+	if channelId < 1 {
+		t.Fatalf("channelResponse failed got channeld id %d, expected > 0", channelId)
 	}
 }
