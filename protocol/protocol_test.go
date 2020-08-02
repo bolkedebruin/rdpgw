@@ -123,7 +123,10 @@ func TestTunnelCreation(t *testing.T) {
 }
 
 func TestTunnelAuth(t *testing.T) {
-	client := ClientConfig{}
+	name := "test_name"
+	client := ClientConfig{
+		Name: name,
+	}
 	s := &SessionInfo{}
 	hc := &ServerConf{
 		TokenAuth:   true,
@@ -133,9 +136,8 @@ func TestTunnelAuth(t *testing.T) {
 		},
 	}
 	h := NewServer(s, hc)
-	name := "test_name"
 
-	data := client.tunnelAuthRequest(name)
+	data := client.tunnelAuthRequest()
 	_, _, pkt, err := verifyPacketHeader(data, PKT_TYPE_TUNNEL_AUTH, uint32(TunnelAuthLen+len(name)*2))
 	if err != nil {
 		t.Fatalf("verifyHeader failed: %s", err)
@@ -166,7 +168,11 @@ func TestTunnelAuth(t *testing.T) {
 }
 
 func TestChannelCreation(t *testing.T) {
-	client := ClientConfig{}
+	server := "test_server"
+	client := ClientConfig{
+		Server: server,
+		Port: 3389,
+	}
 	s := &SessionInfo{}
 	hc := &ServerConf{
 		TokenAuth:   true,
@@ -176,10 +182,8 @@ func TestChannelCreation(t *testing.T) {
 		},
 	}
 	h := NewServer(s, hc)
-	server := "test_server"
-	port := uint16(3389)
 
-	data := client.channelRequest(server, port)
+	data := client.channelRequest()
 	_, _, pkt, err := verifyPacketHeader(data, PKT_TYPE_CHANNEL_CREATE, uint32(ChannelCreateLen+len(server)*2))
 	if err != nil {
 		t.Fatalf("verifyHeader failed: %s", err)
@@ -188,8 +192,8 @@ func TestChannelCreation(t *testing.T) {
 	if hServer != server {
 		t.Fatalf("channelRequest failed got server %s, expected %s", hServer, server)
 	}
-	if hPort != port {
-		t.Fatalf("channelRequest failed got port %d, expected %d", hPort, port)
+	if int(hPort) != client.Port {
+		t.Fatalf("channelRequest failed got port %d, expected %d", hPort, client.Port)
 	}
 
 	data = h.channelResponse()
