@@ -66,6 +66,7 @@ func (s *Server) Process(ctx context.Context) error {
 			return err
 		}
 
+		log.Printf("%x", pkt)
 		switch pt {
 		case PKT_TYPE_HANDSHAKE_REQUEST:
 			log.Printf("Client handshakeRequest from %s", common.GetClientIp(ctx))
@@ -141,6 +142,7 @@ func (s *Server) Process(ctx context.Context) error {
 			go forward(s.Remote, s.Session.TransportOut)
 			s.State = SERVER_STATE_CHANNEL_CREATE
 		case PKT_TYPE_DATA:
+			log.Printf("Data received")
 			if s.State < SERVER_STATE_CHANNEL_CREATE {
 				log.Printf("Data received while in wrong state %d != %d", s.State, SERVER_STATE_CHANNEL_CREATE)
 				return errors.New("wrong state")

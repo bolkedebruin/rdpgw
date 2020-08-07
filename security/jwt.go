@@ -55,11 +55,11 @@ func VerifyServerFunc(ctx context.Context, host string) (bool, error) {
 		return false, nil
 	}
 
-	if s.ClientIp != common.GetClientIp(ctx) {
+	/*if s.ClientIp != common.GetClientIp(ctx) {
 		log.Printf("Current client ip address %s does not match token client ip %s",
 			common.GetClientIp(ctx), s.ClientIp)
 		return false, nil
-	}
+	}*/
 
 	return true, nil
 }
