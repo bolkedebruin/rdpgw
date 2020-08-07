@@ -110,7 +110,6 @@ func forward(in net.Conn, out transport.Transport) {
 		b1.Write(buf[:n])
 		out.WritePacket(createPacket(PKT_TYPE_DATA, b1.Bytes()))
 		b1.Reset()
-		log.Printf("Forward data")
 	}
 }
 
@@ -124,6 +123,5 @@ func receive(data []byte, out net.Conn) {
 	binary.Read(buf, binary.LittleEndian, &pkt)
 
 	out.Write(pkt)
-	log.Printf("Received data")
 }
 
