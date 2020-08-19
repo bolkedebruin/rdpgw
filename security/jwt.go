@@ -6,42 +6,64 @@ import (
 	"fmt"
 	"github.com/bolkedebruin/rdpgw/common"
 	"github.com/bolkedebruin/rdpgw/protocol"
-	"github.com/dgrijalva/jwt-go/v4"
+	"github.com/square/go-jose/v3"
+	"github.com/square/go-jose/v3/jwt"
 	"log"
 	"time"
 )
 
-var SigningKey []byte
+var (
+	SigningKey        []byte
+	EncryptionKey     []byte
+	UserSigningKey    []byte
+	UserEncryptionKey []byte
+)
+
 var ExpiryTime time.Duration = 5
 
 type customClaims struct {
 	RemoteServer string `json:"remoteServer"`
-	ClientIP	 string `json:"clientIp"`
-	jwt.StandardClaims
+	ClientIP     string `json:"clientIp"`
+	AccessToken  string `json:"accessToken"`
 }
 
 func VerifyPAAToken(ctx context.Context, tokenString string) (bool, error) {
-	token, err := jwt.ParseWithClaims(tokenString, &customClaims{}, func(token *jwt.Token) (interface{}, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+	token, err := jwt.ParseSigned(tokenString)
+
+	// check if the signing algo matches what we expect
+	for _, header := range token.Headers {
+		if header.Algorithm != string(jose.HS256) {
+			return false, fmt.Errorf("unexpected signing method: %v", header.Algorithm)
 		}
+	}
 
-		return SigningKey, nil
-	})
+	standard := jwt.Claims{}
+	custom := customClaims{}
 
+	// Claims automagically checks the signature...
+	err = token.Claims(SigningKey, &standard, &custom)
 	if err != nil {
+		log.Printf("token signature validation failed due to %s", err)
 		return false, err
 	}
 
-	if c, ok := token.Claims.(*customClaims); ok && token.Valid {
-		s := getSessionInfo(ctx)
-		s.RemoteServer = c.RemoteServer
-		s.ClientIp = c.ClientIP
-		return true, nil
+	// ...but doesn't check the expiry claim :/
+	err = standard.Validate(jwt.Expected{
+		Issuer: "rdpgw",
+		Time:   time.Now(),
+	})
+
+	if err != nil {
+		log.Printf("token validation failed due to %s", err)
+		return false, err
 	}
 
-	log.Printf("token validation failed: %s", err)
-	return false, err
+	s := getSessionInfo(ctx)
+
+	s.RemoteServer = custom.RemoteServer
+	s.ClientIp = custom.ClientIP
+
+	return true, nil
 }
 
 func VerifyServerFunc(ctx context.Context, host string) (bool, error) {
@@ -68,32 +90,59 @@ func GeneratePAAToken(ctx context.Context, username string, server string) (stri
 	if len(SigningKey) < 32 {
 		return "", errors.New("token signing key not long enough or not specified")
 	}
-
-	exp := &jwt.Time{
-		Time: time.Now().Add(time.Minute * 5),
-	}
-	now := &jwt.Time{
-		Time: time.Now(),
+	sig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.HS256, Key: SigningKey}, nil)
+	if err != nil {
+		log.Printf("Cannot obtain signer %s", err)
+		return "", err
 	}
 
-	c := customClaims{
+	standard := jwt.Claims{
+		Issuer:  "rdpgw",
+		Expiry:  jwt.NewNumericDate(time.Now().Add(time.Minute * 5)),
+		Subject: username,
+	}
+
+	private := customClaims{
 		RemoteServer: server,
 		ClientIP:     common.GetClientIp(ctx),
-		StandardClaims: jwt.StandardClaims{
-			ExpiresAt: exp,
-			IssuedAt: now,
-			Issuer: "rdpgw",
-			Subject: username,
-		},
+		AccessToken:  common.GetAccessToken(ctx),
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, c)
-	if ss, err := token.SignedString(SigningKey); err != nil {
+	if token, err := jwt.Signed(sig).Claims(standard).Claims(private).CompactSerialize(); err != nil {
 		log.Printf("Cannot sign PAA token %s", err)
 		return "", err
 	} else {
-		return ss, nil
+		return token, nil
 	}
+}
+
+func GenerateUserToken(ctx context.Context, userName string) (string, error) {
+	if len(UserEncryptionKey) < 32 {
+		return "", errors.New("user token encryption key not long enough or not specified")
+	}
+
+	claims := jwt.Claims{
+		Subject: userName,
+		Expiry:  jwt.NewNumericDate(time.Now().Add(time.Minute * 5)),
+		Issuer:  "rdpgw",
+	}
+
+	enc, err := jose.NewEncrypter(
+		jose.A128CBC_HS256,
+		jose.Recipient{Algorithm: jose.DIRECT, Key: UserEncryptionKey},
+		(&jose.EncrypterOptions{Compression: jose.DEFLATE}).WithContentType("JWT"),
+	)
+
+	if err != nil {
+		log.Printf("Cannot encrypt user token due to %s", err)
+		return "", err
+	}
+
+	// this makes the token bigger and we deal with a limited space of 511 characters
+	// sig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.HS256, Key: SigningKey}, nil)
+	// token, err := jwt.SignedAndEncrypted(sig, enc).Claims(claims).CompactSerialize()
+	token, err := jwt.Encrypted(enc).Claims(claims).CompactSerialize()
+	return token, err
 }
 
 func getSessionInfo(ctx context.Context) *protocol.SessionInfo {

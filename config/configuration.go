@@ -44,9 +44,10 @@ type RDGCapsConfig struct {
 }
 
 type SecurityConfig struct {
-	EnableOpenId        bool
-	TokenSigningKey     string
-	PassTokenAsPassword bool
+	PAATokenEncryptionKey  string
+	PAATokenSigningKey     string
+	UserTokenEncryptionKey string
+	UserTokenSigningKey    string
 }
 
 type ClientConfig struct {
@@ -82,7 +83,7 @@ func Load(configFile string) Configuration {
 		log.Fatalf("Cannot unmarshal the config file; %s", err)
 	}
 
-	if len(conf.Security.TokenSigningKey) < 32 {
+	if len(conf.Security.PAATokenSigningKey) < 32 {
 		log.Fatalf("Token signing key not long enough")
 	}
 

@@ -85,7 +85,8 @@ client:
 security:
   # a random string of at least 32 characters to secure cookies on the client
   # make sure to share this amongst different pods
-  tokenSigningKey: thisisasessionkeyreplacethisjetzt
+  PAATokenSigningKey: thisisasessionkeyreplacethisjetzt
+  PAATokenEncryptionKey: thisisasessionkeyreplacethisjetzt
 ```
 ## Testing locally
 A convenience docker-compose allows you to test the RDPGW locally. It uses [Keycloak](http://www.keycloak.org) 

@@ -2,6 +2,7 @@ package common
 
 import (
 	"context"
+	"log"
 	"net"
 	"net/http"
 	"strings"
@@ -47,4 +48,13 @@ func GetClientIp(ctx context.Context) string {
 		return ""
 	}
 	return s
+}
+
+func GetAccessToken(ctx context.Context) string {
+	token, ok := ctx.Value("access_token").(string)
+	if !ok {
+		log.Printf("cannot get access token from context")
+		return ""
+	}
+	return token
 }

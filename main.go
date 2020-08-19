@@ -35,7 +35,10 @@ func main() {
 	conf = config.Load(configFile)
 
 	// set security keys
-	security.SigningKey = []byte(conf.Security.TokenSigningKey)
+	security.SigningKey = []byte(conf.Security.PAATokenSigningKey)
+	security.EncryptionKey = []byte(conf.Security.PAATokenEncryptionKey)
+	security.UserEncryptionKey = []byte(conf.Security.UserTokenEncryptionKey)
+	security.UserSigningKey = []byte(conf.Security.UserTokenSigningKey)
 
 	// set oidc config
 	ctx := context.Background()
@@ -57,17 +60,18 @@ func main() {
 	}
 
 	api := &api.Config{
-		GatewayAddress: conf.Server.GatewayAddress,
-		OAuth2Config: &oauthConfig,
-		TokenVerifier: verifier,
-		TokenGenerator: security.GeneratePAAToken,
-		SessionKey: []byte(conf.Server.SessionKey),
+		GatewayAddress:       conf.Server.GatewayAddress,
+		OAuth2Config:         &oauthConfig,
+		OIDCTokenVerifier:    verifier,
+		PAATokenGenerator:    security.GeneratePAAToken,
+		UserTokenGenerator:   security.GenerateUserToken,
+		SessionKey:           []byte(conf.Server.SessionKey),
 		SessionEncryptionKey: []byte(conf.Server.SessionEncryptionKey),
-		Hosts: conf.Server.Hosts,
-		NetworkAutoDetect: conf.Client.NetworkAutoDetect,
-		UsernameTemplate: conf.Client.UsernameTemplate,
-		BandwidthAutoDetect: conf.Client.BandwidthAutoDetect,
-		ConnectionType: conf.Client.ConnectionType,
+		Hosts:                conf.Server.Hosts,
+		NetworkAutoDetect:    conf.Client.NetworkAutoDetect,
+		UsernameTemplate:     conf.Client.UsernameTemplate,
+		BandwidthAutoDetect:  conf.Client.BandwidthAutoDetect,
+		ConnectionType:       conf.Client.ConnectionType,
 	}
 	api.NewApi()
 

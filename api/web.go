@@ -23,14 +23,16 @@ const (
 )
 
 type TokenGeneratorFunc func(context.Context, string, string) (string, error)
+type UserTokenGeneratorFunc func(context.Context, string) (string, error)
 
 type Config struct {
 	SessionKey           []byte
 	SessionEncryptionKey []byte
-	TokenGenerator       TokenGeneratorFunc
+	PAATokenGenerator    TokenGeneratorFunc
+	UserTokenGenerator   UserTokenGeneratorFunc
 	OAuth2Config         *oauth2.Config
 	store                *sessions.CookieStore
-	TokenVerifier        *oidc.IDTokenVerifier
+	OIDCTokenVerifier    *oidc.IDTokenVerifier
 	stateStore           *cache.Cache
 	Hosts                []string
 	GatewayAddress       string
@@ -72,7 +74,7 @@ func (c *Config) HandleCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "No id_token field in oauth2 token.", http.StatusInternalServerError)
 		return
 	}
-	idToken, err := c.TokenVerifier.Verify(ctx, rawIDToken)
+	idToken, err := c.OIDCTokenVerifier.Verify(ctx, rawIDToken)
 	if err != nil {
 		http.Error(w, "Failed to verify ID Token: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -103,6 +105,7 @@ func (c *Config) HandleCallback(w http.ResponseWriter, r *http.Request) {
 	session.Options.MaxAge = MaxAge
 	session.Values["preferred_username"] = data["preferred_username"]
 	session.Values["authenticated"] = true
+	session.Values["access_token"] = oauth2Token.AccessToken
 
 	if err = session.Save(r, w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -130,6 +133,8 @@ func (c *Config) Authenticated(next http.Handler) http.Handler {
 		}
 
 		ctx := context.WithValue(r.Context(), "preferred_username", session.Values["preferred_username"])
+		ctx = context.WithValue(ctx, "access_token", session.Values["access_token"])
+
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -159,7 +164,13 @@ func (c *Config) HandleDownload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	token, err := c.TokenGenerator(ctx, user, host)
+	token, err := c.PAATokenGenerator(ctx, user, host)
+	if err != nil {
+		log.Printf("Cannot generate PAA token for user %s due to %s", user, err)
+		http.Error(w, errors.New("unable to generate gateway credentials").Error(), http.StatusInternalServerError)
+	}
+
+	userToken, err := c.UserTokenGenerator(ctx, user)
 	if err != nil {
 		log.Printf("Cannot generate token for user %s due to %s", user, err)
 		http.Error(w, errors.New("unable to generate gateway credentials").Error(), http.StatusInternalServerError)
@@ -182,6 +193,6 @@ func (c *Config) HandleDownload(w http.ResponseWriter, r *http.Request) {
 			"networkautodetect:i:"+strconv.Itoa(c.NetworkAutoDetect)+"\r\n"+
 			"bandwidthautodetect:i:"+strconv.Itoa(c.BandwidthAutoDetect)+"\r\n"+
 			"connection type:i:"+strconv.Itoa(c.ConnectionType)+"\r\n"+
-			"username:s:"+token+"\r\n"+
+			"username:s:"+userToken+"\r\n"+
 			"bitmapcachesize:i:32000\r\n"))
 }
