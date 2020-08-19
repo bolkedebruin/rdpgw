@@ -87,6 +87,7 @@ security:
   # make sure to share this amongst different pods
   PAATokenSigningKey: thisisasessionkeyreplacethisjetzt
   PAATokenEncryptionKey: thisisasessionkeyreplacethisjetzt
+  UserTokenEncryptionKey: thisisasessionkeyreplacethisjetzt
 ```
 ## Testing locally
 A convenience docker-compose allows you to test the RDPGW locally. It uses [Keycloak](http://www.keycloak.org) 
@@ -105,6 +106,14 @@ Point your browser to `https://your-gateway/connect`. After authentication
 and RDP file will download to your desktop. This file can be opened by one
 of the remote desktop clients and it will try to connect to the gateway and
 desktop host behind it.
+
+## Integration
+The gateway exposes an endpoint for the verification of user tokens at
+https://yourserver/tokeninfo . The query parameter is 'access_token' so
+you can just do a GET to https://yourserver/tokeninfo?access_token=<token> .
+It will return 200 OK with the decrypted token.
+
+In this way you can integrate, for example, it with [pam-jwt](https://github.com/bolkedebruin/pam-jwt).
 
 ## TODO
 * Integrate Open Policy Agent
