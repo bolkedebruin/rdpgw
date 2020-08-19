@@ -130,6 +130,7 @@ func main() {
 	http.Handle("/remoteDesktopGateway/", common.EnrichContext(http.HandlerFunc(gw.HandleGatewayProtocol)))
 	http.Handle("/connect", common.EnrichContext(api.Authenticated(http.HandlerFunc(api.HandleDownload))))
 	http.Handle("/metrics", promhttp.Handler())
+	http.HandleFunc("/tokeninfo", api.TokenInfo)
 	http.HandleFunc("/callback", api.HandleCallback)
 
 	err = server.ListenAndServeTLS("", "")
