@@ -41,8 +41,7 @@ func main() {
 	security.UserSigningKey = []byte(conf.Security.UserTokenSigningKey)
 
 	// set oidc config
-	ctx := context.Background()
-	provider, err := oidc.NewProvider(ctx, conf.OpenId.ProviderUrl)
+	provider, err := oidc.NewProvider(context.Background(), conf.OpenId.ProviderUrl)
 	if err != nil {
 		log.Fatalf("Cannot get oidc provider: %s", err)
 	}
@@ -58,6 +57,8 @@ func main() {
 		Endpoint: provider.Endpoint(),
 		Scopes: []string{oidc.ScopeOpenID, "profile", "email"},
 	}
+	security.OIDCProvider = provider
+	security.Oauth2Config = oauthConfig
 
 	api := &api.Config{
 		GatewayAddress:       conf.Server.GatewayAddress,

@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"github.com/bolkedebruin/rdpgw/common"
 	"github.com/bolkedebruin/rdpgw/protocol"
+	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/square/go-jose/v3"
 	"github.com/square/go-jose/v3/jwt"
+	"golang.org/x/oauth2"
 	"log"
 	"time"
 )
@@ -17,6 +19,8 @@ var (
 	EncryptionKey     []byte
 	UserSigningKey    []byte
 	UserEncryptionKey []byte
+	OIDCProvider	  *oidc.Provider
+	Oauth2Config	  oauth2.Config
 )
 
 var ExpiryTime time.Duration = 5
@@ -55,6 +59,14 @@ func VerifyPAAToken(ctx context.Context, tokenString string) (bool, error) {
 
 	if err != nil {
 		log.Printf("token validation failed due to %s", err)
+		return false, err
+	}
+
+	// validate the access token
+	tokenSource := Oauth2Config.TokenSource(ctx, &oauth2.Token{AccessToken: custom.AccessToken})
+	_, err = OIDCProvider.UserInfo(ctx, tokenSource)
+	if err != nil {
+		log.Printf("Cannot get user info for access token: %s", err)
 		return false, err
 	}
 
