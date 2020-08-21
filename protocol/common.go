@@ -101,7 +101,7 @@ func readHeader(data []byte) (packetType uint16, size uint32, packet []byte, err
 	if len(data) < int(size) {
 		return packetType, size, data[8:], errors.New("data incomplete, fragment received")
 	}
-	return packetType, size, data[8:size-8], nil
+	return packetType, size, data[8:size], nil
 }
 
 // forwards data from a Connection to Transport and wraps it in the rdpgw protocol
