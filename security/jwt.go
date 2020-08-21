@@ -24,6 +24,7 @@ var (
 )
 
 var ExpiryTime time.Duration = 5
+var VerifyClientIP bool = true
 
 type customClaims struct {
 	RemoteServer string `json:"remoteServer"`
@@ -89,11 +90,11 @@ func VerifyServerFunc(ctx context.Context, host string) (bool, error) {
 		return false, nil
 	}
 
-	/*if s.ClientIp != common.GetClientIp(ctx) {
+	if VerifyClientIP && s.ClientIp != common.GetClientIp(ctx) {
 		log.Printf("Current client ip address %s does not match token client ip %s",
 			common.GetClientIp(ctx), s.ClientIp)
 		return false, nil
-	}*/
+	}
 
 	return true, nil
 }

@@ -48,6 +48,7 @@ type SecurityConfig struct {
 	PAATokenSigningKey     string
 	UserTokenEncryptionKey string
 	UserTokenSigningKey    string
+	VerifyClientIp		   bool
 }
 
 type ClientConfig struct {
@@ -61,9 +62,9 @@ func init() {
 	viper.SetDefault("server.certFile", "server.pem")
 	viper.SetDefault("server.keyFile", "key.pem")
 	viper.SetDefault("server.port", 443)
-	viper.SetDefault("security.enableOpenId", true)
 	viper.SetDefault("client.networkAutoDetect", 1)
 	viper.SetDefault("client.bandwidthAutoDetect", 1)
+	viper.SetDefault("security.verifyClientIp", true)
 }
 
 func Load(configFile string) Configuration {

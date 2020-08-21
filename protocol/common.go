@@ -21,13 +21,22 @@ type RedirectFlags struct {
 }
 
 type SessionInfo struct {
+	// The connection-id (RDG-ConnID) as reported by the client
 	ConnId           string
+	// The underlying incoming transport being either websocket or legacy http
+	// in case of websocket TransportOut will equal TransportIn
 	TransportIn      transport.Transport
+	// The underlying outgoing transport being either websocket or legacy http
+	// in case of websocket TransportOut will equal TransportOut
 	TransportOut     transport.Transport
+	// The remote desktop server (rdp, vnc etc) the clients intends to connect to
 	RemoteServer	 string
+	// The obtained client ip address
 	ClientIp		 string
 }
 
+// readMessage parses and defragments a packet from a Transport. It returns
+// at most the bytes that have been reported by the packet
 func readMessage(in transport.Transport) (pt int, n int, msg []byte, err error) {
 	fragment := false
 	index := 0
@@ -66,6 +75,7 @@ func readMessage(in transport.Transport) (pt int, n int, msg []byte, err error) 
 	}
 }
 
+// createPacket wraps the data into the protocol packet
 func createPacket(pktType uint16, data []byte) (packet []byte) {
 	size := len(data) + 8
 	buf := new(bytes.Buffer)
@@ -78,6 +88,7 @@ func createPacket(pktType uint16, data []byte) (packet []byte) {
 	return buf.Bytes()
 }
 
+// readHeader parses a packet and verifies its reported size
 func readHeader(data []byte) (packetType uint16, size uint32, packet []byte, err error) {
 	// header needs to be 8 min
 	if len(data) < 8 {
@@ -90,10 +101,10 @@ func readHeader(data []byte) (packetType uint16, size uint32, packet []byte, err
 	if len(data) < int(size) {
 		return packetType, size, data[8:], errors.New("data incomplete, fragment received")
 	}
-	return packetType, size, data[8:], nil
+	return packetType, size, data[8:size-8], nil
 }
 
-// sends data wrapped inside the rdpgw protocol
+// forwards data from a Connection to Transport and wraps it in the rdpgw protocol
 func forward(in net.Conn, out transport.Transport) {
 	defer in.Close()
 
@@ -113,7 +124,7 @@ func forward(in net.Conn, out transport.Transport) {
 	}
 }
 
-// receive data from the wire, unwrap and forward to the client
+// receive data received from the gateway client, unwrap and forward the remote desktop server
 func receive(data []byte, out net.Conn) {
 	buf := bytes.NewReader(data)
 

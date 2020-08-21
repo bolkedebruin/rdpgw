@@ -34,6 +34,8 @@ func main() {
 	cmd.PersistentFlags().StringVarP(&configFile, "conf", "c", "rdpgw.yaml",  "config file (json, yaml, ini)")
 	conf = config.Load(configFile)
 
+	security.VerifyClientIP = conf.Security.VerifyClientIp
+
 	// set security keys
 	security.SigningKey = []byte(conf.Security.PAATokenSigningKey)
 	security.EncryptionKey = []byte(conf.Security.PAATokenEncryptionKey)
