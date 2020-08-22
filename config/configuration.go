@@ -49,6 +49,7 @@ type SecurityConfig struct {
 	UserTokenEncryptionKey string
 	UserTokenSigningKey    string
 	VerifyClientIp		   bool
+	EnableUserToken        bool
 }
 
 type ClientConfig struct {

@@ -68,6 +68,7 @@ func main() {
 		OIDCTokenVerifier:    verifier,
 		PAATokenGenerator:    security.GeneratePAAToken,
 		UserTokenGenerator:   security.GenerateUserToken,
+		EnableUserToken:	  conf.Security.EnableUserToken,
 		SessionKey:           []byte(conf.Server.SessionKey),
 		SessionEncryptionKey: []byte(conf.Server.SessionEncryptionKey),
 		Hosts:                conf.Server.Hosts,

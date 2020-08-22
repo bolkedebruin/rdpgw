@@ -30,6 +30,7 @@ type Config struct {
 	SessionEncryptionKey []byte
 	PAATokenGenerator    TokenGeneratorFunc
 	UserTokenGenerator   UserTokenGeneratorFunc
+	EnableUserToken      bool
 	OAuth2Config         *oauth2.Config
 	store                *sessions.CookieStore
 	OIDCTokenVerifier    *oidc.IDTokenVerifier
@@ -170,10 +171,13 @@ func (c *Config) HandleDownload(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, errors.New("unable to generate gateway credentials").Error(), http.StatusInternalServerError)
 	}
 
-	userToken, err := c.UserTokenGenerator(ctx, user)
-	if err != nil {
-		log.Printf("Cannot generate token for user %s due to %s", user, err)
-		http.Error(w, errors.New("unable to generate gateway credentials").Error(), http.StatusInternalServerError)
+	userToken := user
+	if c.EnableUserToken {
+		userToken, err = c.UserTokenGenerator(ctx, user)
+		if err != nil {
+			log.Printf("Cannot generate token for user %s due to %s", user, err)
+			http.Error(w, errors.New("unable to generate gateway credentials").Error(), http.StatusInternalServerError)
+		}
 	}
 
 	// authenticated

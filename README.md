@@ -86,8 +86,11 @@ security:
   # a random string of at least 32 characters to secure cookies on the client
   # make sure to share this amongst different pods
   PAATokenSigningKey: thisisasessionkeyreplacethisjetzt
-  PAATokenEncryptionKey: thisisasessionkeyreplacethisjetzt
+  # PAATokenEncryptionKey: thisisasessionkeyreplacethisjetzt
   UserTokenEncryptionKey: thisisasessionkeyreplacethisjetzt
+  # if you want to enable token generation for the user
+  # if true the username will be set to a jwt with the username embedded into it
+  EnableUserToken: true
 ```
 ## Testing locally
 A convenience docker-compose allows you to test the RDPGW locally. It uses [Keycloak](http://www.keycloak.org) 
@@ -119,7 +122,6 @@ In this way you can integrate, for example, it with [pam-jwt](https://github.com
 * Integrate Open Policy Agent
 * Integrate GOKRB5
 * Integrate uber-go/zap
-* Integrate prometheus
 * Research: TLS defragmentation 
 * Improve Web Interface
 
