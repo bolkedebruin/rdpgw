@@ -91,6 +91,9 @@ security:
   # if you want to enable token generation for the user
   # if true the username will be set to a jwt with the username embedded into it
   EnableUserToken: true
+  # Verifies if the ip used to connect to download the rdp file equals from where the
+  # connection is opened.
+  VerifyClientIp: true
 ```
 ## Testing locally
 A convenience docker-compose allows you to test the RDPGW locally. It uses [Keycloak](http://www.keycloak.org) 
