@@ -10,13 +10,18 @@ RUN apt-get update && \
     -subj "/C=US/ST=VA/L=SomeCity/O=MyCompany/OU=MyDivision/CN=localhost" && \
     openssl x509 -req -days 365 -in server.csr -signkey key.pem -out server.pem
 
+RUN curl -L https://dl.google.com/go/go1.14.7.linux-amd64.tar.gz -o golang.tgz && \
+    tar zxvf golang.tgz && rm golang.tgz
+
 RUN git clone https://github.com/bolkedebruin/rdpgw.git && \
     cd rdpgw && \
-    env GOOS=linux GOARCH=amd64 go build && \
+    env GOOS=linux GOARCH=amd64 GOROOT=/go /go/bin/go build && \
     mkdir -p /opt/rdpgw && \
     mv rdpgw /opt/rdpgw/rdpgw && \
     rm -rf /root/go && \
     rm -rf /rdpgw
+
+RUN rm -rf /go
 
 COPY rdpgw.yaml /opt/rdpgw/rdpgw.yaml
 
