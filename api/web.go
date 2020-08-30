@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/gorilla/sessions"
 	"github.com/patrickmn/go-cache"
@@ -155,8 +156,16 @@ func (c *Config) HandleDownload(w http.ResponseWriter, r *http.Request) {
 	host := c.Hosts[rand.Intn(len(c.Hosts))]
 	host = strings.Replace(host, "{{ preferred_username }}", userName, 1)
 
-	user := userName
+	// split the username into user and domain
+	creds := strings.SplitN(userName, "@", 2)
+	user := creds[0]
+	var domain string
+	if len(creds) > 1 {
+		domain = creds[1]
+	}
+
 	if c.UsernameTemplate != "" {
+		c.UsernameTemplate = fmt.Sprintf(c.UsernameTemplate)
 		user = strings.Replace(c.UsernameTemplate, "{{ username }}", user, 1)
 		if c.UsernameTemplate == user {
 			log.Printf("Invalid username template. %s == %s", c.UsernameTemplate, user)
@@ -180,6 +189,8 @@ func (c *Config) HandleDownload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	user = strings.Replace(user,"{{ token }}", userToken, 1)
+
 	// authenticated
 	seed := make([]byte, 16)
 	rand.Read(seed)
@@ -187,16 +198,18 @@ func (c *Config) HandleDownload(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Disposition", "attachment; filename="+fn)
 	w.Header().Set("Content-Type", "application/x-rdp")
-	http.ServeContent(w, r, fn, time.Now(), strings.NewReader(
-		"full address:s:"+host+"\r\n"+
-			"gatewayhostname:s:"+c.GatewayAddress+"\r\n"+
-			"gatewaycredentialssource:i:5\r\n"+
-			"gatewayusagemethod:i:1\r\n"+
-			"gatewayprofileusagemethod:i:1\r\n"+
-			"gatewayaccesstoken:s:"+token+"\r\n"+
-			"networkautodetect:i:"+strconv.Itoa(c.NetworkAutoDetect)+"\r\n"+
-			"bandwidthautodetect:i:"+strconv.Itoa(c.BandwidthAutoDetect)+"\r\n"+
-			"connection type:i:"+strconv.Itoa(c.ConnectionType)+"\r\n"+
-			"username:s:"+userToken+"\r\n"+
-			"bitmapcachesize:i:32000\r\n"))
+	data := "full address:s:"+host+"\r\n"+
+		"gatewayhostname:s:"+c.GatewayAddress+"\r\n"+
+		"gatewaycredentialssource:i:5\r\n"+
+		"gatewayusagemethod:i:1\r\n"+
+		"gatewayprofileusagemethod:i:1\r\n"+
+		"gatewayaccesstoken:s:"+token+"\r\n"+
+		"networkautodetect:i:"+strconv.Itoa(c.NetworkAutoDetect)+"\r\n"+
+		"bandwidthautodetect:i:"+strconv.Itoa(c.BandwidthAutoDetect)+"\r\n"+
+		"connection type:i:"+strconv.Itoa(c.ConnectionType)+"\r\n"+
+		"username:s:"+user+"\r\n"+
+		"domain:s:"+domain+"\r\n"+
+		"bitmapcachesize:i:32000\r\n"
+
+	http.ServeContent(w, r, fn, time.Now(), strings.NewReader(data))
 }

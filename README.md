@@ -76,7 +76,10 @@ caps:
  enableDrive: true
  enableClipboard: true
 client:
-  usernameTemplate: "{{ username }}@bla.com"
+  # this is a go string templated with {{ username }} and {{ token }}
+  # the example below uses the ASCII field separator to distinguish
+  # between user and token 
+  usernameTemplate: "{{ username }}@bla.com\x1f{{ token }}"
   # rdp file settings see: 
   # https://docs.microsoft.com/en-us/windows-server/remote/remote-desktop-services/clients/rdp-files
   networkAutoDetect: 0
