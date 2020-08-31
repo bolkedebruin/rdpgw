@@ -42,6 +42,7 @@ type Config struct {
 	NetworkAutoDetect    int
 	BandwidthAutoDetect  int
 	ConnectionType       int
+	SplitUserDomain		 bool
 }
 
 func (c *Config) NewApi() {
@@ -157,17 +158,23 @@ func (c *Config) HandleDownload(w http.ResponseWriter, r *http.Request) {
 	host = strings.Replace(host, "{{ preferred_username }}", userName, 1)
 
 	// split the username into user and domain
-	creds := strings.SplitN(userName, "@", 2)
-	user := creds[0]
+	var user string
 	var domain string
-	if len(creds) > 1 {
-		domain = creds[1]
+	if c.SplitUserDomain {
+		creds := strings.SplitN(userName, "@", 2)
+		user = creds[0]
+		if len(creds) > 1 {
+			domain = creds[1]
+		}
+	} else {
+		user = userName
 	}
 
+	render := user
 	if c.UsernameTemplate != "" {
-		c.UsernameTemplate = fmt.Sprintf(c.UsernameTemplate)
-		user = strings.Replace(c.UsernameTemplate, "{{ username }}", user, 1)
-		if c.UsernameTemplate == user {
+		render = fmt.Sprintf(c.UsernameTemplate)
+		render = strings.Replace(render, "{{ username }}", user, 1)
+		if c.UsernameTemplate == render {
 			log.Printf("Invalid username template. %s == %s", c.UsernameTemplate, user)
 			http.Error(w, errors.New("invalid server configuration").Error(), http.StatusInternalServerError)
 			return
@@ -180,16 +187,14 @@ func (c *Config) HandleDownload(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, errors.New("unable to generate gateway credentials").Error(), http.StatusInternalServerError)
 	}
 
-	userToken := user
 	if c.EnableUserToken {
-		userToken, err = c.UserTokenGenerator(ctx, user)
+		userToken, err := c.UserTokenGenerator(ctx, user)
 		if err != nil {
 			log.Printf("Cannot generate token for user %s due to %s", user, err)
 			http.Error(w, errors.New("unable to generate gateway credentials").Error(), http.StatusInternalServerError)
 		}
+		render = strings.Replace(render, "{{ token }}", userToken, 1)
 	}
-
-	user = strings.Replace(user,"{{ token }}", userToken, 1)
 
 	// authenticated
 	seed := make([]byte, 16)
@@ -207,7 +212,7 @@ func (c *Config) HandleDownload(w http.ResponseWriter, r *http.Request) {
 		"networkautodetect:i:"+strconv.Itoa(c.NetworkAutoDetect)+"\r\n"+
 		"bandwidthautodetect:i:"+strconv.Itoa(c.BandwidthAutoDetect)+"\r\n"+
 		"connection type:i:"+strconv.Itoa(c.ConnectionType)+"\r\n"+
-		"username:s:"+user+"\r\n"+
+		"username:s:"+render+"\r\n"+
 		"domain:s:"+domain+"\r\n"+
 		"bitmapcachesize:i:32000\r\n"
 

@@ -57,6 +57,7 @@ type ClientConfig struct {
 	BandwidthAutoDetect int
 	ConnectionType      int
 	UsernameTemplate    string
+	SplitUserDomain     bool
 }
 
 func init() {

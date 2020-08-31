@@ -76,6 +76,7 @@ func main() {
 		UsernameTemplate:     conf.Client.UsernameTemplate,
 		BandwidthAutoDetect:  conf.Client.BandwidthAutoDetect,
 		ConnectionType:       conf.Client.ConnectionType,
+		SplitUserDomain:      conf.Client.SplitUserDomain,
 	}
 	api.NewApi()
 

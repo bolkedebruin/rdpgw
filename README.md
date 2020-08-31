@@ -85,6 +85,9 @@ client:
   networkAutoDetect: 0
   bandwidthAutoDetect: 1
   ConnectionType: 6
+  # If true puts splits "user@domain.com" into the user and domain component so that
+  # domain gets set in the rdp file and the domain name is stripped from the username
+  SplitUserDomain: false
 security:
   # a random string of at least 32 characters to secure cookies on the client
   # make sure to share this amongst different pods
