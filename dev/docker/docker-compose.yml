@@ -33,16 +33,4 @@ services:
       volumes:
         - ${PWD}/xrdp_users.txt:/root/createusers.txt
       environment:
-        TZ: "Europe/London"
-  rdpgw:
-      build: .
-      ports:
-        - 9443:9443
-      restart: on-failure
-      depends_on:
-        - keycloak
-      healthcheck:
-        test: ["CMD", "curl", "-f", "http://keycloak:8080"]
-        interval: 30s
-        timeout: 10s
-        retries: 10
+        TZ: "Europe/Amsterdam"

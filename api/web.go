@@ -43,6 +43,7 @@ type Config struct {
 	BandwidthAutoDetect  int
 	ConnectionType       int
 	SplitUserDomain		 bool
+	DefaultDomain		 string
 }
 
 func (c *Config) NewApi() {
@@ -158,16 +159,14 @@ func (c *Config) HandleDownload(w http.ResponseWriter, r *http.Request) {
 	host = strings.Replace(host, "{{ preferred_username }}", userName, 1)
 
 	// split the username into user and domain
-	var user string
-	var domain string
+	var user = userName
+	var domain = c.DefaultDomain
 	if c.SplitUserDomain {
 		creds := strings.SplitN(userName, "@", 2)
 		user = creds[0]
 		if len(creds) > 1 {
 			domain = creds[1]
 		}
-	} else {
-		user = userName
 	}
 
 	render := user

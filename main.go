@@ -77,6 +77,7 @@ func main() {
 		BandwidthAutoDetect:  conf.Client.BandwidthAutoDetect,
 		ConnectionType:       conf.Client.ConnectionType,
 		SplitUserDomain:      conf.Client.SplitUserDomain,
+		DefaultDomain:		  conf.Client.DefaultDomain,
 	}
 	api.NewApi()
 

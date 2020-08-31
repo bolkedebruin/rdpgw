@@ -58,6 +58,7 @@ type ClientConfig struct {
 	ConnectionType      int
 	UsernameTemplate    string
 	SplitUserDomain     bool
+	DefaultDomain       string
 }
 
 func init() {
