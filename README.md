@@ -59,6 +59,11 @@ server:
  # make sure to share this across the different pods
  sessionKey: thisisasessionkeyreplacethisjetzt
  sessionEncryptionKey: thisisasessionkeyreplacethisnunu!
+ # tries to set the receive / send buffer of the connections to the client
+ # in case of high latency high bandwidth the defaults set by the OS might
+ # be to low for a good experience
+ # receiveBuf: 12582912
+ # sendBuf: 12582912 
 # Open ID Connect specific settings
 openId:
  providerUrl: http://keycloak/auth/realms/test

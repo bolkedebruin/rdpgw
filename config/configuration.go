@@ -22,6 +22,8 @@ type ServerConfig struct {
 	RoundRobin           bool
 	SessionKey           string
 	SessionEncryptionKey string
+	SendBuf				 int
+	ReceiveBuf			 int
 }
 
 type OpenIDConfig struct {

@@ -39,6 +39,8 @@ type ServerConf struct {
 	IdleTimeout          int
 	SmartCardAuth        bool
 	TokenAuth            bool
+	ReceiveBuf			 int
+	SendBuf				 int
 }
 
 func NewServer(s *SessionInfo, conf *ServerConf) *Server {

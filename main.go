@@ -128,6 +128,8 @@ func main() {
 		},
 		VerifyTunnelCreate: security.VerifyPAAToken,
 		VerifyServerFunc: security.VerifyServerFunc,
+		SendBuf: conf.Server.SendBuf,
+		ReceiveBuf: conf.Server.ReceiveBuf,
 	}
 	gw := protocol.Gateway{
 		ServerConf: &handlerConfig,
