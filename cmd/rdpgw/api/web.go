@@ -160,11 +160,11 @@ func (c *Config) HandleDownload(w http.ResponseWriter, r *http.Request) {
 	
 	
 	//Change Host to value of host query Parameter if host query string is in Config Hosts
-	paraHost, hasParaHost := r.URL.Query()["host"]
-	if hasParaHost {
-        for _,a := range c.Hosts {
-            if a==paraHost[0] {
-                host=paraHost[0]
+	parameterHost, hasParameterHost := r.URL.Query()["host"]
+	if hasParameterHost {
+        for _,configHost := range c.Hosts {
+            if configHost==parameterHost[0] {
+                host=parameterHost[0]
             }
         }
     }
