@@ -157,6 +157,17 @@ func (c *Config) HandleDownload(w http.ResponseWriter, r *http.Request) {
 	rand.Seed(time.Now().Unix())
 	host := c.Hosts[rand.Intn(len(c.Hosts))]
 	host = strings.Replace(host, "{{ preferred_username }}", userName, 1)
+	
+	
+	//Change Host to value of host query Parameter if host query string is in Config Hosts
+	parameterHost, hasParameterHost := r.URL.Query()["host"]
+	if hasParameterHost {
+        for _,configHost := range c.Hosts {
+            if configHost==parameterHost[0] {
+                host=parameterHost[0]
+            }
+        }
+    }
 
 	// split the username into user and domain
 	var user = userName
