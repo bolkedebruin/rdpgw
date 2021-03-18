@@ -213,7 +213,8 @@ func (c *Config) HandleDownload(w http.ResponseWriter, r *http.Request) {
 		"connection type:i:"+strconv.Itoa(c.ConnectionType)+"\r\n"+
 		"username:s:"+render+"\r\n"+
 		"domain:s:"+domain+"\r\n"+
-		"bitmapcachesize:i:32000\r\n"
+		"bitmapcachesize:i:32000\r\n"+
+	        "smart sizing:i:1\r\n"
 
 	http.ServeContent(w, r, fn, time.Now(), strings.NewReader(data))
 }
