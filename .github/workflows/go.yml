@@ -26,10 +26,10 @@ jobs:
       run: go get -u golang.org/x/lint/golint
       
     - name: Update go.sum
-      run: go mod tidy
+      run: make mod
 
     - name: Build
-      run: go build -v .
+      run: make build
 
     - name: Test
       run: go test -cover -v ./...
