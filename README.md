@@ -27,10 +27,11 @@ are generated and signed according to the JWT spec by using [jwt-go](https://git
 signed with a 256 bit HMAC. Hosts provided by the user are verified against what was provided by
 the server. Finally, the client's ip address needs to match the one it obtained the token with.
 
-## How to build
+## How to build & install
 ```bash
 cd rdpgw
-go build -o rdpgw .
+make
+make install
 ```
 
 ## Configuration
