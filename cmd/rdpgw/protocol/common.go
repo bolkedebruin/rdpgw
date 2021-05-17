@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
-	"github.com/bolkedebruin/rdpgw/transport"
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/transport"
 	"io"
 	"log"
 	"net"
@@ -27,10 +27,10 @@ type SessionInfo struct {
 	ConnId           string
 	// The underlying incoming transport being either websocket or legacy http
 	// in case of websocket TransportOut will equal TransportIn
-	TransportIn      transport.Transport
+	TransportIn transport.Transport
 	// The underlying outgoing transport being either websocket or legacy http
 	// in case of websocket TransportOut will equal TransportOut
-	TransportOut     transport.Transport
+	TransportOut transport.Transport
 	// The remote desktop server (rdp, vnc etc) the clients intends to connect to
 	RemoteServer	 string
 	// The obtained client ip address

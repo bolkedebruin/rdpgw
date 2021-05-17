@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
-	"github.com/bolkedebruin/rdpgw/common"
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/common"
 	"io"
 	"log"
 	"net"
@@ -39,13 +39,13 @@ type ServerConf struct {
 	IdleTimeout          int
 	SmartCardAuth        bool
 	TokenAuth            bool
-	ReceiveBuf			 int
-	SendBuf				 int
+	ReceiveBuf           int
+	SendBuf              int
 }
 
 func NewServer(s *SessionInfo, conf *ServerConf) *Server {
 	h := &Server{
-		State:				  SERVER_STATE_INITIAL,
+		State:                SERVER_STATE_INITIAL,
 		Session:              s,
 		RedirectFlags:        makeRedirectFlags(conf.RedirectFlags),
 		IdleTimeout:          conf.IdleTimeout,

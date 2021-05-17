@@ -3,11 +3,11 @@ package main
 import (
 	"context"
 	"crypto/tls"
-	"github.com/bolkedebruin/rdpgw/api"
-	"github.com/bolkedebruin/rdpgw/common"
-	"github.com/bolkedebruin/rdpgw/config"
-	"github.com/bolkedebruin/rdpgw/protocol"
-	"github.com/bolkedebruin/rdpgw/security"
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/api"
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/common"
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/config"
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/protocol"
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/security"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/cobra"
@@ -68,7 +68,7 @@ func main() {
 		OIDCTokenVerifier:    verifier,
 		PAATokenGenerator:    security.GeneratePAAToken,
 		UserTokenGenerator:   security.GenerateUserToken,
-		EnableUserToken:	  conf.Security.EnableUserToken,
+		EnableUserToken:      conf.Security.EnableUserToken,
 		SessionKey:           []byte(conf.Server.SessionKey),
 		SessionEncryptionKey: []byte(conf.Server.SessionEncryptionKey),
 		Hosts:                conf.Server.Hosts,
@@ -77,7 +77,7 @@ func main() {
 		BandwidthAutoDetect:  conf.Client.BandwidthAutoDetect,
 		ConnectionType:       conf.Client.ConnectionType,
 		SplitUserDomain:      conf.Client.SplitUserDomain,
-		DefaultDomain:		  conf.Client.DefaultDomain,
+		DefaultDomain:        conf.Client.DefaultDomain,
 	}
 	api.NewApi()
 
@@ -127,9 +127,9 @@ func main() {
 			EnableAll: conf.Caps.RedirectAll,
 		},
 		VerifyTunnelCreate: security.VerifyPAAToken,
-		VerifyServerFunc: security.VerifyServerFunc,
-		SendBuf: conf.Server.SendBuf,
-		ReceiveBuf: conf.Server.ReceiveBuf,
+		VerifyServerFunc:   security.VerifyServerFunc,
+		SendBuf:            conf.Server.SendBuf,
+		ReceiveBuf:         conf.Server.ReceiveBuf,
 	}
 	gw := protocol.Gateway{
 		ServerConf: &handlerConfig,

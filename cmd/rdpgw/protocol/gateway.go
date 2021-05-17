@@ -3,8 +3,8 @@ package protocol
 import (
 	"context"
 	"errors"
-	"github.com/bolkedebruin/rdpgw/common"
-	"github.com/bolkedebruin/rdpgw/transport"
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/common"
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/transport"
 	"github.com/gorilla/websocket"
 	"github.com/patrickmn/go-cache"
 	"github.com/prometheus/client_golang/prometheus"
