@@ -10,14 +10,15 @@ RUN apt-get update && \
     -subj "/C=US/ST=VA/L=SomeCity/O=MyCompany/OU=MyDivision/CN=localhost" && \
     openssl x509 -req -days 365 -in server.csr -signkey key.pem -out server.pem
 
-RUN curl -L https://dl.google.com/go/go1.14.7.linux-amd64.tar.gz -o golang.tgz && \
+RUN curl -L https://dl.google.com/go/go1.17.5.linux-amd64.tar.gz -o golang.tgz && \
     tar zxvf golang.tgz && rm golang.tgz
 
 RUN git clone https://github.com/bolkedebruin/rdpgw.git && \
     cd rdpgw && \
-    env GOOS=linux GOARCH=amd64 GOROOT=/go /go/bin/go build && \
+    env GOOS=linux GOARCH=amd64 GOROOT=/go /go/bin/go mod tidy && \
+    env GOOS=linux GOARCH=amd64 GOROOT=/go /go/bin/go build -trimpath -tags '' -ldflags '' -o '/rdpgw/bin/rdpgw' ./cmd/rdpgw && \
     mkdir -p /opt/rdpgw && \
-    mv rdpgw /opt/rdpgw/rdpgw && \
+    mv /rdpgw/bin/rdpgw /opt/rdpgw/rdpgw && \
     rm -rf /root/go && \
     rm -rf /rdpgw
 
