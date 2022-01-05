@@ -38,6 +38,8 @@ FROM busybox
 # Copy stuff from builder
 COPY --from=builder /opt/rdpgw /opt/rdpgw
 COPY --from=builder /etc/passwd /etc/passwd
+# trust root CA
+COPY --from=builder /etc/ssl/certs /etc/ssl/certs
 # COPY --from=builder /bin/sh /bin/sh
 # COPY rdpgw.yaml
 COPY rdpgw.yaml /opt/rdpgw/rdpgw.yaml
