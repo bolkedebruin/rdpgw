@@ -22,9 +22,9 @@ RUN mkdir -p /opt/rdpgw && cd /opt/rdpgw && \
     openssl x509 -req -days 365 -in server.csr -signkey key.pem -out server.pem
 
 # add user
-RUN adduser --disabled-password --gecos "" --home /opt/rdpgw --uid 1001 rdgw
+RUN adduser --disabled-password --gecos "" --home /opt/rdpgw --uid 1001 rdpgw
 
-# build rdwgw and set rights
+# build rdpgw and set rights
 RUN git clone https://github.com/bolkedebruin/rdpgw.git /app && \
     cd /app && \
     go mod tidy && \
