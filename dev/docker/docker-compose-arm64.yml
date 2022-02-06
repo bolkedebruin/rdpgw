@@ -7,7 +7,7 @@ volumes:
 
 services:
   keycloak:
-      image: quay.io/keycloak/keycloak:latest
+      image: richardjkendall/keycloak-arm:latest
       hostname: keycloak
       volumes:
         - ${PWD}/realm-export.json:/export/realm-export.json
