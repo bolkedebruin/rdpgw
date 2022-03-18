@@ -7,42 +7,45 @@ volumes:
 
 services:
   keycloak:
-      image: richardjkendall/keycloak-arm:latest
-      hostname: keycloak
-      volumes:
-        - ${PWD}/realm-export.json:/export/realm-export.json
-      environment:
-        KEYCLOAK_USER: admin
-        KEYCLOAK_PASSWORD: admin
-        KEYCLOAK_IMPORT: /export/realm-export.json
-      ports:
-        - 8080:8080
-      restart: on-failure
-      healthcheck:
-        test: ["CMD", "curl", "-f", "http://localhost:8080/auth"]
-        interval: 30s
-        timeout: 3s
-        retries: 10
-        start_period: 5s
+    container_name: keycloak
+    image: richardjkendall/keycloak-arm:latest
+    hostname: keycloak
+    volumes:
+      - ${PWD}/realm-export.json:/export/realm-export.json
+    environment:
+      KEYCLOAK_USER: admin
+      KEYCLOAK_PASSWORD: admin
+      KEYCLOAK_IMPORT: /export/realm-export.json
+    ports:
+      - 8080:8080
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/auth"]
+      interval: 30s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
   xrdp:
-      hostname: xrdp
-      image: rattydave/docker-ubuntu-xrdp-mate-custom:20.04
-      ports:
-        - 3389:3389
-      restart: on-failure
-      volumes:
-        - ${PWD}/xrdp_users.txt:/root/createusers.txt
-      environment:
-        TZ: "Europe/Amsterdam"
+    container_name: xrdp
+    hostname: xrdp
+    image: rattydave/docker-ubuntu-xrdp-mate-custom:20.04
+    ports:
+      - 3389:3389
+    restart: on-failure
+    volumes:
+      - ${PWD}/xrdp_users.txt:/root/createusers.txt
+    environment:
+      TZ: "Europe/Amsterdam"
   rdpgw:
-       build: .
-       ports:
-         - 9443:9443
-       restart: on-failure
-       depends_on:
-         - keycloak
-       healthcheck:
-         test: ["CMD", "curl", "-f", "http://keycloak:8080"]
-         interval: 30s
-         timeout: 10s
-         retries: 10
+    container_name: rdpgw
+    build: .
+    ports:
+      - 9443:9443
+    restart: on-failure
+    depends_on:
+      - keycloak
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://keycloak:8080"]
+      interval: 30s
+      timeout: 10s
+      retries: 10

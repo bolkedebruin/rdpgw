@@ -7,6 +7,7 @@ volumes:
 
 services:
   keycloak:
+      container_name: keycloak
       image: quay.io/keycloak/keycloak:latest
       hostname: keycloak
       volumes:
@@ -15,9 +16,13 @@ services:
         KEYCLOAK_USER: admin
         KEYCLOAK_PASSWORD: admin
         KEYCLOAK_IMPORT: /export/realm-export.json
+        KEYCLOAK_ADMIN: admin
+        KEYCLOAD_ADMIN_PASSWORD: admin
       ports:
         - 8080:8080
       restart: on-failure
+      command:
+        - start-dev
       healthcheck:
         test: ["CMD", "curl", "-f", "http://localhost:8080/auth"]
         interval: 30s
@@ -25,6 +30,7 @@ services:
         retries: 10
         start_period: 5s
   xrdp:
+      container_name: xrdp
       hostname: xrdp
       image: rattydave/docker-ubuntu-xrdp-mate-custom:20.04
       ports:
