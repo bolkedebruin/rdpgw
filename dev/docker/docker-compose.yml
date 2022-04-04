@@ -17,7 +17,7 @@ services:
         KEYCLOAK_PASSWORD: admin
         KEYCLOAK_IMPORT: /export/realm-export.json
         KEYCLOAK_ADMIN: admin
-        KEYCLOAD_ADMIN_PASSWORD: admin
+        KEYCLOAK_ADMIN_PASSWORD: admin
       ports:
         - 8080:8080
       restart: on-failure
