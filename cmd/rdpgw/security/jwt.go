@@ -7,8 +7,8 @@ import (
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/common"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/protocol"
 	"github.com/coreos/go-oidc/v3/oidc"
-	"github.com/square/go-jose/v3"
-	"github.com/square/go-jose/v3/jwt"
+	"github.com/go-jose/go-jose/v3"
+	"github.com/go-jose/go-jose/v3/jwt"
 	"golang.org/x/oauth2"
 	"log"
 	"time"
@@ -19,8 +19,8 @@ var (
 	EncryptionKey     []byte
 	UserSigningKey    []byte
 	UserEncryptionKey []byte
-	OIDCProvider	  *oidc.Provider
-	Oauth2Config	  oauth2.Config
+	OIDCProvider      *oidc.Provider
+	Oauth2Config      oauth2.Config
 )
 
 var ExpiryTime time.Duration = 5
@@ -210,7 +210,7 @@ func UserInfo(ctx context.Context, token string) (jwt.Claims, error) {
 	// go-jose doesnt verify the expiry
 	err := standard.Validate(jwt.Expected{
 		Issuer: "rdpgw",
-		Time: time.Now(),
+		Time:   time.Now(),
 	})
 
 	if err != nil {
