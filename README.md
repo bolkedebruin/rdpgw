@@ -49,7 +49,7 @@ server:
  keyFile: key.pem
  # gateway address advertised in the rdp files
  gatewayAddress: localhost
- # port to listen on
+ # port to listen on (change to 80 or equivalent if not using TLS)
  port: 443
  # list of acceptable desktop hosts to connect to
  hosts:

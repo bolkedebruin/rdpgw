@@ -143,7 +143,11 @@ func main() {
 	http.HandleFunc("/tokeninfo", api.TokenInfo)
 	http.HandleFunc("/callback", api.HandleCallback)
 
-	err = server.ListenAndServeTLS("", "")
+	if conf.Server.DisableTLS {
+		err = server.ListenAndServe()
+	} else {
+		err = server.ListenAndServeTLS("", "")
+	}
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}
