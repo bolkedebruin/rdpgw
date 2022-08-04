@@ -81,31 +81,33 @@ func main() {
 	}
 	api.NewApi()
 
-	if conf.Server.CertFile == "" || conf.Server.KeyFile == "" {
-		log.Fatal("Both certfile and keyfile need to be specified")
-	}
-
-	//mux := http.NewServeMux()
-	//mux.HandleFunc("*", HelloServer)
-
 	log.Printf("Starting remote desktop gateway server")
-
 	cfg := &tls.Config{}
-	tlsDebug := os.Getenv("SSLKEYLOGFILE")
-	if tlsDebug != "" {
-		w, err := os.OpenFile(tlsDebug, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
-		if err != nil {
-			log.Fatalf("Cannot open key log file %s for writing %s", tlsDebug, err)
+
+	if conf.Server.DisableTLS {
+		log.Printf("TLS disabled - rdp gw connections require tls make sure to have a terminator")
+	} else {
+		if conf.Server.CertFile == "" || conf.Server.KeyFile == "" {
+			log.Fatal("Both certfile and keyfile need to be specified")
 		}
-		log.Printf("Key log file set to: %s", tlsDebug)
-		cfg.KeyLogWriter = w
+
+		tlsDebug := os.Getenv("SSLKEYLOGFILE")
+		if tlsDebug != "" {
+			w, err := os.OpenFile(tlsDebug, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+			if err != nil {
+				log.Fatalf("Cannot open key log file %s for writing %s", tlsDebug, err)
+			}
+			log.Printf("Key log file set to: %s", tlsDebug)
+			cfg.KeyLogWriter = w
+		}
+
+		cert, err := tls.LoadX509KeyPair(conf.Server.CertFile, conf.Server.KeyFile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		cfg.Certificates = append(cfg.Certificates, cert)
 	}
 
-	cert, err := tls.LoadX509KeyPair(conf.Server.CertFile, conf.Server.KeyFile)
-	if err != nil {
-		log.Fatal(err)
-	}
-	cfg.Certificates = append(cfg.Certificates, cert)
 	server := http.Server{
 		Addr:      ":" + strconv.Itoa(conf.Server.Port),
 		TLSConfig: cfg,

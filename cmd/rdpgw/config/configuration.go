@@ -16,6 +16,7 @@ type Configuration struct {
 type ServerConfig struct {
 	GatewayAddress       string
 	Port                 int
+	DisableTLS			 bool
 	CertFile             string
 	KeyFile              string
 	Hosts                []string
@@ -70,6 +71,7 @@ func init() {
 	viper.SetDefault("client.networkAutoDetect", 1)
 	viper.SetDefault("client.bandwidthAutoDetect", 1)
 	viper.SetDefault("security.verifyClientIp", true)
+	viper.SetDefault("server.tlsDisabled",  false)
 }
 
 func Load(configFile string) Configuration {
