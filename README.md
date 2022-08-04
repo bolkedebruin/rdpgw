@@ -41,7 +41,10 @@ template.
 ```yaml
 # web server configuration. 
 server:
- # TLS certificate files (required)
+ # disable TLS if termination happens somehwere else (e.g. a load balancer)
+ # note: rdp connections over a gateway require TLS
+ disableTLS: false
+ # TLS certificate files
  certFile: server.pem
  keyFile: key.pem
  # gateway address advertised in the rdp files
