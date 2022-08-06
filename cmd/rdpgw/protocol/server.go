@@ -165,10 +165,10 @@ func (s *Server) Process(ctx context.Context) error {
 				log.Printf("Channel closed while in wrong state %d != %d", s.State, SERVER_STATE_OPENED)
 				return errors.New("wrong state")
 			}
+			log.Printf("Channel closed")
 			s.Session.TransportIn.Close()
 			s.Session.TransportOut.Close()
 			s.State = SERVER_STATE_CLOSED
-			log.Printf("Channel closed")
 			return nil
 		default:
 			log.Printf("Unknown packet (size %d): %x", sz, pkt)
