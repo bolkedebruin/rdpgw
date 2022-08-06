@@ -143,7 +143,6 @@ func (s *Server) Process(ctx context.Context) error {
 			go forward(s.Remote, s.Session.TransportOut)
 			s.State = SERVER_STATE_CHANNEL_CREATE
 		case PKT_TYPE_DATA:
-			log.Printf("Data received")
 			if s.State < SERVER_STATE_CHANNEL_CREATE {
 				log.Printf("Data received while in wrong state %d != %d", s.State, SERVER_STATE_CHANNEL_CREATE)
 				return errors.New("wrong state")
@@ -165,9 +164,10 @@ func (s *Server) Process(ctx context.Context) error {
 				log.Printf("Channel closed while in wrong state %d != %d", s.State, SERVER_STATE_OPENED)
 				return errors.New("wrong state")
 			}
-			log.Printf("Channel closed")
-			s.Session.TransportIn.Close()
-			s.Session.TransportOut.Close()
+			msg := s.channelCloseResponse()
+			s.Session.TransportOut.WritePacket(msg)
+			//s.Session.TransportIn.Close()
+			//s.Session.TransportOut.Close()
 			s.State = SERVER_STATE_CLOSED
 			return nil
 		default:
@@ -312,6 +312,25 @@ func (s *Server) channelResponse() []byte {
 	// length uint16
 
 	return createPacket(PKT_TYPE_CHANNEL_RESPONSE, buf.Bytes())
+}
+
+func (s *Server) channelCloseResponse() []byte {
+	buf := new(bytes.Buffer)
+
+	binary.Write(buf, binary.LittleEndian, uint32(0))                                     // error code
+	binary.Write(buf, binary.LittleEndian, uint16(HTTP_CHANNEL_RESPONSE_FIELD_CHANNELID)) // fields present
+	binary.Write(buf, binary.LittleEndian, uint16(0))                                     // reserved
+
+	// channel id is required for Windows clients
+	binary.Write(buf, binary.LittleEndian, uint32(1)) // channel id
+
+	// optional fields
+	// channel id uint32 (4)
+	// udp port uint16 (2)
+	// udp auth cookie 1 byte for side channel
+	// length uint16
+
+	return createPacket(PKT_TYPE_CLOSE_CHANNEL_RESPONSE, buf.Bytes())
 }
 
 func makeRedirectFlags(flags RedirectFlags) int {
