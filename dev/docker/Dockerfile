@@ -27,7 +27,7 @@ RUN adduser --disabled-password --gecos "" --home /opt/rdpgw --uid 1001 rdpgw
 # build rdpgw and set rights
 RUN git clone https://github.com/bolkedebruin/rdpgw.git /app && \
     cd /app && \
-    go mod tidy && \
+    go mod tidy -compat=1.17 && \
     CGO_ENABLED=0 GOOS=linux go build -trimpath -tags '' -ldflags '' -o '/opt/rdpgw/rdpgw' ./cmd/rdpgw && \
     chmod +x /opt/rdpgw/rdpgw && \
     chown -R 1001 /opt/rdpgw

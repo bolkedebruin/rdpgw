@@ -143,6 +143,7 @@ func (s *Server) Process(ctx context.Context) error {
 			go forward(s.Remote, s.Session.TransportOut)
 			s.State = SERVER_STATE_CHANNEL_CREATE
 		case PKT_TYPE_DATA:
+			log.Printf("Data received")
 			if s.State < SERVER_STATE_CHANNEL_CREATE {
 				log.Printf("Data received while in wrong state %d != %d", s.State, SERVER_STATE_CHANNEL_CREATE)
 				return errors.New("wrong state")
@@ -167,6 +168,8 @@ func (s *Server) Process(ctx context.Context) error {
 			s.Session.TransportIn.Close()
 			s.Session.TransportOut.Close()
 			s.State = SERVER_STATE_CLOSED
+			log.Printf("Channel closed")
+			return nil
 		default:
 			log.Printf("Unknown packet (size %d): %x", sz, pkt)
 		}
