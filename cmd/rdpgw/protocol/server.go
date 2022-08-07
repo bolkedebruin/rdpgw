@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/common"
 	"io"
 	"log"
@@ -45,7 +46,7 @@ type ServerConf struct {
 
 func NewServer(s *SessionInfo, conf *ServerConf) *Server {
 	h := &Server{
-		State:                SERVER_STATE_INITIAL,
+		State:                SERVER_STATE_INITIALIZED,
 		Session:              s,
 		RedirectFlags:        makeRedirectFlags(conf.RedirectFlags),
 		IdleTimeout:          conf.IdleTimeout,
@@ -71,12 +72,14 @@ func (s *Server) Process(ctx context.Context) error {
 		switch pt {
 		case PKT_TYPE_HANDSHAKE_REQUEST:
 			log.Printf("Client handshakeRequest from %s", common.GetClientIp(ctx))
-			if s.State != SERVER_STATE_INITIAL {
-				log.Printf("Handshake attempted while in wrong state %d != %d", s.State, SERVER_STATE_INITIAL)
-				return errors.New("wrong state")
+			if s.State != SERVER_STATE_INITIALIZED {
+				log.Printf("Handshake attempted while in wrong state %d != %d", s.State, SERVER_STATE_INITIALIZED)
+				msg := s.handshakeResponse(0x0, 0x0, ERROR_GENERIC)
+				s.Session.TransportOut.WritePacket(msg)
+				return fmt.Errorf("%x: wrong state", ERROR_GENERIC)
 			}
 			major, minor, _, _ := s.handshakeRequest(pkt) // todo check if auth matches what the handler can do
-			msg := s.handshakeResponse(major, minor)
+			msg := s.handshakeResponse(major, minor, ERROR_NO)
 			s.Session.TransportOut.WritePacket(msg)
 			s.State = SERVER_STATE_HANDSHAKE
 		case PKT_TYPE_TUNNEL_CREATE:
@@ -84,16 +87,20 @@ func (s *Server) Process(ctx context.Context) error {
 			if s.State != SERVER_STATE_HANDSHAKE {
 				log.Printf("Tunnel create attempted while in wrong state %d != %d",
 					s.State, SERVER_STATE_HANDSHAKE)
-				return errors.New("wrong state")
+				msg := s.tunnelResponse(ERROR_SECURITY_GATEWAY_COOKIE_REJECTED)
+				s.Session.TransportOut.WritePacket(msg)
+				return fmt.Errorf("%x: PAA cookie rejected, wrong state", ERROR_SECURITY_GATEWAY_COOKIE_REJECTED)
 			}
 			_, cookie := s.tunnelRequest(pkt)
 			if s.VerifyTunnelCreate != nil {
 				if ok, _ := s.VerifyTunnelCreate(ctx, cookie); !ok {
 					log.Printf("Invalid PAA cookie received from client %s", common.GetClientIp(ctx))
-					return errors.New("invalid PAA cookie")
+					msg := s.tunnelResponse(ERROR_SECURITY_GATEWAY_COOKIE_INVALID)
+					s.Session.TransportOut.WritePacket(msg)
+					return fmt.Errorf("%x: invalid PAA cookie", ERROR_SECURITY_GATEWAY_COOKIE_INVALID)
 				}
 			}
-			msg := s.tunnelResponse()
+			msg := s.tunnelResponse(ERROR_NO)
 			s.Session.TransportOut.WritePacket(msg)
 			s.State = SERVER_STATE_TUNNEL_CREATE
 		case PKT_TYPE_TUNNEL_AUTH:
@@ -101,16 +108,20 @@ func (s *Server) Process(ctx context.Context) error {
 			if s.State != SERVER_STATE_TUNNEL_CREATE {
 				log.Printf("Tunnel auth attempted while in wrong state %d != %d",
 					s.State, SERVER_STATE_TUNNEL_CREATE)
-				return errors.New("wrong state")
+				msg := s.tunnelAuthResponse(ERROR_GENERIC)
+				s.Session.TransportOut.WritePacket(msg)
+				return fmt.Errorf("%x: Tunnel auth rejected, wrong state", ERROR_GENERIC)
 			}
 			client := s.tunnelAuthRequest(pkt)
 			if s.VerifyTunnelAuthFunc != nil {
 				if ok, _ := s.VerifyTunnelAuthFunc(ctx, client); !ok {
 					log.Printf("Invalid client name: %s", client)
-					return errors.New("invalid client name")
+					msg := s.tunnelAuthResponse(ERROR_SECURITY)
+					s.Session.TransportOut.WritePacket(msg)
+					return fmt.Errorf("%x: Tunnel auth rejected, invalid client name", ERROR_SECURITY)
 				}
 			}
-			msg := s.tunnelAuthResponse()
+			msg := s.tunnelAuthResponse(ERROR_NO)
 			s.Session.TransportOut.WritePacket(msg)
 			s.State = SERVER_STATE_TUNNEL_AUTHORIZE
 		case PKT_TYPE_CHANNEL_CREATE:
@@ -118,24 +129,30 @@ func (s *Server) Process(ctx context.Context) error {
 			if s.State != SERVER_STATE_TUNNEL_AUTHORIZE {
 				log.Printf("Channel create attempted while in wrong state %d != %d",
 					s.State, SERVER_STATE_TUNNEL_AUTHORIZE)
-				return errors.New("wrong state")
+				msg := s.channelResponse(ERROR_GENERIC)
+				s.Session.TransportOut.WritePacket(msg)
+				return fmt.Errorf("%x: Channel create rejected, wrong state", ERROR_GENERIC)
 			}
 			server, port := s.channelRequest(pkt)
 			host := net.JoinHostPort(server, strconv.Itoa(int(port)))
 			if s.VerifyServerFunc != nil {
 				if ok, _ := s.VerifyServerFunc(ctx, host); !ok {
 					log.Printf("Not allowed to connect to %s by policy handler", host)
-					return errors.New("denied by security policy")
+					msg := s.channelResponse(ERROR_SECURITY_GATEWAY_POLICY)
+					s.Session.TransportOut.WritePacket(msg)
+					return fmt.Errorf("%x: denied by security policy", ERROR_SECURITY_GATEWAY_POLICY)
 				}
 			}
 			log.Printf("Establishing connection to RDP server: %s", host)
 			s.Remote, err = net.DialTimeout("tcp", host, time.Second*15)
 			if err != nil {
 				log.Printf("Error connecting to %s, %s", host, err)
+				msg := s.channelResponse(ERROR_GENERIC)
+				s.Session.TransportOut.WritePacket(msg)
 				return err
 			}
 			log.Printf("Connection established")
-			msg := s.channelResponse()
+			msg := s.channelResponse(ERROR_NO)
 			s.Session.TransportOut.WritePacket(msg)
 
 			// Make sure to start the flow from the RDP server first otherwise connections
@@ -164,7 +181,7 @@ func (s *Server) Process(ctx context.Context) error {
 				log.Printf("Channel closed while in wrong state %d != %d", s.State, SERVER_STATE_OPENED)
 				return errors.New("wrong state")
 			}
-			msg := s.channelCloseResponse()
+			msg := s.channelCloseResponse(ERROR_NO)
 			s.Session.TransportOut.WritePacket(msg)
 			//s.Session.TransportIn.Close()
 			//s.Session.TransportOut.Close()
@@ -179,7 +196,7 @@ func (s *Server) Process(ctx context.Context) error {
 // Creates a packet the is a response to a handshakeRequest request
 // HTTP_EXTENDED_AUTH_SSPI_NTLM is not supported in Linux
 // but could be in Windows. However the NTLM protocol is insecure
-func (s *Server) handshakeResponse(major byte, minor byte) []byte {
+func (s *Server) handshakeResponse(major byte, minor byte, errorCode int) []byte {
 	var caps uint16
 	if s.SmartCardAuth {
 		caps = caps | HTTP_EXTENDED_AUTH_SC
@@ -189,7 +206,7 @@ func (s *Server) handshakeResponse(major byte, minor byte) []byte {
 	}
 
 	buf := new(bytes.Buffer)
-	binary.Write(buf, binary.LittleEndian, uint32(0)) // error_code
+	binary.Write(buf, binary.LittleEndian, uint32(errorCode)) // error_code
 	buf.Write([]byte{major, minor})
 	binary.Write(buf, binary.LittleEndian, uint16(0))    // server version
 	binary.Write(buf, binary.LittleEndian, uint16(caps)) // extended auth
@@ -227,11 +244,11 @@ func (s *Server) tunnelRequest(data []byte) (caps uint32, cookie string) {
 	return
 }
 
-func (s *Server) tunnelResponse() []byte {
+func (s *Server) tunnelResponse(errorCode int) []byte {
 	buf := new(bytes.Buffer)
 
 	binary.Write(buf, binary.LittleEndian, uint16(0))                                                                    // server version
-	binary.Write(buf, binary.LittleEndian, uint32(0))                                                                    // error code
+	binary.Write(buf, binary.LittleEndian, uint32(errorCode))                                                            // error code
 	binary.Write(buf, binary.LittleEndian, uint16(HTTP_TUNNEL_RESPONSE_FIELD_TUNNEL_ID|HTTP_TUNNEL_RESPONSE_FIELD_CAPS)) // fields present
 	binary.Write(buf, binary.LittleEndian, uint16(0))                                                                    // reserved
 
@@ -255,10 +272,10 @@ func (s *Server) tunnelAuthRequest(data []byte) string {
 	return clientName
 }
 
-func (s *Server) tunnelAuthResponse() []byte {
+func (s *Server) tunnelAuthResponse(errorCode int) []byte {
 	buf := new(bytes.Buffer)
 
-	binary.Write(buf, binary.LittleEndian, uint32(0))                                                                                        // error code
+	binary.Write(buf, binary.LittleEndian, uint32(errorCode))                                                                                // error code
 	binary.Write(buf, binary.LittleEndian, uint16(HTTP_TUNNEL_AUTH_RESPONSE_FIELD_REDIR_FLAGS|HTTP_TUNNEL_AUTH_RESPONSE_FIELD_IDLE_TIMEOUT)) // fields present
 	binary.Write(buf, binary.LittleEndian, uint16(0))                                                                                        // reserved
 
@@ -295,10 +312,10 @@ func (s *Server) channelRequest(data []byte) (server string, port uint16) {
 	return
 }
 
-func (s *Server) channelResponse() []byte {
+func (s *Server) channelResponse(errorCode int) []byte {
 	buf := new(bytes.Buffer)
 
-	binary.Write(buf, binary.LittleEndian, uint32(0))                                     // error code
+	binary.Write(buf, binary.LittleEndian, uint32(errorCode))                             // error code
 	binary.Write(buf, binary.LittleEndian, uint16(HTTP_CHANNEL_RESPONSE_FIELD_CHANNELID)) // fields present
 	binary.Write(buf, binary.LittleEndian, uint16(0))                                     // reserved
 
@@ -314,10 +331,10 @@ func (s *Server) channelResponse() []byte {
 	return createPacket(PKT_TYPE_CHANNEL_RESPONSE, buf.Bytes())
 }
 
-func (s *Server) channelCloseResponse() []byte {
+func (s *Server) channelCloseResponse(errorCode int) []byte {
 	buf := new(bytes.Buffer)
 
-	binary.Write(buf, binary.LittleEndian, uint32(0))                                     // error code
+	binary.Write(buf, binary.LittleEndian, uint32(errorCode))                             // error code
 	binary.Write(buf, binary.LittleEndian, uint16(HTTP_CHANNEL_RESPONSE_FIELD_CHANNELID)) // fields present
 	binary.Write(buf, binary.LittleEndian, uint16(0))                                     // reserved
 

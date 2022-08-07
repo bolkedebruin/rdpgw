@@ -160,6 +160,8 @@ func (g *Gateway) handleWebsocketProtocol(ctx context.Context, c *websocket.Conn
 	defer websocketConnections.Dec()
 
 	inout, _ := transport.NewWS(c)
+	defer inout.Close()
+
 	s.TransportOut = inout
 	s.TransportIn = inout
 	handler := NewServer(s, g.ServerConf)
