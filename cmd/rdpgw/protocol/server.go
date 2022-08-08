@@ -152,7 +152,7 @@ func (s *Server) Process(ctx context.Context) error {
 				return err
 			}
 			log.Printf("Connection established")
-			msg := s.channelResponse(E_PROXY_INTERNALERROR)
+			msg := s.channelResponse(ERROR_SUCCESS)
 			s.Session.TransportOut.WritePacket(msg)
 
 			// Make sure to start the flow from the RDP server first otherwise connections
