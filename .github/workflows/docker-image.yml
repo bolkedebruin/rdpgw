@@ -16,11 +16,8 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Docker login
-      env:
-        DOCKER_USER: ${{secrets.DOCKER_USER}}
-        DOCKER_PASSWORD: $${{secrets.DOCKER_PASSWORD}}
       run: |
-        docker login -u $DOCKER_USER -p $DOCKER_PASSWORD
+        echo ${{ secrets.DOCKER_USER }} | docker login -u ${{ secrets.DOCKER_PASSWORD }} --password-stdin
     - name: Build the Docker image
       run: docker build . --file dev/docker/Dockerfile --tag bolkedebruin/rdpgw:$(date +%s)
     - name: Publish
