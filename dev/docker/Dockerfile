@@ -18,7 +18,7 @@ RUN mkdir -p /opt/rdpgw && cd /opt/rdpgw && \
     openssl rsa -passin pass:$random -in server.pass.key -out key.pem && \
     rm server.pass.key && \
     openssl req -new -sha256 -key key.pem -out server.csr \
-    -subj "/C=US/ST=VA/L=SomeCity/O=MyCompany/OU=MyDivision/CN=localhost" && \
+    -subj "/C=US/ST=VA/L=SomeCity/O=MyCompany/OU=MyDivision/CN=rdpgw" && \
     openssl x509 -req -days 365 -in server.csr -signkey key.pem -out server.pem
 
 # add user

@@ -28,7 +28,7 @@ services:
   xrdp:
     container_name: xrdp
     hostname: xrdp
-    image: rattydave/docker-ubuntu-xrdp-mate-custom:20.04
+    image: bolkedebruin/docker-ubuntu-xrdp-mate-rdpgw:20.04
     ports:
       - 3389:3389
     restart: on-failure
