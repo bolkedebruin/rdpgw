@@ -22,6 +22,6 @@ jobs:
          username: ${{ secrets.DOCKER_USER }}
          password: ${{ secrets.DOCKER_PASSWORD }}
       - name: Build the Docker image
-        run: docker build ./dev/docker --file dev/docker/Dockerfile --tag bolkedebruin/rdpgw:$(date +%s)
+        run: docker build ./dev/docker --file dev/docker/Dockerfile --tag ${{ secrets.DOCKER_USER }}/rdpgw:$(date +%s)
       - name: Publish
-        run: docker push bolkedebruin/rdpgw
+        run: docker push ${{ secrets.DOCKER_USER }}/rdpgw
