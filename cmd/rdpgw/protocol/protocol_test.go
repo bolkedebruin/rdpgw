@@ -66,7 +66,7 @@ func TestHandshake(t *testing.T) {
 		t.Fatalf("handshakeRequest failed got ext auth %d, expected %d", extAuth, extAuth|HTTP_EXTENDED_AUTH_PAA)
 	}
 
-	data = h.handshakeResponse(0x0, 0x0)
+	data = h.handshakeResponse(0x0, 0x0, ERROR_SUCCESS)
 	_, _, pkt, err = verifyPacketHeader(data, PKT_TYPE_HANDSHAKE_RESPONSE, HandshakeResponseLen)
 	if err != nil {
 		t.Fatalf("verifyHeader failed: %s", err)
@@ -104,7 +104,7 @@ func TestTunnelCreation(t *testing.T) {
 		t.Fatalf("tunnelRequest failed got token %s, expected %s", token, client.PAAToken)
 	}
 
-	data = h.tunnelResponse()
+	data = h.tunnelResponse(ERROR_SUCCESS)
 	_, _, pkt, err = verifyPacketHeader(data, PKT_TYPE_TUNNEL_RESPONSE, TunnelCreateResponseLen)
 	if err != nil {
 		t.Fatalf("verifyHeader failed: %s", err)
@@ -148,7 +148,7 @@ func TestTunnelAuth(t *testing.T) {
 		t.Fatalf("tunnelAuthRequest failed got name %s, expected %s", n, name)
 	}
 
-	data = h.tunnelAuthResponse()
+	data = h.tunnelAuthResponse(ERROR_SUCCESS)
 	_, _, pkt, err = verifyPacketHeader(data, PKT_TYPE_TUNNEL_AUTH_RESPONSE, TunnelAuthResponseLen)
 	if err != nil {
 		t.Fatalf("verifyHeader failed: %s", err)
@@ -196,7 +196,7 @@ func TestChannelCreation(t *testing.T) {
 		t.Fatalf("channelRequest failed got port %d, expected %d", hPort, client.Port)
 	}
 
-	data = h.channelResponse()
+	data = h.channelResponse(ERROR_SUCCESS)
 	_, _, pkt, err = verifyPacketHeader(data, PKT_TYPE_CHANNEL_RESPONSE, uint32(ChannelResponseLen))
 	if err != nil {
 		t.Fatalf("verifyHeader failed: %s", err)
