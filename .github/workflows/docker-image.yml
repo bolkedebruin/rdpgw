@@ -29,6 +29,6 @@ jobs:
           file: ./dev/docker/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ secrets.DOCKER_USER }}/rdpgw:${{ env.BRANCH }}
+          tags: bolkedebruin/rdpgw:${{ env.BRANCH }}
           build-args: |
             BRANCH=${{ env.BRANCH }}
