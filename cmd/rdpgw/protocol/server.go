@@ -74,12 +74,12 @@ func (s *Server) Process(ctx context.Context) error {
 			log.Printf("Client handshakeRequest from %s", common.GetClientIp(ctx))
 			if s.State != SERVER_STATE_INITIALIZED {
 				log.Printf("Handshake attempted while in wrong state %d != %d", s.State, SERVER_STATE_INITIALIZED)
-				msg := s.handshakeResponse(0x0, 0x0, ERROR_GENERIC)
+				msg := s.handshakeResponse(0x0, 0x0, E_PROXY_INTERNALERROR)
 				s.Session.TransportOut.WritePacket(msg)
-				return fmt.Errorf("%x: wrong state", ERROR_GENERIC)
+				return fmt.Errorf("%x: wrong state", E_PROXY_INTERNALERROR)
 			}
 			major, minor, _, _ := s.handshakeRequest(pkt) // todo check if auth matches what the handler can do
-			msg := s.handshakeResponse(major, minor, ERROR_NO)
+			msg := s.handshakeResponse(major, minor, ERROR_SUCCESS)
 			s.Session.TransportOut.WritePacket(msg)
 			s.State = SERVER_STATE_HANDSHAKE
 		case PKT_TYPE_TUNNEL_CREATE:
@@ -87,20 +87,20 @@ func (s *Server) Process(ctx context.Context) error {
 			if s.State != SERVER_STATE_HANDSHAKE {
 				log.Printf("Tunnel create attempted while in wrong state %d != %d",
 					s.State, SERVER_STATE_HANDSHAKE)
-				msg := s.tunnelResponse(ERROR_SECURITY_GATEWAY_COOKIE_REJECTED)
+				msg := s.tunnelResponse(E_PROXY_INTERNALERROR)
 				s.Session.TransportOut.WritePacket(msg)
-				return fmt.Errorf("%x: PAA cookie rejected, wrong state", ERROR_SECURITY_GATEWAY_COOKIE_REJECTED)
+				return fmt.Errorf("%x: PAA cookie rejected, wrong state", E_PROXY_INTERNALERROR)
 			}
 			_, cookie := s.tunnelRequest(pkt)
 			if s.VerifyTunnelCreate != nil {
 				if ok, _ := s.VerifyTunnelCreate(ctx, cookie); !ok {
 					log.Printf("Invalid PAA cookie received from client %s", common.GetClientIp(ctx))
-					msg := s.tunnelResponse(ERROR_SECURITY_GATEWAY_COOKIE_INVALID)
+					msg := s.tunnelResponse(E_PROXY_COOKIE_AUTHENTICATION_ACCESS_DENIED)
 					s.Session.TransportOut.WritePacket(msg)
-					return fmt.Errorf("%x: invalid PAA cookie", ERROR_SECURITY_GATEWAY_COOKIE_INVALID)
+					return fmt.Errorf("%x: invalid PAA cookie", E_PROXY_COOKIE_AUTHENTICATION_ACCESS_DENIED)
 				}
 			}
-			msg := s.tunnelResponse(ERROR_NO)
+			msg := s.tunnelResponse(ERROR_SUCCESS)
 			s.Session.TransportOut.WritePacket(msg)
 			s.State = SERVER_STATE_TUNNEL_CREATE
 		case PKT_TYPE_TUNNEL_AUTH:
@@ -108,20 +108,20 @@ func (s *Server) Process(ctx context.Context) error {
 			if s.State != SERVER_STATE_TUNNEL_CREATE {
 				log.Printf("Tunnel auth attempted while in wrong state %d != %d",
 					s.State, SERVER_STATE_TUNNEL_CREATE)
-				msg := s.tunnelAuthResponse(ERROR_GENERIC)
+				msg := s.tunnelAuthResponse(E_PROXY_INTERNALERROR)
 				s.Session.TransportOut.WritePacket(msg)
-				return fmt.Errorf("%x: Tunnel auth rejected, wrong state", ERROR_GENERIC)
+				return fmt.Errorf("%x: Tunnel auth rejected, wrong state", E_PROXY_INTERNALERROR)
 			}
 			client := s.tunnelAuthRequest(pkt)
 			if s.VerifyTunnelAuthFunc != nil {
 				if ok, _ := s.VerifyTunnelAuthFunc(ctx, client); !ok {
 					log.Printf("Invalid client name: %s", client)
-					msg := s.tunnelAuthResponse(ERROR_SECURITY)
+					msg := s.tunnelAuthResponse(ERROR_ACCESS_DENIED)
 					s.Session.TransportOut.WritePacket(msg)
-					return fmt.Errorf("%x: Tunnel auth rejected, invalid client name", ERROR_SECURITY)
+					return fmt.Errorf("%x: Tunnel auth rejected, invalid client name", ERROR_ACCESS_DENIED)
 				}
 			}
-			msg := s.tunnelAuthResponse(ERROR_NO)
+			msg := s.tunnelAuthResponse(ERROR_SUCCESS)
 			s.Session.TransportOut.WritePacket(msg)
 			s.State = SERVER_STATE_TUNNEL_AUTHORIZE
 		case PKT_TYPE_CHANNEL_CREATE:
@@ -129,30 +129,30 @@ func (s *Server) Process(ctx context.Context) error {
 			if s.State != SERVER_STATE_TUNNEL_AUTHORIZE {
 				log.Printf("Channel create attempted while in wrong state %d != %d",
 					s.State, SERVER_STATE_TUNNEL_AUTHORIZE)
-				msg := s.channelResponse(ERROR_GENERIC)
+				msg := s.channelResponse(E_PROXY_INTERNALERROR)
 				s.Session.TransportOut.WritePacket(msg)
-				return fmt.Errorf("%x: Channel create rejected, wrong state", ERROR_GENERIC)
+				return fmt.Errorf("%x: Channel create rejected, wrong state", E_PROXY_INTERNALERROR)
 			}
 			server, port := s.channelRequest(pkt)
 			host := net.JoinHostPort(server, strconv.Itoa(int(port)))
 			if s.VerifyServerFunc != nil {
 				if ok, _ := s.VerifyServerFunc(ctx, host); !ok {
 					log.Printf("Not allowed to connect to %s by policy handler", host)
-					msg := s.channelResponse(ERROR_SECURITY_GATEWAY_POLICY)
+					msg := s.channelResponse(E_PROXY_RAP_ACCESSDENIED)
 					s.Session.TransportOut.WritePacket(msg)
-					return fmt.Errorf("%x: denied by security policy", ERROR_SECURITY_GATEWAY_POLICY)
+					return fmt.Errorf("%x: denied by security policy", E_PROXY_RAP_ACCESSDENIED)
 				}
 			}
 			log.Printf("Establishing connection to RDP server: %s", host)
 			s.Remote, err = net.DialTimeout("tcp", host, time.Second*15)
 			if err != nil {
 				log.Printf("Error connecting to %s, %s", host, err)
-				msg := s.channelResponse(ERROR_GENERIC)
+				msg := s.channelResponse(E_PROXY_INTERNALERROR)
 				s.Session.TransportOut.WritePacket(msg)
 				return err
 			}
 			log.Printf("Connection established")
-			msg := s.channelResponse(ERROR_NO)
+			msg := s.channelResponse(E_PROXY_INTERNALERROR)
 			s.Session.TransportOut.WritePacket(msg)
 
 			// Make sure to start the flow from the RDP server first otherwise connections
@@ -181,7 +181,7 @@ func (s *Server) Process(ctx context.Context) error {
 				log.Printf("Channel closed while in wrong state %d != %d", s.State, SERVER_STATE_OPENED)
 				return errors.New("wrong state")
 			}
-			msg := s.channelCloseResponse(ERROR_NO)
+			msg := s.channelCloseResponse(ERROR_SUCCESS)
 			s.Session.TransportOut.WritePacket(msg)
 			//s.Session.TransportIn.Close()
 			//s.Session.TransportOut.Close()

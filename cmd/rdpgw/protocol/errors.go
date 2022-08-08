@@ -1,5 +1,6 @@
 package protocol
 
+/*
 const (
 	ERROR_NO                                       = 0x0000000
 	ERROR_CLIENT_DISCONNECT                        = 0x0000001
@@ -121,4 +122,34 @@ const (
 	ERROR_MAX_USER                                 = 0x300004E
 	ERROR_AZURE_TRIAL                              = 0x300004F
 	ERROR_AZURE_EXPIRED                            = 0x3000050
+)
+*/
+
+/* Common Error Code */
+const (
+	ERROR_SUCCESS								= 0x00000000
+	ERROR_ACCESS_DENIED							= 0x00000005
+	E_PROXY_INTERNALERROR                       = 0x800759D8
+	E_PROXY_RAP_ACCESSDENIED                    = 0x800759DA
+	E_PROXY_NAP_ACCESSDENIED                    = 0x800759DB
+	E_PROXY_ALREADYDISCONNECTED                 = 0x800759DF
+	E_PROXY_QUARANTINE_ACCESSDENIED             = 0x800759ED
+	E_PROXY_NOCERTAVAILABLE                     = 0x800759EE
+	E_PROXY_COOKIE_BADPACKET                    = 0x800759F7
+	E_PROXY_COOKIE_AUTHENTICATION_ACCESS_DENIED = 0x800759F8
+	E_PROXY_UNSUPPORTED_AUTHENTICATION_METHOD   = 0x800759F9
+	E_PROXY_CAPABILITYMISMATCH                  = 0x800759E9
+	E_PROXY_TS_CONNECTFAILED                    = 0x000059DD
+	E_PROXY_MAXCONNECTIONSREACHED               = 0x000059E6
+	// E_PROXY_INTERNALERROR                       = 0x000059D8
+	ERROR_GRACEFUL_DISCONNECT                   = 0x000004CA
+	E_PROXY_NOTSUPPORTED                        = 0x000059E8
+	SEC_E_LOGON_DENIED                          = 0x8009030C
+	E_PROXY_SESSIONTIMEOUT                      = 0x000059F6
+	E_PROXY_REAUTH_AUTHN_FAILED                 = 0x000059FA
+	E_PROXY_REAUTH_CAP_FAILED                   = 0x000059FB
+	E_PROXY_REAUTH_RAP_FAILED                   = 0x000059FC
+	E_PROXY_SDR_NOT_SUPPORTED_BY_TS             = 0x000059FD
+	E_PROXY_REAUTH_NAP_FAILED                   = 0x00005A00
+	E_PROXY_CONNECTIONABORTED                   = 0x000004D4
 )
