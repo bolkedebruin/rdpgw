@@ -23,12 +23,10 @@ jobs:
          password: ${{ secrets.DOCKER_PASSWORD }}
       -
         name: Build and push
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v3
         with:
           context: ./dev/docker
           file: ./dev/docker/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ github.repository_owner }}/rdpgw:${{ env.BRANCH }}
-          build-args: |
-            BRANCH=${{ env.BRANCH }}
+          tags: ${{ github.repository_owner }}/rdpgw:latest
