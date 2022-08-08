@@ -14,11 +14,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
-    - name: Docker login
-      run: |
-        echo ${{ secrets.DOCKER_USER }} | docker login -u ${{ secrets.DOCKER_PASSWORD }} --password-stdin
-    - name: Build the Docker image
-      run: docker build . --file dev/docker/Dockerfile --tag bolkedebruin/rdpgw:$(date +%s)
-    - name: Publish
-      run: docker push bolkedebruin/rdpgw
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+         username: ${{ secrets.DOCKERHUB_USERNAME }}
+         password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Build the Docker image
+        run: docker build . --file dev/docker/Dockerfile --tag bolkedebruin/rdpgw:$(date +%s)
+      - name: Publish
+        run: docker push bolkedebruin/rdpgw
