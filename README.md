@@ -2,6 +2,10 @@ GO Remote Desktop Gateway
 =========================
 
 ![Go](https://github.com/bolkedebruin/rdpgw/workflows/Go/badge.svg)
+[![Docker Pulls](https://badgen.net/docker/pulls/bolkedebruin/rdpgw?icon=docker&label=pulls)](https://hub.docker.com/r/bolkedebruin/rdpgw/)
+[![Docker Stars](https://badgen.net/docker/stars/bolkedebruin/rdpgw?icon=docker&label=stars)](https://hub.docker.com/r/bolkedebruin/rdpgw/)
+[![Docker Image Size](https://badgen.net/docker/size/bolkedebruin/rdpgw?icon=docker&label=image%20size)](https://hub.docker.com/r/bolkedebruin/rdpgw/)
+
 
 :star: Star us on GitHub — it helps!
 
