@@ -19,3 +19,5 @@ client:
  ConnectionType: 6
 security:
   PAATokenSigningKey: prettypleasereplacemeinproductio
+caps:
+ tokenAuth: true
