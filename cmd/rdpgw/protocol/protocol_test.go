@@ -66,7 +66,7 @@ func TestHandshake(t *testing.T) {
 		t.Fatalf("handshakeRequest failed got ext auth %d, expected %d", extAuth, extAuth|HTTP_EXTENDED_AUTH_PAA)
 	}
 
-	data = h.handshakeResponse(0x0, 0x0, ERROR_SUCCESS)
+	data = h.handshakeResponse(0x0, 0x0, 0, ERROR_SUCCESS)
 	_, _, pkt, err = verifyPacketHeader(data, PKT_TYPE_HANDSHAKE_RESPONSE, HandshakeResponseLen)
 	if err != nil {
 		t.Fatalf("verifyHeader failed: %s", err)
