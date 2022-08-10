@@ -225,10 +225,10 @@ func (s *Server) handshakeRequest(data []byte) (major byte, minor byte, version 
 }
 
 func (s *Server) matchAuth(extAuth uint16) (caps uint16, err error) {
-	if s.SmartCardAuth && extAuth & HTTP_EXTENDED_AUTH_SC == 1 {
+	if s.SmartCardAuth {
 		caps = caps | HTTP_EXTENDED_AUTH_SC
 	}
-	if s.TokenAuth && extAuth & HTTP_EXTENDED_AUTH_PAA == 1 {
+	if s.TokenAuth {
 		caps = caps | HTTP_EXTENDED_AUTH_PAA
 	}
 
