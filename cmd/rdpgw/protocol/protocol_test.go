@@ -66,7 +66,7 @@ func TestHandshake(t *testing.T) {
 		t.Fatalf("handshakeRequest failed got ext auth %d, expected %d", extAuth, extAuth|HTTP_EXTENDED_AUTH_PAA)
 	}
 
-	data = h.handshakeResponse(0x0, 0x0, 0, ERROR_SUCCESS)
+	data = h.handshakeResponse(0x0, 0x0, HTTP_EXTENDED_AUTH_PAA, ERROR_SUCCESS)
 	_, _, pkt, err = verifyPacketHeader(data, PKT_TYPE_HANDSHAKE_RESPONSE, HandshakeResponseLen)
 	if err != nil {
 		t.Fatalf("verifyHeader failed: %s", err)
@@ -76,6 +76,58 @@ func TestHandshake(t *testing.T) {
 	caps, err := client.handshakeResponse(pkt)
 	if !((caps & HTTP_EXTENDED_AUTH_PAA) == HTTP_EXTENDED_AUTH_PAA) {
 		t.Fatalf("handshakeResponse failed got caps %d, expected %d", caps, caps|HTTP_EXTENDED_AUTH_PAA)
+	}
+}
+
+func capsHelper(h Server) uint16 {
+	var caps uint16
+	if h.TokenAuth {
+		caps = caps | HTTP_EXTENDED_AUTH_PAA
+	}
+	if h.SmartCardAuth {
+		caps = caps | HTTP_EXTENDED_AUTH_SC
+	}
+	return caps
+}
+
+func TestMatchAuth(t *testing.T) {
+	s := &SessionInfo{}
+	hc := &ServerConf{
+		TokenAuth: false,
+		SmartCardAuth: false,
+	}
+
+	h:= NewServer(s, hc)
+
+	in := uint16(0)
+	caps, err := h.matchAuth(in)
+	if err != nil {
+		t.Fatalf("in caps: %x <= server caps %x, but %s", in, capsHelper(*h), err)
+	}
+	if caps > in {
+		t.Fatalf("returned server caps %x > client cpas %x", capsHelper(*h), in)
+	}
+
+	in = HTTP_EXTENDED_AUTH_PAA
+	caps, err = h.matchAuth(in)
+	if err == nil {
+		t.Fatalf("server cannot satisfy client caps %x but error is nil (server caps %x)", in, caps)
+	} else {
+		t.Logf("(SUCCESS) server cannot satisfy client caps : %s", err)
+	}
+
+	h.SmartCardAuth = true
+	caps, err = h.matchAuth(in)
+	if err == nil {
+		t.Fatalf("server cannot satisfy client caps %x but error is nil (server caps %x)", in, caps)
+	} else {
+		t.Logf("(SUCCESS) server cannot satisfy client caps : %s", err)
+	}
+
+	h.TokenAuth = true
+	caps, err = h.matchAuth(in)
+	if err != nil {
+		t.Fatalf("server caps %x (orig: %x) should match client request %x, %s", caps, capsHelper(*h), in, err)
 	}
 }
 

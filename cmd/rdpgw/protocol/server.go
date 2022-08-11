@@ -232,7 +232,7 @@ func (s *Server) matchAuth(extAuth uint16) (caps uint16, err error) {
 		caps = caps | HTTP_EXTENDED_AUTH_PAA
 	}
 
-	if caps & extAuth == 0 {
+	if caps & extAuth == 0 && extAuth > 0 {
 		return 0, fmt.Errorf("%x has no matching capability configured (%x). Did you configure caps? ", extAuth, caps)
 	}
 
