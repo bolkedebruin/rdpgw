@@ -19,7 +19,7 @@ import (
 )
 
 var opts struct {
-	configFile string `short:"c" long:"conf" description:"config file (yaml)" default:"rdpgw.yaml"`
+	ConfigFile string `short:"c" long:"conf" default:"rdpgw.yaml" description:"config file (yaml)"`
 }
 
 var conf config.Configuration
@@ -30,7 +30,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	conf = config.Load(opts.configFile)
+	conf = config.Load(opts.ConfigFile)
 
 	security.VerifyClientIP = conf.Security.VerifyClientIp
 
