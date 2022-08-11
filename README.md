@@ -67,7 +67,11 @@ server:
  # make sure to share this across the different pods
  sessionKey: thisisasessionkeyreplacethisjetzt
  sessionEncryptionKey: thisisasessionkeyreplacethisnunu!
- # tries to set the receive / send buffer of the connections to the client
+  # where to store session details. This can be either file or cookie (default: cookie)
+  # if a file store is chosen, it is required to have clients 'keep state' to the rdpgw
+  # instance they are connected to.
+ sessionStore: cookie
+  # tries to set the receive / send buffer of the connections to the client
  # in case of high latency high bandwidth the defaults set by the OS might
  # be to low for a good experience
  # receiveBuf: 12582912
