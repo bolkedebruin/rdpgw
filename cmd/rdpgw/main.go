@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"github.com/thought-machine/go-flags"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/api"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/common"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/config"
@@ -10,7 +11,6 @@ import (
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/security"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/spf13/cobra"
 	"golang.org/x/oauth2"
 	"log"
 	"net/http"
@@ -18,21 +18,19 @@ import (
 	"strconv"
 )
 
-var cmd = &cobra.Command{
-	Use:	"rdpgw",
-	Long:	"Remote Desktop Gateway",
+var opts struct {
+	configFile string `short:"c" long:"conf" description:"config file (yaml)" default:"rdpgw.yaml"`
 }
-
-var (
-	configFile	string
-)
 
 var conf config.Configuration
 
 func main() {
 	// get config
-	cmd.PersistentFlags().StringVarP(&configFile, "conf", "c", "rdpgw.yaml",  "config file (json, yaml, ini)")
-	conf = config.Load(configFile)
+	_, err := flags.Parse(&opts)
+	if err != nil {
+		panic(err)
+	}
+	conf = config.Load(opts.configFile)
 
 	security.VerifyClientIP = conf.Security.VerifyClientIp
 
