@@ -1,23 +1,23 @@
-server:
- certFile: /opt/rdpgw/server.pem
- keyFile: /opt/rdpgw/key.pem
- gatewayAddress: localhost:9443
- port: 9443
- hosts:
+Server:
+ CertFile: /opt/rdpgw/server.pem
+ KeyFile: /opt/rdpgw/key.pem
+ GatewayAddress: localhost:9443
+ Port: 9443
+ Hosts:
   - xrdp:3389
- roundRobin: false
- sessionKey: thisisasessionkeyreplacethisjetz
- sessionEncryptionKey: thisisasessionkeyreplacethisnunu
-openId:
- providerUrl: http://keycloak:8080/auth/realms/rdpgw
- clientId: rdpgw
- clientSecret: 01cd304c-6f43-4480-9479-618eb6fd578f
-client:
- usernameTemplate: "{{ username }}"
- networkAutoDetect: 0
- bandwidthAutoDetect: 1
+ RoundRobin: false
+ SessionKey: thisisasessionkeyreplacethisjetz
+ SessionEncryptionKey: thisisasessionkeyreplacethisnunu
+OpenId:
+ ProviderUrl: http://keycloak:8080/auth/realms/rdpgw
+ ClientId: rdpgw
+ ClientSecret: 01cd304c-6f43-4480-9479-618eb6fd578f
+Client:
+ UsernameTemplate: "{{ username }}"
+ NetworkAutoDetect: 0
+ BandwidthAutoDetect: 1
  ConnectionType: 6
-security:
+Security:
   PAATokenSigningKey: prettypleasereplacemeinproductio
-caps:
- tokenAuth: true
+Caps:
+ TokenAuth: true

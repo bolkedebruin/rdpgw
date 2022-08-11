@@ -44,68 +44,68 @@ template.
 
 ```yaml
 # web server configuration. 
-server:
+Server:
  # disable TLS if termination happens somehwere else (e.g. a load balancer)
- # note: rdp connections over a gateway require TLS
- disableTLS: false
+ # Note: rdp connections over a gateway require TLS
+ DisableTLS: false
  # TLS certificate files
- certFile: server.pem
- keyFile: key.pem
+ CertFile: server.pem
+ KeyFile: key.pem
  # gateway address advertised in the rdp files
- gatewayAddress: localhost
+ GatewayAddress: localhost
  # port to listen on (change to 80 or equivalent if not using TLS)
- port: 443
+ Port: 443
  # list of acceptable desktop hosts to connect to
- hosts:
+ Hosts:
   - localhost:3389
   - my-{{ preferred_username }}-host:3389
   # Allow the user to connect to any host (insecure)
   - any 
  # if true the server randomly selects a host to connect to
- roundRobin: false 
+ RoundRobin: false 
  # a random strings of at least 32 characters to secure cookies on the client
  # make sure to share this across the different pods
- sessionKey: thisisasessionkeyreplacethisjetzt
- sessionEncryptionKey: thisisasessionkeyreplacethisnunu!
+ SessionKey: thisisasessionkeyreplacethisjetzt
+ SessionEncryptionKey: thisisasessionkeyreplacethisnunu!
   # where to store session details. This can be either file or cookie (default: cookie)
   # if a file store is chosen, it is required to have clients 'keep state' to the rdpgw
   # instance they are connected to.
- sessionStore: cookie
+ SessionStore: cookie
   # tries to set the receive / send buffer of the connections to the client
  # in case of high latency high bandwidth the defaults set by the OS might
  # be to low for a good experience
- # receiveBuf: 12582912
- # sendBuf: 12582912 
+ # ReceiveBuf: 12582912
+ # SendBuf: 12582912 
 # Open ID Connect specific settings
-openId:
- providerUrl: http://keycloak/auth/realms/test
- clientId: rdpgw
- clientSecret: your-secret
+OpenId:
+ ProviderUrl: http://keycloak/auth/realms/test
+ ClientId: rdpgw
+ ClientSecret: your-secret
 # enabled / disabled capabilities
-caps:
- smartCardAuth: false
- tokenAuth: true
+Caps:
+ SmartCardAuth: false
+ TokenAuth: true
  # connection timeout in minutes, 0 is limitless
- idleTimeout: 10
- enablePrinter: true
- enablePort: true
- enablePnp: true
- enableDrive: true
- enableClipboard: true
-client:
+ IdleTimeout: 10
+ EnablePrinter: true
+ EnablePort: true
+ EnablePnp: true
+ EnableDrive: true
+ EnableClipboard: true
+Client:
   # this is a go string templated with {{ username }} and {{ token }}
   # the example below uses the ASCII field separator to distinguish
   # between user and token 
-  usernameTemplate: "{{ username }}@bla.com\x1f{{ token }}"
+  UsernameTemplate: "{{ username }}@bla.com\x1f{{ token }}"
   # rdp file settings see: 
   # https://docs.microsoft.com/en-us/windows-server/remote/remote-desktop-services/clients/rdp-files
-  networkAutoDetect: 0
-  bandwidthAutoDetect: 1
+  NetworkAutoDetect: 0
+  BandwidthAutoDetect: 1
   ConnectionType: 6
   # If true puts splits "user@domain.com" into the user and domain component so that
   # domain gets set in the rdp file and the domain name is stripped from the username
   SplitUserDomain: false
-security:
+Security:
   # a random string of at least 32 characters to secure cookies on the client
   # make sure to share this amongst different pods
   PAATokenSigningKey: thisisasessionkeyreplacethisjetzt
