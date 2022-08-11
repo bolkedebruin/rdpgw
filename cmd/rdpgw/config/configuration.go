@@ -23,6 +23,7 @@ type ServerConfig struct {
 	RoundRobin           bool
 	SessionKey           string
 	SessionEncryptionKey string
+	SessionStore         string
 	SendBuf				 int
 	ReceiveBuf			 int
 }
@@ -72,6 +73,8 @@ func init() {
 	viper.SetDefault("client.bandwidthAutoDetect", 1)
 	viper.SetDefault("security.verifyClientIp", true)
 	viper.SetDefault("server.tlsDisabled",  false)
+	viper.SetDefault("server.sessionStore", "cookie")
+	viper.SetDefault("caps.tokenAuth", true)
 }
 
 func Load(configFile string) Configuration {

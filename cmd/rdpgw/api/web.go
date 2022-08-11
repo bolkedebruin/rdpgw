@@ -13,6 +13,7 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -29,11 +30,12 @@ type UserTokenGeneratorFunc func(context.Context, string) (string, error)
 type Config struct {
 	SessionKey           []byte
 	SessionEncryptionKey []byte
+	SessionStore		 string
 	PAATokenGenerator    TokenGeneratorFunc
 	UserTokenGenerator   UserTokenGeneratorFunc
 	EnableUserToken      bool
 	OAuth2Config         *oauth2.Config
-	store                *sessions.CookieStore
+	store                sessions.Store
 	OIDCTokenVerifier    *oidc.IDTokenVerifier
 	stateStore           *cache.Cache
 	Hosts                []string
@@ -53,7 +55,13 @@ func (c *Config) NewApi() {
 	if len(c.Hosts) < 1 {
 		log.Fatal("Not enough hosts to connect to specified")
 	}
-	c.store = sessions.NewCookieStore(c.SessionKey, c.SessionEncryptionKey)
+	if c.SessionStore == "file" {
+		log.Println("Filesystem is used as session storage")
+		c.store = sessions.NewFilesystemStore(os.TempDir(), c.SessionKey, c.SessionEncryptionKey)
+	} else {
+		log.Println("Cookies are used as session storage")
+		c.store = sessions.NewCookieStore(c.SessionKey, c.SessionEncryptionKey)
+	}
 	c.stateStore = cache.New(time.Minute*2, 5*time.Minute)
 }
 

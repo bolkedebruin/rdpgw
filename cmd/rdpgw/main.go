@@ -71,6 +71,7 @@ func main() {
 		EnableUserToken:      conf.Security.EnableUserToken,
 		SessionKey:           []byte(conf.Server.SessionKey),
 		SessionEncryptionKey: []byte(conf.Server.SessionEncryptionKey),
+		SessionStore: 		  conf.Server.SessionStore,
 		Hosts:                conf.Server.Hosts,
 		NetworkAutoDetect:    conf.Client.NetworkAutoDetect,
 		UsernameTemplate:     conf.Client.UsernameTemplate,
