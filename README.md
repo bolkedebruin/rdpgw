@@ -106,10 +106,11 @@ Client:
   # domain gets set in the rdp file and the domain name is stripped from the username
   SplitUserDomain: false
 Security:
-  # a random string of at least 32 characters to secure cookies on the client
+  # a random string of 32 characters to secure cookies on the client
   # make sure to share this amongst different pods
   PAATokenSigningKey: thisisasessionkeyreplacethisjetzt
   # PAATokenEncryptionKey: thisisasessionkeyreplacethisjetzt
+  # a random string of 32 characters to secure cookies on the client
   UserTokenEncryptionKey: thisisasessionkeyreplacethisjetzt
   # if you want to enable token generation for the user
   # if true the username will be set to a jwt with the username embedded into it
