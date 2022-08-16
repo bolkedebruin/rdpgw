@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"crypto/tls"
-	"github.com/thought-machine/go-flags"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/api"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/common"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/config"
@@ -11,9 +10,11 @@ import (
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/security"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/thought-machine/go-flags"
 	"golang.org/x/oauth2"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 )
@@ -50,18 +51,25 @@ func main() {
 	}
 	verifier := provider.Verifier(oidcConfig)
 
+	// get callback url and external advertised gateway address
+	url, err := url.Parse(conf.Server.GatewayAddress)
+	if url.Scheme == "" {
+		url.Scheme = "https"
+	}
+	url.Path = "callback"
+
 	oauthConfig := oauth2.Config{
-		ClientID: conf.OpenId.ClientId,
+		ClientID:     conf.OpenId.ClientId,
 		ClientSecret: conf.OpenId.ClientSecret,
-		RedirectURL: "https://" + conf.Server.GatewayAddress + "/callback",
-		Endpoint: provider.Endpoint(),
-		Scopes: []string{oidc.ScopeOpenID, "profile", "email"},
+		RedirectURL:  url.String(),
+		Endpoint:     provider.Endpoint(),
+		Scopes:       []string{oidc.ScopeOpenID, "profile", "email"},
 	}
 	security.OIDCProvider = provider
 	security.Oauth2Config = oauthConfig
 
 	api := &api.Config{
-		GatewayAddress:       conf.Server.GatewayAddress,
+		GatewayAddress:       url.Host,
 		OAuth2Config:         &oauthConfig,
 		OIDCTokenVerifier:    verifier,
 		PAATokenGenerator:    security.GeneratePAAToken,
@@ -69,7 +77,7 @@ func main() {
 		EnableUserToken:      conf.Security.EnableUserToken,
 		SessionKey:           []byte(conf.Server.SessionKey),
 		SessionEncryptionKey: []byte(conf.Server.SessionEncryptionKey),
-		SessionStore: 		  conf.Server.SessionStore,
+		SessionStore:         conf.Server.SessionStore,
 		Hosts:                conf.Server.Hosts,
 		NetworkAutoDetect:    conf.Client.NetworkAutoDetect,
 		UsernameTemplate:     conf.Client.UsernameTemplate,
@@ -84,7 +92,7 @@ func main() {
 	cfg := &tls.Config{}
 
 	if conf.Server.DisableTLS {
-		log.Printf("TLS disabled - rdp gw connections require tls make sure to have a terminator")
+		log.Printf("TLS disabled - rdp gw connections require tls, make sure to have a terminator")
 	} else {
 		if conf.Server.CertFile == "" || conf.Server.KeyFile == "" {
 			log.Fatal("Both certfile and keyfile need to be specified")
@@ -108,24 +116,24 @@ func main() {
 	}
 
 	server := http.Server{
-		Addr:      ":" + strconv.Itoa(conf.Server.Port),
-		TLSConfig: cfg,
+		Addr:         ":" + strconv.Itoa(conf.Server.Port),
+		TLSConfig:    cfg,
 		TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler)), // disable http2
 	}
 
 	// create the gateway
 	handlerConfig := protocol.ServerConf{
-		IdleTimeout: conf.Caps.IdleTimeout,
-		TokenAuth: conf.Caps.TokenAuth,
+		IdleTimeout:   conf.Caps.IdleTimeout,
+		TokenAuth:     conf.Caps.TokenAuth,
 		SmartCardAuth: conf.Caps.SmartCardAuth,
 		RedirectFlags: protocol.RedirectFlags{
-			Clipboard: conf.Caps.EnableClipboard,
-			Drive: conf.Caps.EnableDrive,
-			Printer: conf.Caps.EnablePrinter,
-			Port: conf.Caps.EnablePort,
-			Pnp: conf.Caps.EnablePnp,
+			Clipboard:  conf.Caps.EnableClipboard,
+			Drive:      conf.Caps.EnableDrive,
+			Printer:    conf.Caps.EnablePrinter,
+			Port:       conf.Caps.EnablePort,
+			Pnp:        conf.Caps.EnablePnp,
 			DisableAll: conf.Caps.DisableRedirect,
-			EnableAll: conf.Caps.RedirectAll,
+			EnableAll:  conf.Caps.RedirectAll,
 		},
 		VerifyTunnelCreate: security.VerifyPAAToken,
 		VerifyServerFunc:   security.VerifyServerFunc,

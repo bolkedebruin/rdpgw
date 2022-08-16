@@ -1,6 +1,7 @@
 package config
 
 import (
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/security"
 	"github.com/knadh/koanf"
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/confmap"
@@ -30,7 +31,7 @@ type ServerConfig struct {
 	SessionStore         string   `koanf:"sessionstore"`
 	SendBuf              int      `koanf:"sendbuf"`
 	ReceiveBuf           int      `koanf:"recievebuf"`
-	DisableTLS			 bool	  `koanf:"disabletls"`
+	DisableTLS           bool     `koanf:"disabletls"`
 }
 
 type OpenIDConfig struct {
@@ -114,13 +115,13 @@ func Load(configFile string) Configuration {
 	k.Load(confmap.Provider(map[string]interface{}{
 		"Server.CertFile":            "server.pem",
 		"Server.KeyFile":             "key.pem",
-		"Server.TlsDisabled":		  false,
+		"Server.TlsDisabled":         false,
 		"Server.Port":                443,
-		"Server.SessionStore":		  "cookie",
+		"Server.SessionStore":        "cookie",
 		"Client.NetworkAutoDetect":   1,
 		"Client.BandwidthAutoDetect": 1,
 		"Security.VerifyClientIp":    true,
-		"Caps.TokenAuth":			  true,
+		"Caps.TokenAuth":             true,
 	}, "."), nil)
 
 	if err := k.Load(file.Provider(configFile), yaml.Parser()); err != nil {
@@ -141,6 +142,36 @@ func Load(configFile string) Configuration {
 	k.UnmarshalWithConf("Caps", &Conf.Caps, koanfTag)
 	k.UnmarshalWithConf("Security", &Conf.Security, koanfTag)
 	k.UnmarshalWithConf("Client", &Conf.Client, koanfTag)
+
+	if len(Conf.Security.PAATokenEncryptionKey) != 32 {
+		Conf.Security.PAATokenEncryptionKey, _ = security.GenerateRandomString(32)
+		log.Printf("No valid `security.paatokenencryptionkey` specified (empty or not 32 characters). Setting to random")
+	}
+
+	if len(Conf.Security.PAATokenSigningKey) != 32 {
+		Conf.Security.PAATokenSigningKey, _ = security.GenerateRandomString(32)
+		log.Printf("No valid `security.paatokensigningkey` specified (empty or not 32 characters). Setting to random")
+	}
+
+	if len(Conf.Security.UserTokenEncryptionKey) != 32 {
+		Conf.Security.UserTokenEncryptionKey, _ = security.GenerateRandomString(32)
+		log.Printf("No valid `security.usertokenencryptionkey` specified (empty or not 32 characters). Setting to random")
+	}
+
+	if len(Conf.Security.UserTokenSigningKey) != 32 {
+		Conf.Security.UserTokenSigningKey, _ = security.GenerateRandomString(32)
+		log.Printf("No valid `security.usertokensigningkey` specified (empty or not 32 characters). Setting to random")
+	}
+
+	if len(Conf.Server.SessionKey) != 32 {
+		Conf.Server.SessionKey, _ = security.GenerateRandomString(32)
+		log.Printf("No valid `server.sessionkey` specified (empty or not 32 characters). Setting to random")
+	}
+
+	if len(Conf.Server.SessionEncryptionKey) != 32 {
+		Conf.Server.SessionEncryptionKey, _ = security.GenerateRandomString(32)
+		log.Printf("No valid `server.sessionencryptionkey` specified (empty or not 32 characters). Setting to random")
+	}
 
 	return Conf
 

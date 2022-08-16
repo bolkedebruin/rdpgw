@@ -51,7 +51,7 @@ Server:
  # TLS certificate files
  CertFile: server.pem
  KeyFile: key.pem
- # gateway address advertised in the rdp files
+ # gateway address advertised in the rdp files and browser
  GatewayAddress: localhost
  # port to listen on (change to 80 or equivalent if not using TLS)
  Port: 443
