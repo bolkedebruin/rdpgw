@@ -40,6 +40,7 @@ func main() {
 	security.EncryptionKey = []byte(conf.Security.PAATokenEncryptionKey)
 	security.UserEncryptionKey = []byte(conf.Security.UserTokenEncryptionKey)
 	security.UserSigningKey = []byte(conf.Security.UserTokenSigningKey)
+	security.QuerySigningKey = []byte(conf.Security.QueryTokenSigningKey)
 
 	// set oidc config
 	provider, err := oidc.NewProvider(context.Background(), conf.OpenId.ProviderUrl)
@@ -74,6 +75,8 @@ func main() {
 		OIDCTokenVerifier:    verifier,
 		PAATokenGenerator:    security.GeneratePAAToken,
 		UserTokenGenerator:   security.GenerateUserToken,
+		QueryInfo:            security.QueryInfo,
+		QueryTokenIssuer:     conf.Security.QueryTokenIssuer,
 		EnableUserToken:      conf.Security.EnableUserToken,
 		SessionKey:           []byte(conf.Server.SessionKey),
 		SessionEncryptionKey: []byte(conf.Server.SessionEncryptionKey),

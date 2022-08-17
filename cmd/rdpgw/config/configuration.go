@@ -58,6 +58,8 @@ type SecurityConfig struct {
 	PAATokenSigningKey     string `koanf:"paatokensigningkey"`
 	UserTokenEncryptionKey string `koanf:"usertokenencryptionkey"`
 	UserTokenSigningKey    string `koanf:"usertokensigningkey"`
+	QueryTokenSigningKey   string `koanf:"querytokensigningkey"`
+	QueryTokenIssuer       string `koanf:"querytokenissuer"`
 	VerifyClientIp         bool   `koanf:"verifyclientip"`
 	EnableUserToken        bool   `koanf:"enableusertoken"`
 }
@@ -174,6 +176,10 @@ func Load(configFile string) Configuration {
 	if len(Conf.Server.SessionEncryptionKey) != 32 {
 		Conf.Server.SessionEncryptionKey, _ = security.GenerateRandomString(32)
 		log.Printf("No valid `server.sessionencryptionkey` specified (empty or not 32 characters). Setting to random")
+	}
+
+	if Conf.Server.HostSelection == "signed" && len(Conf.Security.QueryTokenSigningKey) == 0 {
+		log.Fatalf("host selection is set to `signed` but `querytokensigningkey` is not set")
 	}
 
 	return Conf

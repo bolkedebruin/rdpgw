@@ -27,6 +27,7 @@ const (
 
 type TokenGeneratorFunc func(context.Context, string, string) (string, error)
 type UserTokenGeneratorFunc func(context.Context, string) (string, error)
+type QueryInfoFunc func(context.Context, string, string) (string, error)
 
 type Config struct {
 	SessionKey           []byte
@@ -34,6 +35,8 @@ type Config struct {
 	SessionStore         string
 	PAATokenGenerator    TokenGeneratorFunc
 	UserTokenGenerator   UserTokenGeneratorFunc
+	QueryInfo            QueryInfoFunc
+	QueryTokenIssuer     string
 	EnableUserToken      bool
 	OAuth2Config         *oauth2.Config
 	store                sessions.Store
@@ -159,39 +162,53 @@ func (c *Config) selectRandomHost() string {
 	return host
 }
 
-func (c *Config) getHost(u *url.URL) (string, error) {
-	var host string
+func (c *Config) getHost(ctx context.Context, u *url.URL) (string, error) {
 	switch c.HostSelection {
 	case "roundrobin":
-		host = c.selectRandomHost()
+		return c.selectRandomHost(), nil
 	case "signed":
-	case "unsigned":
 		hosts, ok := u.Query()["host"]
 		if !ok {
 			return "", errors.New("invalid query parameter")
 		}
+		host, err := c.QueryInfo(ctx, hosts[0], c.QueryTokenIssuer)
+		if err != nil {
+			return "", err
+		}
 		found := false
 		for _, check := range c.Hosts {
-			if check == hosts[0] {
-				host = hosts[0]
+			if check == host {
 				found = true
 				break
 			}
 		}
 		if !found {
-			log.Printf("Invalid host %s specified in client request", hosts[0])
-			return "", errors.New("invalid host specified in query parameter")
+			log.Printf("Invalid host %s specified in token", hosts[0])
+			return "", errors.New("invalid host specified in query token")
 		}
+		return host, nil
+	case "unsigned":
+		hosts, ok := u.Query()["host"]
+		if !ok {
+			return "", errors.New("invalid query parameter")
+		}
+		for _, check := range c.Hosts {
+			if check == hosts[0] {
+				return hosts[0], nil
+			}
+		}
+		// not found
+		log.Printf("Invalid host %s specified in client request", hosts[0])
+		return "", errors.New("invalid host specified in query parameter")
 	case "any":
 		hosts, ok := u.Query()["host"]
 		if !ok {
 			return "", errors.New("invalid query parameter")
 		}
-		host = hosts[0]
+		return hosts[0], nil
 	default:
-		host = c.selectRandomHost()
+		return c.selectRandomHost(), nil
 	}
-	return host, nil
 }
 
 func (c *Config) HandleDownload(w http.ResponseWriter, r *http.Request) {
@@ -205,7 +222,7 @@ func (c *Config) HandleDownload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// determine host to connect to
-	host, err := c.getHost(r.URL)
+	host, err := c.getHost(ctx, r.URL)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

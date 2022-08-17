@@ -19,6 +19,7 @@ var (
 	EncryptionKey     []byte
 	UserSigningKey    []byte
 	UserEncryptionKey []byte
+	QuerySigningKey   []byte
 	OIDCProvider      *oidc.Provider
 	Oauth2Config      oauth2.Config
 )
@@ -219,6 +220,61 @@ func UserInfo(ctx context.Context, token string) (jwt.Claims, error) {
 	}
 
 	return standard, nil
+}
+
+func QueryInfo(ctx context.Context, tokenString string, issuer string) (string, error) {
+	standard := jwt.Claims{}
+	token, err := jwt.ParseSigned(tokenString)
+	if err != nil {
+		log.Printf("Cannot get token %s", err)
+		return "", errors.New("cannot get token")
+	}
+	if _, err := verifyAlg(token.Headers, string(jose.HS256)); err != nil {
+		log.Printf("signature validation failure: %s", err)
+		return "", errors.New("signature validation failure")
+	}
+	err = token.Claims(QuerySigningKey, &standard)
+	if err = token.Claims(QuerySigningKey, &standard); err != nil {
+		log.Printf("cannot verify signature %s", err)
+		return "", errors.New("cannot verify signature")
+	}
+
+	// go-jose doesnt verify the expiry
+	err = standard.Validate(jwt.Expected{
+		Issuer: issuer,
+		Time:   time.Now(),
+	})
+
+	if err != nil {
+		log.Printf("token validation failed due to %s", err)
+		return "", fmt.Errorf("token validation failed due to %s", err)
+	}
+
+	return standard.Subject, nil
+}
+
+// GenerateQueryToken this is a helper function for testing
+func GenerateQueryToken(ctx context.Context, query string, issuer string) (string, error) {
+	if len(QuerySigningKey) < 32 {
+		return "", errors.New("query token encryption key not long enough or not specified")
+	}
+
+	claims := jwt.Claims{
+		Subject: query,
+		Expiry:  jwt.NewNumericDate(time.Now().Add(time.Minute * 5)),
+		Issuer:  issuer,
+	}
+
+	sig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.HS256, Key: QuerySigningKey},
+		(&jose.SignerOptions{}).WithBase64(true))
+
+	if err != nil {
+		log.Printf("Cannot encrypt user token due to %s", err)
+		return "", err
+	}
+
+	token, err := jwt.Signed(sig).Claims(claims).CompactSerialize()
+	return token, err
 }
 
 func getSessionInfo(ctx context.Context) *protocol.SessionInfo {
