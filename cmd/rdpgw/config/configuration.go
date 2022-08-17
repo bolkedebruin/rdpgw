@@ -25,7 +25,7 @@ type ServerConfig struct {
 	CertFile             string   `koanf:"certfile"`
 	KeyFile              string   `koanf:"keyfile"`
 	Hosts                []string `koanf:"hosts"`
-	RoundRobin           bool     `koanf:"roundrobin"`
+	HostSelection        string   `koanf:"hostselection"`
 	SessionKey           string   `koanf:"sessionkey"`
 	SessionEncryptionKey string   `koanf:"sessionencryptionkey"`
 	SessionStore         string   `koanf:"sessionstore"`
@@ -118,6 +118,7 @@ func Load(configFile string) Configuration {
 		"Server.TlsDisabled":         false,
 		"Server.Port":                443,
 		"Server.SessionStore":        "cookie",
+		"Server.HostSelection":       "roundrobin",
 		"Client.NetworkAutoDetect":   1,
 		"Client.BandwidthAutoDetect": 1,
 		"Security.VerifyClientIp":    true,
@@ -153,14 +154,16 @@ func Load(configFile string) Configuration {
 		log.Printf("No valid `security.paatokensigningkey` specified (empty or not 32 characters). Setting to random")
 	}
 
-	if len(Conf.Security.UserTokenEncryptionKey) != 32 {
-		Conf.Security.UserTokenEncryptionKey, _ = security.GenerateRandomString(32)
-		log.Printf("No valid `security.usertokenencryptionkey` specified (empty or not 32 characters). Setting to random")
-	}
+	if Conf.Security.EnableUserToken {
+		if len(Conf.Security.UserTokenEncryptionKey) != 32 {
+			Conf.Security.UserTokenEncryptionKey, _ = security.GenerateRandomString(32)
+			log.Printf("No valid `security.usertokenencryptionkey` specified (empty or not 32 characters). Setting to random")
+		}
 
-	if len(Conf.Security.UserTokenSigningKey) != 32 {
-		Conf.Security.UserTokenSigningKey, _ = security.GenerateRandomString(32)
-		log.Printf("No valid `security.usertokensigningkey` specified (empty or not 32 characters). Setting to random")
+		if len(Conf.Security.UserTokenSigningKey) != 32 {
+			Conf.Security.UserTokenSigningKey, _ = security.GenerateRandomString(32)
+			log.Printf("No valid `security.usertokensigningkey` specified (empty or not 32 characters). Setting to random")
+		}
 	}
 
 	if len(Conf.Server.SessionKey) != 32 {

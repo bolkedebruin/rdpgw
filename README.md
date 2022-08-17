@@ -59,10 +59,13 @@ Server:
  Hosts:
   - localhost:3389
   - my-{{ preferred_username }}-host:3389
-  # Allow the user to connect to any host (insecure)
-  - any 
  # if true the server randomly selects a host to connect to
- RoundRobin: false 
+ # valid options are: 
+ #  - roundrobin, which selects a random host from the list (default)
+ #  - signed, a listed host specified in the signed query parameter
+ #  - unsigned, a listed host specified in the query parameter
+ #  - any, insecurely allow any host specified in the query parameter
+ HostSelection: roundrobin 
  # a random strings of at least 32 characters to secure cookies on the client
  # make sure to share this across the different pods
  SessionKey: thisisasessionkeyreplacethisjetzt

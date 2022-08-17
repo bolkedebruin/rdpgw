@@ -79,6 +79,7 @@ func main() {
 		SessionEncryptionKey: []byte(conf.Server.SessionEncryptionKey),
 		SessionStore:         conf.Server.SessionStore,
 		Hosts:                conf.Server.Hosts,
+		HostSelection:        conf.Server.HostSelection,
 		NetworkAutoDetect:    conf.Client.NetworkAutoDetect,
 		UsernameTemplate:     conf.Client.UsernameTemplate,
 		BandwidthAutoDetect:  conf.Client.BandwidthAutoDetect,

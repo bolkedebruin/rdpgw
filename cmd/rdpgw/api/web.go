@@ -13,6 +13,7 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -21,7 +22,7 @@ import (
 
 const (
 	RdpGwSession = "RDPGWSESSION"
-	MaxAge 		 = 120
+	MaxAge       = 120
 )
 
 type TokenGeneratorFunc func(context.Context, string, string) (string, error)
@@ -30,7 +31,7 @@ type UserTokenGeneratorFunc func(context.Context, string) (string, error)
 type Config struct {
 	SessionKey           []byte
 	SessionEncryptionKey []byte
-	SessionStore		 string
+	SessionStore         string
 	PAATokenGenerator    TokenGeneratorFunc
 	UserTokenGenerator   UserTokenGeneratorFunc
 	EnableUserToken      bool
@@ -39,13 +40,14 @@ type Config struct {
 	OIDCTokenVerifier    *oidc.IDTokenVerifier
 	stateStore           *cache.Cache
 	Hosts                []string
+	HostSelection        string
 	GatewayAddress       string
 	UsernameTemplate     string
 	NetworkAutoDetect    int
 	BandwidthAutoDetect  int
 	ConnectionType       int
-	SplitUserDomain		 bool
-	DefaultDomain		 string
+	SplitUserDomain      bool
+	DefaultDomain        string
 }
 
 func (c *Config) NewApi() {
@@ -151,6 +153,47 @@ func (c *Config) Authenticated(next http.Handler) http.Handler {
 	})
 }
 
+func (c *Config) selectRandomHost() string {
+	rand.Seed(time.Now().Unix())
+	host := c.Hosts[rand.Intn(len(c.Hosts))]
+	return host
+}
+
+func (c *Config) getHost(u *url.URL) (string, error) {
+	var host string
+	switch c.HostSelection {
+	case "roundrobin":
+		host = c.selectRandomHost()
+	case "signed":
+	case "unsigned":
+		hosts, ok := u.Query()["host"]
+		if !ok {
+			return "", errors.New("invalid query parameter")
+		}
+		found := false
+		for _, check := range c.Hosts {
+			if check == hosts[0] {
+				host = hosts[0]
+				found = true
+				break
+			}
+		}
+		if !found {
+			log.Printf("Invalid host %s specified in client request", hosts[0])
+			return "", errors.New("invalid host specified in query parameter")
+		}
+	case "any":
+		hosts, ok := u.Query()["host"]
+		if !ok {
+			return "", errors.New("invalid query parameter")
+		}
+		host = hosts[0]
+	default:
+		host = c.selectRandomHost()
+	}
+	return host, nil
+}
+
 func (c *Config) HandleDownload(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userName, ok := ctx.Value("preferred_username").(string)
@@ -161,9 +204,12 @@ func (c *Config) HandleDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// do a round robin selection for now
-	rand.Seed(time.Now().Unix())
-	host := c.Hosts[rand.Intn(len(c.Hosts))]
+	// determine host to connect to
+	host, err := c.getHost(r.URL)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	host = strings.Replace(host, "{{ preferred_username }}", userName, 1)
 
 	// split the username into user and domain
@@ -210,19 +256,19 @@ func (c *Config) HandleDownload(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Disposition", "attachment; filename="+fn)
 	w.Header().Set("Content-Type", "application/x-rdp")
-	data := "full address:s:"+host+"\r\n"+
-		"gatewayhostname:s:"+c.GatewayAddress+"\r\n"+
-		"gatewaycredentialssource:i:5\r\n"+
-		"gatewayusagemethod:i:1\r\n"+
-		"gatewayprofileusagemethod:i:1\r\n"+
-		"gatewayaccesstoken:s:"+token+"\r\n"+
-		"networkautodetect:i:"+strconv.Itoa(c.NetworkAutoDetect)+"\r\n"+
-		"bandwidthautodetect:i:"+strconv.Itoa(c.BandwidthAutoDetect)+"\r\n"+
-		"connection type:i:"+strconv.Itoa(c.ConnectionType)+"\r\n"+
-		"username:s:"+render+"\r\n"+
-		"domain:s:"+domain+"\r\n"+
-		"bitmapcachesize:i:32000\r\n"+
-	        "smart sizing:i:1\r\n"
+	data := "full address:s:" + host + "\r\n" +
+		"gatewayhostname:s:" + c.GatewayAddress + "\r\n" +
+		"gatewaycredentialssource:i:5\r\n" +
+		"gatewayusagemethod:i:1\r\n" +
+		"gatewayprofileusagemethod:i:1\r\n" +
+		"gatewayaccesstoken:s:" + token + "\r\n" +
+		"networkautodetect:i:" + strconv.Itoa(c.NetworkAutoDetect) + "\r\n" +
+		"bandwidthautodetect:i:" + strconv.Itoa(c.BandwidthAutoDetect) + "\r\n" +
+		"connection type:i:" + strconv.Itoa(c.ConnectionType) + "\r\n" +
+		"username:s:" + render + "\r\n" +
+		"domain:s:" + domain + "\r\n" +
+		"bitmapcachesize:i:32000\r\n" +
+		"smart sizing:i:1\r\n"
 
 	http.ServeContent(w, r, fn, time.Now(), strings.NewReader(data))
 }
