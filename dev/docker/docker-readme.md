@@ -24,7 +24,6 @@ across the different instances if this is not what you want.
 docker --run name rdpgw bolkedebruin/rdpgw:latest \
   -e RDPGW_SERVER__SSL_CERT_FILE=/etc/rdpgw/cert.pem
   -e RDPGW_SERVER__SSL_KEY_FILE=/etc/rdpgw.cert.pem
-  -e SSL_KEY=<SSL_KEY>
   -e RDPGW_SERVER__GATEWAY_ADDRESS=https://localhost:443
   -e RDPGW_SERVER__SESSION_KEY=thisisasessionkeyreplacethisjetz  # 32 characters
   -e RDPGW_SERVER__SESSION_ENCRYPTION_KEY=thisisasessionkeyreplacethisnunu # 32 characters
