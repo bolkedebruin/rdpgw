@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package main;
+
+option go_package = "./auth;main";
+
+message UserPass {
+  string username = 1;
+  string password = 2;
+}
+
+message Response {
+  string status = 1;
+}
