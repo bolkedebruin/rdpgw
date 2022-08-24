@@ -47,6 +47,8 @@ func (c *Config) BasicAuth(next http.HandlerFunc) http.HandlerFunc {
 			if !res.Authenticated {
 				log.Printf("User %s is not authenticated for this service", username)
 			} else {
+				ctx := context.WithValue(r.Context(), "preferred_username", username)
+				ctx = context.WithValue(ctx, "access_token", "EMPTY")
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}

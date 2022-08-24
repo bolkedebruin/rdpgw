@@ -42,37 +42,8 @@ func main() {
 	security.UserSigningKey = []byte(conf.Security.UserTokenSigningKey)
 	security.QuerySigningKey = []byte(conf.Security.QueryTokenSigningKey)
 
-	// set oidc config
-	provider, err := oidc.NewProvider(context.Background(), conf.OpenId.ProviderUrl)
-	if err != nil {
-		log.Fatalf("Cannot get oidc provider: %s", err)
-	}
-	oidcConfig := &oidc.Config{
-		ClientID: conf.OpenId.ClientId,
-	}
-	verifier := provider.Verifier(oidcConfig)
-
-	// get callback url and external advertised gateway address
-	url, err := url.Parse(conf.Server.GatewayAddress)
-	if url.Scheme == "" {
-		url.Scheme = "https"
-	}
-	url.Path = "callback"
-
-	oauthConfig := oauth2.Config{
-		ClientID:     conf.OpenId.ClientId,
-		ClientSecret: conf.OpenId.ClientSecret,
-		RedirectURL:  url.String(),
-		Endpoint:     provider.Endpoint(),
-		Scopes:       []string{oidc.ScopeOpenID, "profile", "email"},
-	}
-	security.OIDCProvider = provider
-	security.Oauth2Config = oauthConfig
-
+	// configure api
 	api := &api.Config{
-		GatewayAddress:       url.Host,
-		OAuth2Config:         &oauthConfig,
-		OIDCTokenVerifier:    verifier,
 		PAATokenGenerator:    security.GeneratePAAToken,
 		UserTokenGenerator:   security.GenerateUserToken,
 		QueryInfo:            security.QueryInfo,
@@ -91,6 +62,38 @@ func main() {
 		DefaultDomain:        conf.Client.DefaultDomain,
 		SocketAddress:        conf.Server.AuthSocket,
 		Authentication:       conf.Server.Authentication,
+	}
+
+	if conf.Server.Authentication == "openid" {
+		// set oidc config
+		provider, err := oidc.NewProvider(context.Background(), conf.OpenId.ProviderUrl)
+		if err != nil {
+			log.Fatalf("Cannot get oidc provider: %s", err)
+		}
+		oidcConfig := &oidc.Config{
+			ClientID: conf.OpenId.ClientId,
+		}
+		verifier := provider.Verifier(oidcConfig)
+
+		// get callback url and external advertised gateway address
+		url, err := url.Parse(conf.Server.GatewayAddress)
+		if url.Scheme == "" {
+			url.Scheme = "https"
+		}
+		url.Path = "callback"
+		api.GatewayAddress = url.Host
+
+		oauthConfig := oauth2.Config{
+			ClientID:     conf.OpenId.ClientId,
+			ClientSecret: conf.OpenId.ClientSecret,
+			RedirectURL:  url.String(),
+			Endpoint:     provider.Endpoint(),
+			Scopes:       []string{oidc.ScopeOpenID, "profile", "email"},
+		}
+		security.OIDCProvider = provider
+		security.Oauth2Config = oauthConfig
+		api.OAuth2Config = &oauthConfig
+		api.OIDCTokenVerifier = verifier
 	}
 	api.NewApi()
 

@@ -32,7 +32,7 @@ func GenerateRandomString(n int) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		ret = append(ret, letters[num.Int64()])
+		ret[i] = letters[num.Int64()]
 	}
 
 	return string(ret), nil
