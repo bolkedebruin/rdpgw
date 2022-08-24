@@ -30,8 +30,10 @@ type ServerConfig struct {
 	SessionEncryptionKey string   `koanf:"sessionencryptionkey"`
 	SessionStore         string   `koanf:"sessionstore"`
 	SendBuf              int      `koanf:"sendbuf"`
-	ReceiveBuf           int      `koanf:"recievebuf"`
+	ReceiveBuf           int      `koanf:"receivebuf"`
 	DisableTLS           bool     `koanf:"disabletls"`
+	Authentication       string   `koanf:"authentication"`
+	AuthSocket           string   `koanf:"authsocket"`
 }
 
 type OpenIDConfig struct {
@@ -121,6 +123,8 @@ func Load(configFile string) Configuration {
 		"Server.Port":                443,
 		"Server.SessionStore":        "cookie",
 		"Server.HostSelection":       "roundrobin",
+		"Server.Authentication":      "openid",
+		"Server.AuthSocket":          "/tmp/rdpgw-auth.sock",
 		"Client.NetworkAutoDetect":   1,
 		"Client.BandwidthAutoDetect": 1,
 		"Security.VerifyClientIp":    true,
@@ -182,6 +186,9 @@ func Load(configFile string) Configuration {
 		log.Fatalf("host selection is set to `signed` but `querytokensigningkey` is not set")
 	}
 
+	if Conf.Server.Authentication == "local" && Conf.Server.DisableTLS {
+		log.Fatalf("basicauth=local and disabletls are mutually exclusive")
+	}
 	return Conf
 
 }

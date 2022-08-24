@@ -51,6 +51,8 @@ type Config struct {
 	ConnectionType       int
 	SplitUserDomain      bool
 	DefaultDomain        string
+	SocketAddress        string
+	Authentication       string
 }
 
 func (c *Config) NewApi() {

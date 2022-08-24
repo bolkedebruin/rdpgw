@@ -89,6 +89,8 @@ func main() {
 		ConnectionType:       conf.Client.ConnectionType,
 		SplitUserDomain:      conf.Client.SplitUserDomain,
 		DefaultDomain:        conf.Client.DefaultDomain,
+		SocketAddress:        conf.Server.AuthSocket,
+		Authentication:       conf.Server.Authentication,
 	}
 	api.NewApi()
 
@@ -148,11 +150,16 @@ func main() {
 		ServerConf: &handlerConfig,
 	}
 
-	http.Handle("/remoteDesktopGateway/", common.EnrichContext(http.HandlerFunc(gw.HandleGatewayProtocol)))
-	http.Handle("/connect", common.EnrichContext(api.Authenticated(http.HandlerFunc(api.HandleDownload))))
+	if conf.Server.Authentication == "local" {
+		http.Handle("/connect", common.EnrichContext(api.BasicAuth(api.HandleDownload)))
+		http.Handle("/remoteDesktopGateway/", common.EnrichContext(api.BasicAuth(gw.HandleGatewayProtocol)))
+	} else {
+		// openid
+		http.Handle("/connect", common.EnrichContext(api.Authenticated(http.HandlerFunc(api.HandleDownload))))
+		http.HandleFunc("/callback", api.HandleCallback)
+	}
 	http.Handle("/metrics", promhttp.Handler())
 	http.HandleFunc("/tokeninfo", api.TokenInfo)
-	http.HandleFunc("/callback", api.HandleCallback)
 
 	if conf.Server.DisableTLS {
 		err = server.ListenAndServe()
