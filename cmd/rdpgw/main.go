@@ -41,6 +41,8 @@ func main() {
 	security.UserEncryptionKey = []byte(conf.Security.UserTokenEncryptionKey)
 	security.UserSigningKey = []byte(conf.Security.UserTokenSigningKey)
 	security.QuerySigningKey = []byte(conf.Security.QueryTokenSigningKey)
+	security.HostSelection = conf.Server.HostSelection
+	security.Hosts = conf.Server.Hosts
 
 	// configure api
 	api := &api.Config{
@@ -136,7 +138,7 @@ func main() {
 	}
 
 	// create the gateway
-	handlerConfig := protocol.ServerConf{
+	gwConfig := protocol.ServerConf{
 		IdleTimeout:   conf.Caps.IdleTimeout,
 		TokenAuth:     conf.Caps.TokenAuth,
 		SmartCardAuth: conf.Caps.SmartCardAuth,
@@ -153,11 +155,13 @@ func main() {
 		ReceiveBuf: conf.Server.ReceiveBuf,
 	}
 	if conf.Caps.TokenAuth {
-		handlerConfig.VerifyTunnelAuthFunc = security.VerifyPAAToken
-		handlerConfig.VerifyServerFunc = security.VerifyServerFunc
+		gwConfig.VerifyTunnelAuthFunc = security.VerifyPAAToken
+		gwConfig.VerifyServerFunc = security.VerifyServerFunc
+	} else {
+		gwConfig.VerifyServerFunc = security.BasicVerifyServer
 	}
 	gw := protocol.Gateway{
-		ServerConf: &handlerConfig,
+		ServerConf: &gwConfig,
 	}
 
 	if conf.Server.Authentication == "local" {

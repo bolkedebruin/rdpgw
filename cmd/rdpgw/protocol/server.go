@@ -143,6 +143,7 @@ func (s *Server) Process(ctx context.Context) error {
 			server, port := s.channelRequest(pkt)
 			host := net.JoinHostPort(server, strconv.Itoa(int(port)))
 			if s.VerifyServerFunc != nil {
+				log.Printf("Verifying %s host connection", host)
 				if ok, _ := s.VerifyServerFunc(ctx, host); !ok {
 					log.Printf("Not allowed to connect to %s by policy handler", host)
 					msg := s.channelResponse(E_PROXY_RAP_ACCESSDENIED)
