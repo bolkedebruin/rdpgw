@@ -33,7 +33,7 @@ func (c *Config) BasicAuth(next http.HandlerFunc) http.HandlerFunc {
 			defer conn.Close()
 
 			c := auth.NewAuthenticateClient(conn)
-			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 			defer cancel()
 
 			req := &auth.UserPass{Username: username, Password: password}

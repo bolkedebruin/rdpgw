@@ -34,7 +34,16 @@ type customClaims struct {
 }
 
 func VerifyPAAToken(ctx context.Context, tokenString string) (bool, error) {
+	if tokenString == "" {
+		log.Printf("no token to parse")
+		return false, errors.New("no token to parse")
+	}
+
 	token, err := jwt.ParseSigned(tokenString)
+	if err != nil {
+		log.Printf("cannot parse token due to: %s", err)
+		return false, err
+	}
 
 	// check if the signing algo matches what we expect
 	for _, header := range token.Headers {

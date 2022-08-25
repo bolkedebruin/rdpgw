@@ -44,8 +44,6 @@ func main() {
 
 	// configure api
 	api := &api.Config{
-		PAATokenGenerator:    security.GeneratePAAToken,
-		UserTokenGenerator:   security.GenerateUserToken,
 		QueryInfo:            security.QueryInfo,
 		QueryTokenIssuer:     conf.Security.QueryTokenIssuer,
 		EnableUserToken:      conf.Security.EnableUserToken,
@@ -62,6 +60,13 @@ func main() {
 		DefaultDomain:        conf.Client.DefaultDomain,
 		SocketAddress:        conf.Server.AuthSocket,
 		Authentication:       conf.Server.Authentication,
+	}
+
+	if conf.Caps.TokenAuth {
+		api.PAATokenGenerator = security.GeneratePAAToken
+	}
+	if conf.Security.EnableUserToken {
+		api.UserTokenGenerator = security.GenerateUserToken
 	}
 
 	if conf.Server.Authentication == "openid" {
@@ -144,10 +149,12 @@ func main() {
 			DisableAll: conf.Caps.DisableRedirect,
 			EnableAll:  conf.Caps.RedirectAll,
 		},
-		VerifyTunnelCreate: security.VerifyPAAToken,
-		VerifyServerFunc:   security.VerifyServerFunc,
-		SendBuf:            conf.Server.SendBuf,
-		ReceiveBuf:         conf.Server.ReceiveBuf,
+		SendBuf:    conf.Server.SendBuf,
+		ReceiveBuf: conf.Server.ReceiveBuf,
+	}
+	if conf.Caps.TokenAuth {
+		handlerConfig.VerifyTunnelAuthFunc = security.VerifyPAAToken
+		handlerConfig.VerifyServerFunc = security.VerifyServerFunc
 	}
 	gw := protocol.Gateway{
 		ServerConf: &handlerConfig,

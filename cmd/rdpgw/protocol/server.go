@@ -78,8 +78,8 @@ func (s *Server) Process(ctx context.Context) error {
 				s.Session.TransportOut.WritePacket(msg)
 				return fmt.Errorf("%x: wrong state", E_PROXY_INTERNALERROR)
 			}
-			major, minor, _, auth := s.handshakeRequest(pkt) // todo check if auth matches what the handler can do
-			caps, err := s.matchAuth(auth)
+			major, minor, _, reqAuth := s.handshakeRequest(pkt)
+			caps, err := s.matchAuth(reqAuth)
 			if err != nil {
 				log.Println(err)
 				msg := s.handshakeResponse(0x0, 0x0, 0, E_PROXY_CAPABILITYMISMATCH)
@@ -224,7 +224,7 @@ func (s *Server) handshakeRequest(data []byte) (major byte, minor byte, version 
 	return
 }
 
-func (s *Server) matchAuth(extAuth uint16) (caps uint16, err error) {
+func (s *Server) matchAuth(clientAuthCaps uint16) (caps uint16, err error) {
 	if s.SmartCardAuth {
 		caps = caps | HTTP_EXTENDED_AUTH_SC
 	}
@@ -232,10 +232,13 @@ func (s *Server) matchAuth(extAuth uint16) (caps uint16, err error) {
 		caps = caps | HTTP_EXTENDED_AUTH_PAA
 	}
 
-	if caps & extAuth == 0 && extAuth > 0 {
-		return 0, fmt.Errorf("%x has no matching capability configured (%x). Did you configure caps? ", extAuth, caps)
+	if caps&clientAuthCaps == 0 && clientAuthCaps > 0 {
+		return 0, fmt.Errorf("%x has no matching capability configured (%x). Did you configure caps? ", clientAuthCaps, caps)
 	}
 
+	if caps > 0 && clientAuthCaps == 0 {
+		return 0, fmt.Errorf("%d caps are required by the server, but the client does not support them", caps)
+	}
 	return caps, nil
 }
 
