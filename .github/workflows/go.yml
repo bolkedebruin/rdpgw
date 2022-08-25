@@ -19,6 +19,9 @@ jobs:
         go-version: ^1.19
       id: go
 
+    - name: Install pam-devel
+      run: apt-get -y install libpam-dev
+      
     - name: Check out code into the Go module directory
       uses: actions/checkout@v2
 
