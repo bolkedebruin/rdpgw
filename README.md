@@ -24,6 +24,9 @@ you can integrate your remote desktops with Keycloak, Okta, Google, Azure, Apple
 if you want. 
 
 ## Security
+
+__NOTE__: rdogw now supports PAM authentication as well if you configure it to use 'local' authentication.
+
 RDPGW wants to be secure when you set it up from the beginning. It does this by having OpenID
 Connect integration enabled by default. Cookies are encrypted and signed on the client side relying
 on [Gorilla Sessions](https://www.gorillatoolkit.org/pkg/sessions). PAA tokens (gateway access tokens)
