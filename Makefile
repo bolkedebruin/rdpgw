@@ -1,7 +1,7 @@
 BINDIR      := $(CURDIR)/bin
 INSTALL_PATH ?= /usr/local/bin
 BINNAME     ?= rdpgw
-BINNAME2    ?= auth
+BINNAME2    ?= rdpgw-auth
 
 # Rebuild the binary if any of these files change
 SRC := $(shell find . -type f -name '*.go' -print) go.mod go.sum
