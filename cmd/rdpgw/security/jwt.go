@@ -33,6 +33,27 @@ type customClaims struct {
 	AccessToken  string `json:"accessToken"`
 }
 
+func CheckSession(next protocol.VerifyServerFunc) protocol.VerifyServerFunc {
+	return func(ctx context.Context, host string) (bool, error) {
+		s := getSessionInfo(ctx)
+		if s == nil {
+			return false, errors.New("no valid session info found in context")
+		}
+
+		if s.RemoteServer != host {
+			log.Printf("Client specified host %s does not match token host %s", host, s.RemoteServer)
+			return false, nil
+		}
+
+		if VerifyClientIP && s.ClientIp != common.GetClientIp(ctx) {
+			log.Printf("Current client ip address %s does not match token client ip %s",
+				common.GetClientIp(ctx), s.ClientIp)
+			return false, nil
+		}
+		return next(ctx, host)
+	}
+}
+
 func VerifyPAAToken(ctx context.Context, tokenString string) (bool, error) {
 	if tokenString == "" {
 		log.Printf("no token to parse")
@@ -87,26 +108,6 @@ func VerifyPAAToken(ctx context.Context, tokenString string) (bool, error) {
 
 	s.RemoteServer = custom.RemoteServer
 	s.ClientIp = custom.ClientIP
-
-	return true, nil
-}
-
-func VerifyServerFunc(ctx context.Context, host string) (bool, error) {
-	s := getSessionInfo(ctx)
-	if s == nil {
-		return false, errors.New("no valid session info found in context")
-	}
-
-	if s.RemoteServer != host {
-		log.Printf("Client specified host %s does not match token host %s", host, s.RemoteServer)
-		return false, nil
-	}
-
-	if VerifyClientIP && s.ClientIp != common.GetClientIp(ctx) {
-		log.Printf("Current client ip address %s does not match token client ip %s",
-			common.GetClientIp(ctx), s.ClientIp)
-		return false, nil
-	}
 
 	return true, nil
 }

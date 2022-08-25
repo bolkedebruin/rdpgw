@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 )
 
 var (
@@ -12,19 +13,20 @@ var (
 	HostSelection string
 )
 
-func BasicVerifyServer(ctx context.Context, host string) (bool, error) {
-	if HostSelection == "any" {
+func CheckHost(ctx context.Context, host string) (bool, error) {
+	switch HostSelection {
+	case "any":
 		return true, nil
-	}
-
-	if HostSelection == "signed" {
-		// todo get from context
+	case "signed":
+		// todo get from context?
 		return false, errors.New("cannot verify host in 'signed' mode as token data is missing")
-	}
-
-	if HostSelection == "roundrobin" || HostSelection == "unsigned" {
+	case "roundrobin", "unsigned":
 		log.Printf("Checking host")
+		username := ctx.Value("preferred_username").(string)
 		for _, h := range Hosts {
+			if username != "" {
+				h = strings.Replace(h, "{{ preferred_username }}", username, 1)
+			}
 			if h == host {
 				return true, nil
 			}

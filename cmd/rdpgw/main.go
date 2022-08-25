@@ -156,9 +156,9 @@ func main() {
 	}
 	if conf.Caps.TokenAuth {
 		gwConfig.VerifyTunnelAuthFunc = security.VerifyPAAToken
-		gwConfig.VerifyServerFunc = security.VerifyServerFunc
+		gwConfig.VerifyServerFunc = security.CheckSession(security.CheckHost)
 	} else {
-		gwConfig.VerifyServerFunc = security.BasicVerifyServer
+		gwConfig.VerifyServerFunc = security.CheckHost
 	}
 	gw := protocol.Gateway{
 		ServerConf: &gwConfig,
