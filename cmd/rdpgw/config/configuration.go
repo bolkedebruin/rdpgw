@@ -189,6 +189,10 @@ func Load(configFile string) Configuration {
 	if Conf.Server.Authentication == "local" && Conf.Server.DisableTLS {
 		log.Fatalf("basicauth=local and disabletls are mutually exclusive")
 	}
+
+	if !Conf.Caps.TokenAuth && Conf.Server.Authentication == "openid" {
+		log.Fatalf("openid is configured but tokenauth disabled")
+	}
 	return Conf
 
 }

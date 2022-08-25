@@ -45,6 +45,14 @@ template.
 ```yaml
 # web server configuration. 
 Server:
+ # can be set to openid (default) and local. If openid is used rdpgw expects
+ # a configured openid provider, make sure to set caps.tokenauth to true. If local
+ # rdpgw connects to rdpgw-auth over a socket to verify users and password. Note:
+ # rdpgw-auth needs to be run as root or setuid in order to work
+ Authentication: openid
+ # The socket to connect to if using local auth. Ensure rdpgw auth is configured to
+ # use the same socket.
+ AuthSocket: /tmp/rdpgw-auth.sock
  # disable TLS if termination happens somehwere else (e.g. a load balancer)
  # Note: rdp connections over a gateway require TLS
  DisableTLS: false
