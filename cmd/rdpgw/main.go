@@ -170,6 +170,7 @@ func main() {
 	} else {
 		// openid
 		http.Handle("/connect", common.EnrichContext(api.Authenticated(http.HandlerFunc(api.HandleDownload))))
+		http.Handle("/remoteDesktopGateway/", common.EnrichContext(http.HandlerFunc(gw.HandleGatewayProtocol)))
 		http.HandleFunc("/callback", api.HandleCallback)
 	}
 	http.Handle("/metrics", promhttp.Handler())

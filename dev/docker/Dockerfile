@@ -28,7 +28,7 @@ RUN git clone https://github.com/bolkedebruin/rdpgw.git /app && \
     chmod u+s /opt/rdpgw/rdpgw-auth && \
     chown -R 1001 /opt/rdpgw
 
-FROM scratch
+FROM busybox 
 
 # make tempdir in case filestore is used
 ADD tmp.tar /
