@@ -21,13 +21,19 @@ func CheckHost(ctx context.Context, host string) (bool, error) {
 		// todo get from context?
 		return false, errors.New("cannot verify host in 'signed' mode as token data is missing")
 	case "roundrobin", "unsigned":
+		var username string
+
 		log.Printf("Checking host")
 		s := getSessionInfo(ctx)
 		if s == nil {
-			return false, errors.New("no valid session info found in context")
+			var ok bool
+			username, ok = ctx.Value("preferred_username").(string)
+			if !ok {
+				return false, errors.New("no valid session info or username found in context")
+			}
 		}
 		for _, h := range Hosts {
-			if s.UserName != "" {
+			if username != "" {
 				h = strings.Replace(h, "{{ preferred_username }}", s.UserName, 1)
 			}
 			if h == host {
