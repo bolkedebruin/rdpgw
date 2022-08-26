@@ -23,18 +23,18 @@ func CheckHost(ctx context.Context, host string) (bool, error) {
 	case "roundrobin", "unsigned":
 		var username string
 
-		log.Printf("Checking host")
 		s := getSessionInfo(ctx)
-		if s == nil {
+		if s == nil || s.UserName == "" {
 			var ok bool
 			username, ok = ctx.Value("preferred_username").(string)
 			if !ok {
 				return false, errors.New("no valid session info or username found in context")
 			}
 		}
+		log.Printf("Checking host for user %s", username)
 		for _, h := range Hosts {
 			if username != "" {
-				h = strings.Replace(h, "{{ preferred_username }}", s.UserName, 1)
+				h = strings.Replace(h, "{{ preferred_username }}", username, 1)
 			}
 			if h == host {
 				return true, nil
