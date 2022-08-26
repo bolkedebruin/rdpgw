@@ -44,7 +44,7 @@ type Config struct {
 	stateStore           *cache.Cache
 	Hosts                []string
 	HostSelection        string
-	GatewayAddress       string
+	GatewayAddress       *url.URL
 	UsernameTemplate     string
 	NetworkAutoDetect    int
 	BandwidthAutoDetect  int
@@ -276,7 +276,7 @@ func (c *Config) HandleDownload(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", "attachment; filename="+fn)
 	w.Header().Set("Content-Type", "application/x-rdp")
 	data := "full address:s:" + host + "\r\n" +
-		"gatewayhostname:s:" + c.GatewayAddress + "\r\n" +
+		"gatewayhostname:s:" + c.GatewayAddress.Host + "\r\n" +
 		"gatewaycredentialssource:i:5\r\n" +
 		"gatewayusagemethod:i:1\r\n" +
 		"gatewayprofileusagemethod:i:1\r\n" +

@@ -30,6 +30,9 @@ RUN git clone https://github.com/bolkedebruin/rdpgw.git /app && \
 
 FROM scratch
 
+# make tempdir in case filestore is used
+ADD tmp.tar /
+
 COPY --from=builder /opt/rdpgw /opt/rdpgw
 COPY --from=builder /etc/passwd /etc/passwd
 COPY --from=builder /etc/ssl/certs /etc/ssl/certs
