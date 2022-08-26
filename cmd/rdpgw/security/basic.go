@@ -30,6 +30,8 @@ func CheckHost(ctx context.Context, host string) (bool, error) {
 			if !ok {
 				return false, errors.New("no valid session info or username found in context")
 			}
+		} else {
+			username = s.UserName
 		}
 		log.Printf("Checking host for user %s", username)
 		for _, h := range Hosts {
