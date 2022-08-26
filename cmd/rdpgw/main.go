@@ -88,7 +88,7 @@ func main() {
 			url.Scheme = "https"
 		}
 		url.Path = "callback"
-		api.GatewayAddress = url.Host
+		api.GatewayAddress = url.String()
 
 		oauthConfig := oauth2.Config{
 			ClientID:     conf.OpenId.ClientId,

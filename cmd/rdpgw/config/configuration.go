@@ -193,6 +193,12 @@ func Load(configFile string) Configuration {
 	if !Conf.Caps.TokenAuth && Conf.Server.Authentication == "openid" {
 		log.Fatalf("openid is configured but tokenauth disabled")
 	}
+
+	// prepend '//' if required for URL parsing
+	if !strings.Contains(Conf.Server.GatewayAddress, "//") {
+		Conf.Server.GatewayAddress = "//" + Conf.Server.GatewayAddress
+	}
+	
 	return Conf
 
 }

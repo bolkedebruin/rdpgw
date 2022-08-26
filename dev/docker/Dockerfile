@@ -1,15 +1,7 @@
 # builder stage
 FROM golang as builder
 
-# define architectures which could be run rdpgw
-RUN dpkgArch="$(dpkg --print-architecture)"; \
-    case "$dpkgArch" in \
-        arm) ARCH='arm' ;; \
-        arm64) ARCH='arm64' ;; \
-        amd64) ARCH='amd64' ;; \
-        386) ARCH='386' ;; \
-        *) echo >&2 "error: unsupported architecture: $apkArch"; exit 1 ;; \
-    esac
+RUN apt-get update && apt-get install -y libpam-dev
 
 # certificate
 RUN mkdir -p /opt/rdpgw && cd /opt/rdpgw && \
@@ -28,23 +20,22 @@ RUN adduser --disabled-password --gecos "" --home /opt/rdpgw --uid 1001 rdpgw
 ARG CACHEBUST
 RUN git clone https://github.com/bolkedebruin/rdpgw.git /app && \
     cd /app && \
-    go mod tidy -compat=1.17 && \
+    go mod tidy -compat=1.19 && \
     CGO_ENABLED=0 GOOS=linux go build -trimpath -tags '' -ldflags '' -o '/opt/rdpgw/rdpgw' ./cmd/rdpgw && \
+    CGO_ENABLED=1 GOOS=linux go build -trimpath -tags '' -ldflags '' -o '/opt/rdpgw/rdpgw-auth' ./cmd/auth && \
     chmod +x /opt/rdpgw/rdpgw && \
+    chmod +x /opt/rdpgw/rdpgw-auth && \
+    chmod u+s /opt/rdpgw/rdpgw-auth && \
     chown -R 1001 /opt/rdpgw
 
-# FROM scratch
-# FROM scratch is missing /bin/sh which is sadly needed to start the container.
-FROM busybox
-# Copy stuff from builder
+FROM scratch
+
 COPY --from=builder /opt/rdpgw /opt/rdpgw
 COPY --from=builder /etc/passwd /etc/passwd
-# trust root CA
 COPY --from=builder /etc/ssl/certs /etc/ssl/certs
-# COPY --from=builder /bin/sh /bin/sh
-# COPY rdpgw.yaml
+
 COPY rdpgw.yaml /opt/rdpgw/rdpgw.yaml
 
 USER 1001
 WORKDIR /opt/rdpgw
-ENTRYPOINT /opt/rdpgw/rdpgw
+ENTRYPOINT ["/opt/rdpgw/rdpgw"]
