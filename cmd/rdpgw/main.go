@@ -155,7 +155,7 @@ func main() {
 		ReceiveBuf: conf.Server.ReceiveBuf,
 	}
 	if conf.Caps.TokenAuth {
-		gwConfig.VerifyTunnelAuthFunc = security.VerifyPAAToken
+		gwConfig.VerifyTunnelCreate = security.VerifyPAAToken
 		gwConfig.VerifyServerFunc = security.CheckSession(security.CheckHost)
 	} else {
 		gwConfig.VerifyServerFunc = security.CheckHost
