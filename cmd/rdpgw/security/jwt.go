@@ -95,19 +95,18 @@ func VerifyPAAToken(ctx context.Context, tokenString string) (bool, error) {
 	}
 
 	// validate the access token
-	if custom.AccessToken != "EMPTY" {
-		tokenSource := Oauth2Config.TokenSource(ctx, &oauth2.Token{AccessToken: custom.AccessToken})
-		_, err = OIDCProvider.UserInfo(ctx, tokenSource)
-		if err != nil {
-			log.Printf("Cannot get user info for access token: %s", err)
-			return false, err
-		}
+	tokenSource := Oauth2Config.TokenSource(ctx, &oauth2.Token{AccessToken: custom.AccessToken})
+	user, err := OIDCProvider.UserInfo(ctx, tokenSource)
+	if err != nil {
+		log.Printf("Cannot get user info for access token: %s", err)
+		return false, err
 	}
 
 	s := getSessionInfo(ctx)
 
 	s.RemoteServer = custom.RemoteServer
 	s.ClientIp = custom.ClientIP
+	s.UserName = user.Subject
 
 	return true, nil
 }

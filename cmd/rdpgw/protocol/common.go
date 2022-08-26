@@ -24,7 +24,7 @@ type RedirectFlags struct {
 
 type SessionInfo struct {
 	// The connection-id (RDG-ConnID) as reported by the client
-	ConnId           string
+	ConnId string
 	// The underlying incoming transport being either websocket or legacy http
 	// in case of websocket TransportOut will equal TransportIn
 	TransportIn transport.Transport
@@ -32,9 +32,11 @@ type SessionInfo struct {
 	// in case of websocket TransportOut will equal TransportOut
 	TransportOut transport.Transport
 	// The remote desktop server (rdp, vnc etc) the clients intends to connect to
-	RemoteServer	 string
+	RemoteServer string
 	// The obtained client ip address
-	ClientIp		 string
+	ClientIp string
+	// User
+	UserName string
 }
 
 // readMessage parses and defragments a packet from a Transport. It returns
