@@ -165,7 +165,6 @@ func main() {
 	}
 
 	if conf.Server.Authentication == "local" {
-		http.Handle("/connect", common.EnrichContext(api.BasicAuth(api.HandleDownload)))
 		http.Handle("/remoteDesktopGateway/", common.EnrichContext(api.BasicAuth(gw.HandleGatewayProtocol)))
 	} else {
 		// openid
