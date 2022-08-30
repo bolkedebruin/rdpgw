@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/api"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/common"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/config"
@@ -11,6 +12,7 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/thought-machine/go-flags"
+	"golang.org/x/crypto/acme/autocert"
 	"golang.org/x/oauth2"
 	"log"
 	"net/http"
@@ -71,6 +73,13 @@ func main() {
 		api.UserTokenGenerator = security.GenerateUserToken
 	}
 
+	// get callback url and external advertised gateway address
+	url, err := url.Parse(conf.Server.GatewayAddress)
+	if url.Scheme == "" {
+		url.Scheme = "https"
+	}
+	url.Path = "callback"
+
 	if conf.Server.Authentication == "openid" {
 		// set oidc config
 		provider, err := oidc.NewProvider(context.Background(), conf.OpenId.ProviderUrl)
@@ -82,12 +91,6 @@ func main() {
 		}
 		verifier := provider.Verifier(oidcConfig)
 
-		// get callback url and external advertised gateway address
-		url, err := url.Parse(conf.Server.GatewayAddress)
-		if url.Scheme == "" {
-			url.Scheme = "https"
-		}
-		url.Path = "callback"
 		api.GatewayAddress = url
 
 		oauthConfig := oauth2.Config{
@@ -107,12 +110,11 @@ func main() {
 	log.Printf("Starting remote desktop gateway server")
 	cfg := &tls.Config{}
 
-	if conf.Server.DisableTLS {
+	if conf.Server.Tls == "disable" {
 		log.Printf("TLS disabled - rdp gw connections require tls, make sure to have a terminator")
 	} else {
-		if conf.Server.CertFile == "" || conf.Server.KeyFile == "" {
-			log.Fatal("Both certfile and keyfile need to be specified")
-		}
+		// auto config
+		tlsConfigured := false
 
 		tlsDebug := os.Getenv("SSLKEYLOGFILE")
 		if tlsDebug != "" {
@@ -124,11 +126,34 @@ func main() {
 			cfg.KeyLogWriter = w
 		}
 
-		cert, err := tls.LoadX509KeyPair(conf.Server.CertFile, conf.Server.KeyFile)
-		if err != nil {
-			log.Fatal(err)
+		if conf.Server.KeyFile != "" && conf.Server.CertFile != "" {
+			cert, err := tls.LoadX509KeyPair(conf.Server.CertFile, conf.Server.KeyFile)
+			if err != nil {
+				log.Printf("Cannot load certfile or keyfile (%s) falling back to acme", err)
+			}
+			cfg.Certificates = append(cfg.Certificates, cert)
+			tlsConfigured = true
 		}
-		cfg.Certificates = append(cfg.Certificates, cert)
+
+		if !tlsConfigured {
+			log.Printf("Using acme / letsencrypt for tls configuration. Enabling http (port 80) for verification")
+			// setup a simple handler which sends a HTHS header for six months (!)
+			http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Strict-Transport-Security", "max-age=15768000 ; includeSubDomains")
+				fmt.Fprintf(w, "Hello from RDPGW")
+			})
+
+			certMgr := autocert.Manager{
+				Prompt:     autocert.AcceptTOS,
+				HostPolicy: autocert.HostWhitelist(url.Host),
+				Cache:      autocert.DirCache("/tmp/rdpgw"),
+			}
+			cfg.GetCertificate = certMgr.GetCertificate
+
+			go func() {
+				http.ListenAndServe(":http", certMgr.HTTPHandler(nil))
+			}()
+		}
 	}
 
 	server := http.Server{
@@ -175,7 +200,7 @@ func main() {
 	http.Handle("/metrics", promhttp.Handler())
 	http.HandleFunc("/tokeninfo", api.TokenInfo)
 
-	if conf.Server.DisableTLS {
+	if conf.Server.Tls == "disabled" {
 		err = server.ListenAndServe()
 	} else {
 		err = server.ListenAndServeTLS("", "")

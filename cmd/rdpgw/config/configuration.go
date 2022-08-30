@@ -31,7 +31,7 @@ type ServerConfig struct {
 	SessionStore         string   `koanf:"sessionstore"`
 	SendBuf              int      `koanf:"sendbuf"`
 	ReceiveBuf           int      `koanf:"receivebuf"`
-	DisableTLS           bool     `koanf:"disabletls"`
+	Tls                  string   `koanf:"disabletls"`
 	Authentication       string   `koanf:"authentication"`
 	AuthSocket           string   `koanf:"authsocket"`
 }
@@ -117,9 +117,7 @@ func Load(configFile string) Configuration {
 	var k = koanf.New(".")
 
 	k.Load(confmap.Provider(map[string]interface{}{
-		"Server.CertFile":            "server.pem",
-		"Server.KeyFile":             "key.pem",
-		"Server.TlsDisabled":         false,
+		"Server.Tls":                 "auto",
 		"Server.Port":                443,
 		"Server.SessionStore":        "cookie",
 		"Server.HostSelection":       "roundrobin",
@@ -186,8 +184,8 @@ func Load(configFile string) Configuration {
 		log.Fatalf("host selection is set to `signed` but `querytokensigningkey` is not set")
 	}
 
-	if Conf.Server.Authentication == "local" && Conf.Server.DisableTLS {
-		log.Fatalf("basicauth=local and disabletls are mutually exclusive")
+	if Conf.Server.Authentication == "local" && Conf.Server.Tls == "disable" {
+		log.Fatalf("basicauth=local and tls=disable are mutually exclusive")
 	}
 
 	if !Conf.Caps.TokenAuth && Conf.Server.Authentication == "openid" {
@@ -198,7 +196,7 @@ func Load(configFile string) Configuration {
 	if !strings.Contains(Conf.Server.GatewayAddress, "//") {
 		Conf.Server.GatewayAddress = "//" + Conf.Server.GatewayAddress
 	}
-	
+
 	return Conf
 
 }
