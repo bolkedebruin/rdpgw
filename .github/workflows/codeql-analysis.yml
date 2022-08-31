@@ -37,6 +37,9 @@ jobs:
         # Learn more about CodeQL language support at https://aka.ms/codeql-docs/language-support
 
     steps:
+    - name: Install pam-devel
+      run: sudo apt-get -y install libpam-dev
+
     - name: Checkout repository
       uses: actions/checkout@v3
 
