@@ -56,9 +56,12 @@ Server:
  # The socket to connect to if using local auth. Ensure rdpgw auth is configured to
  # use the same socket.
  AuthSocket: /tmp/rdpgw-auth.sock
- # disable TLS if termination happens somehwere else (e.g. a load balancer)
+ # The default option 'auto' uses a certificate file if provided and found otherwise
+ # it uses letsencrypt to obtain a certificate, the latter requires that the host is reachable
+ # from letsencrypt servers. If TLS termination happens somewhere else (e.g. a load balancer)
+ # set this option to 'disable'. This is mutually exclusive with 'authentication: local'
  # Note: rdp connections over a gateway require TLS
- DisableTLS: false
+ Tls: auto
  # TLS certificate files
  CertFile: server.pem
  KeyFile: key.pem
