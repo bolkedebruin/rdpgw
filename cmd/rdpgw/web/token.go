@@ -1,4 +1,4 @@
-package api
+package web
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"net/http"
 )
 
-func (c *Config) TokenInfo(w http.ResponseWriter, r *http.Request) {
+func TokenInfo(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Invalid request", http.StatusMethodNotAllowed)
 		return

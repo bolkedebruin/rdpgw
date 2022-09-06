@@ -1,4 +1,4 @@
-package api
+package web
 
 import (
 	"context"
@@ -27,12 +27,14 @@ func TestGetHost(t *testing.T) {
 		HostSelection: "roundrobin",
 		Hosts:         hosts,
 	}
+	h := c.NewHandler()
+
 	u := &url.URL{
 		Host: "example.com",
 	}
 	vals := u.Query()
 
-	host, err := c.getHost(ctx, u)
+	host, err := h.getHost(ctx, u)
 	if err != nil {
 		t.Fatalf("#{err}")
 	}
@@ -44,14 +46,16 @@ func TestGetHost(t *testing.T) {
 	c.HostSelection = "unsigned"
 	vals.Set("host", "in.valid.host")
 	u.RawQuery = vals.Encode()
-	host, err = c.getHost(ctx, u)
+	h = c.NewHandler()
+	host, err = h.getHost(ctx, u)
 	if err == nil {
 		t.Fatalf("Accepted host %s is not in hosts list", host)
 	}
 
 	vals.Set("host", hosts[0])
 	u.RawQuery = vals.Encode()
-	host, err = c.getHost(ctx, u)
+	h = c.NewHandler()
+	host, err = h.getHost(ctx, u)
 	if err != nil {
 		t.Fatalf("Not accepted host %s is in hosts list (err: %s)", hosts[0], err)
 	}
@@ -64,7 +68,8 @@ func TestGetHost(t *testing.T) {
 	test := "bla.bla.com"
 	vals.Set("host", test)
 	u.RawQuery = vals.Encode()
-	host, err = c.getHost(ctx, u)
+	h = c.NewHandler()
+	host, err = h.getHost(ctx, u)
 	if err != nil {
 		t.Fatalf("%s is not accepted", host)
 	}
@@ -83,7 +88,8 @@ func TestGetHost(t *testing.T) {
 	}
 	vals.Set("host", queryToken)
 	u.RawQuery = vals.Encode()
-	host, err = c.getHost(ctx, u)
+	h = c.NewHandler()
+	host, err = h.getHost(ctx, u)
 	if err != nil {
 		t.Fatalf("Not accepted host %s is in hosts list (err: %s)", hosts[0], err)
 	}

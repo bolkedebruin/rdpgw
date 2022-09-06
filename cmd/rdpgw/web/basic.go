@@ -1,4 +1,4 @@
-package api
+package web
 
 import (
 	"context"
@@ -15,13 +15,17 @@ const (
 	protocol = "unix"
 )
 
-func (c *Config) BasicAuth(next http.HandlerFunc) http.HandlerFunc {
+type BasicAuthHandler struct {
+	SocketAddress string
+}
+
+func (h *BasicAuthHandler) BasicAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		username, password, ok := r.BasicAuth()
 		if ok {
 			ctx := r.Context()
 
-			conn, err := grpc.Dial(c.SocketAddress, grpc.WithTransportCredentials(insecure.NewCredentials()),
+			conn, err := grpc.Dial(h.SocketAddress, grpc.WithTransportCredentials(insecure.NewCredentials()),
 				grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
 					return net.Dial(protocol, addr)
 				}))

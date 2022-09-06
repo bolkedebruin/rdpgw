@@ -4,12 +4,13 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/api"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/common"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/config"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/protocol"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/security"
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/web"
 	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/gorilla/sessions"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/thought-machine/go-flags"
 	"golang.org/x/crypto/acme/autocert"
@@ -27,17 +28,56 @@ var opts struct {
 
 var conf config.Configuration
 
+func initOIDC(callbackUrl *url.URL, store sessions.Store) *web.OIDC {
+	// set oidc config
+	provider, err := oidc.NewProvider(context.Background(), conf.OpenId.ProviderUrl)
+	if err != nil {
+		log.Fatalf("Cannot get oidc provider: %s", err)
+	}
+	oidcConfig := &oidc.Config{
+		ClientID: conf.OpenId.ClientId,
+	}
+	verifier := provider.Verifier(oidcConfig)
+
+	oauthConfig := oauth2.Config{
+		ClientID:     conf.OpenId.ClientId,
+		ClientSecret: conf.OpenId.ClientSecret,
+		RedirectURL:  callbackUrl.String(),
+		Endpoint:     provider.Endpoint(),
+		Scopes:       []string{oidc.ScopeOpenID, "profile", "email"},
+	}
+	security.OIDCProvider = provider
+	security.Oauth2Config = oauthConfig
+
+	o := web.OIDCConfig{
+		OAuth2Config:      &oauthConfig,
+		OIDCTokenVerifier: verifier,
+		SessionStore:      store,
+	}
+
+	return o.New()
+}
+
 func main() {
-	// get config
+	// load config
 	_, err := flags.Parse(&opts)
 	if err != nil {
 		panic(err)
 	}
 	conf = config.Load(opts.ConfigFile)
 
-	security.VerifyClientIP = conf.Security.VerifyClientIp
+	// set callback url and external advertised gateway address
+	url, err := url.Parse(conf.Server.GatewayAddress)
+	if err != nil {
+		log.Printf("Cannot parse server gateway address %s due to %s", url, err)
+	}
+	if url.Scheme == "" {
+		url.Scheme = "https"
+	}
+	url.Path = "callback"
 
-	// set security keys
+	// set security options
+	security.VerifyClientIP = conf.Security.VerifyClientIp
 	security.SigningKey = []byte(conf.Security.PAATokenSigningKey)
 	security.EncryptionKey = []byte(conf.Security.PAATokenEncryptionKey)
 	security.UserEncryptionKey = []byte(conf.Security.UserTokenEncryptionKey)
@@ -46,66 +86,39 @@ func main() {
 	security.HostSelection = conf.Server.HostSelection
 	security.Hosts = conf.Server.Hosts
 
-	// configure api
-	api := &api.Config{
-		QueryInfo:            security.QueryInfo,
-		QueryTokenIssuer:     conf.Security.QueryTokenIssuer,
-		EnableUserToken:      conf.Security.EnableUserToken,
+	// init session store
+	sessionConf := web.SessionManagerConf{
 		SessionKey:           []byte(conf.Server.SessionKey),
 		SessionEncryptionKey: []byte(conf.Server.SessionEncryptionKey),
-		SessionStore:         conf.Server.SessionStore,
-		Hosts:                conf.Server.Hosts,
-		HostSelection:        conf.Server.HostSelection,
-		NetworkAutoDetect:    conf.Client.NetworkAutoDetect,
-		UsernameTemplate:     conf.Client.UsernameTemplate,
-		BandwidthAutoDetect:  conf.Client.BandwidthAutoDetect,
-		ConnectionType:       conf.Client.ConnectionType,
-		SplitUserDomain:      conf.Client.SplitUserDomain,
-		DefaultDomain:        conf.Client.DefaultDomain,
-		SocketAddress:        conf.Server.AuthSocket,
-		Authentication:       conf.Server.Authentication,
+		StoreType:            conf.Server.SessionStore,
+	}
+	store := sessionConf.Init()
+
+	// configure web backend
+	w := &web.Config{
+		QueryInfo:        security.QueryInfo,
+		QueryTokenIssuer: conf.Security.QueryTokenIssuer,
+		EnableUserToken:  conf.Security.EnableUserToken,
+		SessionStore:     store,
+		Hosts:            conf.Server.Hosts,
+		HostSelection:    conf.Server.HostSelection,
+		RdpOpts: web.RdpOpts{
+			UsernameTemplate:    conf.Client.UsernameTemplate,
+			SplitUserDomain:     conf.Client.SplitUserDomain,
+			DefaultDomain:       conf.Client.DefaultDomain,
+			NetworkAutoDetect:   conf.Client.NetworkAutoDetect,
+			BandwidthAutoDetect: conf.Client.BandwidthAutoDetect,
+			ConnectionType:      conf.Client.ConnectionType,
+		},
 	}
 
 	if conf.Caps.TokenAuth {
-		api.PAATokenGenerator = security.GeneratePAAToken
+		w.PAATokenGenerator = security.GeneratePAAToken
 	}
 	if conf.Security.EnableUserToken {
-		api.UserTokenGenerator = security.GenerateUserToken
+		w.UserTokenGenerator = security.GenerateUserToken
 	}
-
-	// get callback url and external advertised gateway address
-	url, err := url.Parse(conf.Server.GatewayAddress)
-	if url.Scheme == "" {
-		url.Scheme = "https"
-	}
-	url.Path = "callback"
-
-	if conf.Server.Authentication == "openid" {
-		// set oidc config
-		provider, err := oidc.NewProvider(context.Background(), conf.OpenId.ProviderUrl)
-		if err != nil {
-			log.Fatalf("Cannot get oidc provider: %s", err)
-		}
-		oidcConfig := &oidc.Config{
-			ClientID: conf.OpenId.ClientId,
-		}
-		verifier := provider.Verifier(oidcConfig)
-
-		api.GatewayAddress = url
-
-		oauthConfig := oauth2.Config{
-			ClientID:     conf.OpenId.ClientId,
-			ClientSecret: conf.OpenId.ClientSecret,
-			RedirectURL:  url.String(),
-			Endpoint:     provider.Endpoint(),
-			Scopes:       []string{oidc.ScopeOpenID, "profile", "email"},
-		}
-		security.OIDCProvider = provider
-		security.Oauth2Config = oauthConfig
-		api.OAuth2Config = &oauthConfig
-		api.OIDCTokenVerifier = verifier
-	}
-	api.NewApi()
+	h := w.NewHandler()
 
 	log.Printf("Starting remote desktop gateway server")
 	cfg := &tls.Config{}
@@ -151,7 +164,7 @@ func main() {
 			cfg.GetCertificate = certMgr.GetCertificate
 
 			go func() {
-				http.ListenAndServe(":http", certMgr.HTTPHandler(nil))
+				http.ListenAndServe(":80", certMgr.HTTPHandler(nil))
 			}()
 		}
 	}
@@ -190,15 +203,17 @@ func main() {
 	}
 
 	if conf.Server.Authentication == "local" {
-		http.Handle("/remoteDesktopGateway/", common.EnrichContext(api.BasicAuth(gw.HandleGatewayProtocol)))
+		h := web.BasicAuthHandler{SocketAddress: conf.Server.AuthSocket}
+		http.Handle("/remoteDesktopGateway/", common.EnrichContext(h.BasicAuth(gw.HandleGatewayProtocol)))
 	} else {
 		// openid
-		http.Handle("/connect", common.EnrichContext(api.Authenticated(http.HandlerFunc(api.HandleDownload))))
+		oidc := initOIDC(url, store)
+		http.Handle("/connect", common.EnrichContext(oidc.Authenticated(http.HandlerFunc(h.HandleDownload))))
 		http.Handle("/remoteDesktopGateway/", common.EnrichContext(http.HandlerFunc(gw.HandleGatewayProtocol)))
-		http.HandleFunc("/callback", api.HandleCallback)
+		http.HandleFunc("/callback", oidc.HandleCallback)
 	}
 	http.Handle("/metrics", promhttp.Handler())
-	http.HandleFunc("/tokeninfo", api.TokenInfo)
+	http.HandleFunc("/tokeninfo", web.TokenInfo)
 
 	if conf.Server.Tls == "disabled" {
 		err = server.ListenAndServe()

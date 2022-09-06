@@ -31,7 +31,7 @@ type ServerConfig struct {
 	SessionStore         string   `koanf:"sessionstore"`
 	SendBuf              int      `koanf:"sendbuf"`
 	ReceiveBuf           int      `koanf:"receivebuf"`
-	Tls                  string   `koanf:"disabletls"`
+	Tls                  string   `koanf:"tls"`
 	Authentication       string   `koanf:"authentication"`
 	AuthSocket           string   `koanf:"authsocket"`
 }
