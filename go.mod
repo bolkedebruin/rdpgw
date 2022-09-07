@@ -4,6 +4,7 @@ go 1.19
 
 require (
 	github.com/coreos/go-oidc/v3 v3.2.0
+	github.com/fatih/structs v1.1.0
 	github.com/go-jose/go-jose/v3 v3.0.0
 	github.com/gorilla/sessions v1.2.1
 	github.com/gorilla/websocket v1.5.0

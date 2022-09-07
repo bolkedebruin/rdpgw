@@ -10,7 +10,6 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -197,19 +196,18 @@ func (h *Handler) HandleDownload(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", "attachment; filename="+fn)
 	w.Header().Set("Content-Type", "application/x-rdp")
 
-	data := "full address:s:" + host + "\r\n" +
-		"gatewayhostname:s:" + h.gatewayAddress.Host + "\r\n" +
-		"gatewaycredentialssource:i:5\r\n" +
-		"gatewayusagemethod:i:1\r\n" +
-		"gatewayprofileusagemethod:i:1\r\n" +
-		"gatewayaccesstoken:s:" + token + "\r\n" +
-		"networkautodetect:i:" + strconv.Itoa(opts.NetworkAutoDetect) + "\r\n" +
-		"bandwidthautodetect:i:" + strconv.Itoa(opts.BandwidthAutoDetect) + "\r\n" +
-		"connection type:i:" + strconv.Itoa(opts.ConnectionType) + "\r\n" +
-		"username:s:" + render + "\r\n" +
-		"domain:s:" + domain + "\r\n" +
-		"bitmapcachesize:i:32000\r\n" +
-		"smart sizing:i:1\r\n"
-
-	http.ServeContent(w, r, fn, time.Now(), strings.NewReader(data))
+	rdp := NewRdp()
+	rdp.Connection.Username = render
+	rdp.Connection.Domain = domain
+	rdp.Connection.FullAddress = host
+	rdp.Connection.GatewayHostname = h.gatewayAddress.Host
+	rdp.Connection.GatewayCredentialSource = SourceCookie
+	rdp.Connection.GatewayAccessToken = token
+	rdp.Session.NetworkAutodetect = opts.NetworkAutoDetect != 0
+	rdp.Session.BandwidthAutodetect = opts.BandwidthAutoDetect != 0
+	rdp.Session.ConnectionType = opts.ConnectionType
+	rdp.Display.SmartSizing = true
+	rdp.Display.BitmapCacheSize = 32000
+	
+	http.ServeContent(w, r, fn, time.Now(), strings.NewReader(rdp.String()))
 }
