@@ -17,6 +17,7 @@ const (
 	SourceNTLM int = iota
 	SourceSmartCard
 	SourceCurrent
+	SourceBasic
 	SourceUserSelect
 	SourceCookie
 )
