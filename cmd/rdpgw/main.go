@@ -110,6 +110,7 @@ func main() {
 			BandwidthAutoDetect: conf.Client.BandwidthAutoDetect,
 			ConnectionType:      conf.Client.ConnectionType,
 		},
+		GatewayAddress: url,
 	}
 
 	if conf.Caps.TokenAuth {
