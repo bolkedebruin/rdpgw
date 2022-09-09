@@ -124,7 +124,7 @@ func main() {
 	log.Printf("Starting remote desktop gateway server")
 	cfg := &tls.Config{}
 
-	if conf.Server.Tls == "disable" {
+	if conf.Server.Tls == config.TlsDisable {
 		log.Printf("TLS disabled - rdp gw connections require tls, make sure to have a terminator")
 	} else {
 		// auto config
@@ -203,7 +203,7 @@ func main() {
 		ServerConf: &gwConfig,
 	}
 
-	if conf.Server.Authentication == "local" {
+	if conf.Server.Authentication == config.AuthenticationBasic {
 		h := web.BasicAuthHandler{SocketAddress: conf.Server.AuthSocket}
 		http.Handle("/remoteDesktopGateway/", common.EnrichContext(h.BasicAuth(gw.HandleGatewayProtocol)))
 	} else {
@@ -216,7 +216,7 @@ func main() {
 	http.Handle("/metrics", promhttp.Handler())
 	http.HandleFunc("/tokeninfo", web.TokenInfo)
 
-	if conf.Server.Tls == "disabled" {
+	if conf.Server.Tls == config.TlsDisable {
 		err = server.ListenAndServe()
 	} else {
 		err = server.ListenAndServeTLS("", "")

@@ -11,6 +11,20 @@ import (
 	"strings"
 )
 
+const (
+	TlsDisable = "disable"
+	TlsAuto    = "auto"
+
+	HostSelectionSigned     = "signed"
+	HostSelectionRoundRobin = "roundrobin"
+
+	SessionStoreCookie = "cookie"
+	SessionStoreFile   = "file"
+
+	AuthenticationOpenId = "openid"
+	AuthenticationBasic  = "local"
+)
+
 type Configuration struct {
 	Server   ServerConfig   `koanf:"server"`
 	OpenId   OpenIDConfig   `koanf:"openid"`
