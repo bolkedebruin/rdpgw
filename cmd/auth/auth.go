@@ -58,6 +58,12 @@ func (s *AuthServiceImpl) Authenticate(ctx context.Context, message *auth.UserPa
 		return r, nil
 	}
 
+	if err = t.AcctMgmt(0); err != nil {
+		log.Printf("Account authorization for user: %s failed due to %s", message.Username, err)
+		r.Error = err.Error()
+		return r, nil
+	}
+
 	log.Printf("User: %s authenticated", message.Username)
 	r.Authenticated = true
 	return r, nil
