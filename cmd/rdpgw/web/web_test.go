@@ -3,8 +3,16 @@ package web
 import (
 	"context"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/security"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
+)
+
+const (
+	testuser = "test_user"
+	gateway  = "https://my.gateway.com:993"
 )
 
 var (
@@ -96,4 +104,80 @@ func TestGetHost(t *testing.T) {
 	if host != hosts[0] {
 		t.Fatalf("%s does not equal %s", host, hosts[0])
 	}
+}
+
+func TestHandler_HandleDownload(t *testing.T) {
+	req, err := http.NewRequest("GET", "/connect", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rr := httptest.NewRecorder()
+	ctx := req.Context()
+	ctx = context.WithValue(ctx, "preferred_username", testuser)
+	req = req.WithContext(ctx)
+
+	u, _ := url.Parse(gateway)
+	c := Config{
+		HostSelection:     "roundrobin",
+		Hosts:             hosts,
+		PAATokenGenerator: paaTokenMock,
+		GatewayAddress:    u,
+		RdpOpts:           RdpOpts{SplitUserDomain: true},
+	}
+	h := c.NewHandler()
+
+	hh := http.HandlerFunc(h.HandleDownload)
+	hh.ServeHTTP(rr, req)
+
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("handler returned wrong status code: got %v want %v",
+			status, http.StatusOK)
+	}
+
+	if ctype := rr.Header().Get("Content-Type"); ctype != "application/x-rdp" {
+		t.Errorf("content type header does not match: got %v want %v",
+			ctype, "application/json")
+	}
+
+	if cdisp := rr.Header().Get("Content-Disposition"); cdisp == "" {
+		t.Errorf("content disposition is nil")
+	}
+
+	data := rdpToMap(strings.Split(rr.Body.String(), crlf))
+	if data["username"] != testuser {
+		t.Errorf("username key in rdp does not match: got %v want %v", data["username"], testuser)
+	}
+
+	if data["gatewayhostname"] != u.Host {
+		t.Errorf("gatewayhostname key in rdp does not match: got %v want %v", data["gatewayhostname"], u.Host)
+	}
+
+	if token, _ := paaTokenMock(ctx, testuser, data["full address"]); token != data["gatewayaccesstoken"] {
+		t.Errorf("gatewayaccesstoken key in rdp does not match username_full address: got %v want %v",
+			data["gatewayaccesstoken"], token)
+	}
+
+	if !contains(data["full address"], hosts) {
+		t.Errorf("full address key in rdp is not in allowed hosts list: go %v want in %v",
+			data["full address"], hosts)
+	}
+
+}
+
+func paaTokenMock(ctx context.Context, username string, host string) (string, error) {
+	return username + "_" + host, nil
+}
+
+func rdpToMap(rdp []string) map[string]string {
+	ret := make(map[string]string)
+
+	for s := range rdp {
+		d := strings.SplitN(rdp[s], ":", 3)
+		if len(d) >= 2 {
+			ret[d[0]] = d[2]
+		}
+	}
+
+	return ret
 }
