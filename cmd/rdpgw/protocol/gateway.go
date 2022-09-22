@@ -46,7 +46,7 @@ var (
 )
 
 type Gateway struct {
-	ServerConf *ServerConf
+	ServerConf *ProcessorConf
 }
 
 var upgrader = websocket.Upgrader{}
@@ -164,7 +164,9 @@ func (g *Gateway) handleWebsocketProtocol(ctx context.Context, c *websocket.Conn
 
 	s.TransportOut = inout
 	s.TransportIn = inout
-	handler := NewServer(s, g.ServerConf)
+	handler := NewProcessor(s, g.ServerConf)
+	RegisterConnection(s.ConnId, handler, s)
+	defer CloseConnection(s.ConnId)
 	handler.Process(ctx)
 }
 
@@ -208,7 +210,9 @@ func (g *Gateway) handleLegacyProtocol(w http.ResponseWriter, r *http.Request, s
 			in.Drain()
 
 			log.Printf("Legacy handshakeRequest done for client %s", common.GetClientIp(r.Context()))
-			handler := NewServer(s, g.ServerConf)
+			handler := NewProcessor(s, g.ServerConf)
+			RegisterConnection(s.ConnId, handler, s)
+			defer CloseConnection(s.ConnId)
 			handler.Process(r.Context())
 		}
 	}

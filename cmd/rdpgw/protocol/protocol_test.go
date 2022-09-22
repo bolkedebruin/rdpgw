@@ -14,8 +14,8 @@ const (
 	TunnelCreateResponseLen = HeaderLen + 18
 	TunnelAuthLen           = HeaderLen + 2 // + dynamic
 	TunnelAuthResponseLen   = HeaderLen + 16
-	ChannelCreateLen		= HeaderLen + 8 // + dynamic
-	ChannelResponseLen		= HeaderLen + 12
+	ChannelCreateLen        = HeaderLen + 8 // + dynamic
+	ChannelResponseLen      = HeaderLen + 12
 )
 
 func verifyPacketHeader(data []byte, expPt uint16, expSize uint32) (uint16, uint32, []byte, error) {
@@ -41,10 +41,10 @@ func TestHandshake(t *testing.T) {
 		PAAToken: "abab",
 	}
 	s := &SessionInfo{}
-	hc := &ServerConf{
+	hc := &ProcessorConf{
 		TokenAuth: true,
 	}
-	h := NewServer(s, hc)
+	h := NewProcessor(s, hc)
 
 	data := client.handshakeRequest()
 
@@ -79,7 +79,7 @@ func TestHandshake(t *testing.T) {
 	}
 }
 
-func capsHelper(h Server) uint16 {
+func capsHelper(h Processor) uint16 {
 	var caps uint16
 	if h.TokenAuth {
 		caps = caps | HTTP_EXTENDED_AUTH_PAA
@@ -92,12 +92,12 @@ func capsHelper(h Server) uint16 {
 
 func TestMatchAuth(t *testing.T) {
 	s := &SessionInfo{}
-	hc := &ServerConf{
-		TokenAuth: false,
+	hc := &ProcessorConf{
+		TokenAuth:     false,
 		SmartCardAuth: false,
 	}
 
-	h:= NewServer(s, hc)
+	h := NewProcessor(s, hc)
 
 	in := uint16(0)
 	caps, err := h.matchAuth(in)
@@ -136,10 +136,10 @@ func TestTunnelCreation(t *testing.T) {
 		PAAToken: "abab",
 	}
 	s := &SessionInfo{}
-	hc := &ServerConf{
+	hc := &ProcessorConf{
 		TokenAuth: true,
 	}
-	h := NewServer(s, hc)
+	h := NewProcessor(s, hc)
 
 	data := client.tunnelRequest()
 	_, _, pkt, err := verifyPacketHeader(data, PKT_TYPE_TUNNEL_CREATE,
@@ -180,14 +180,14 @@ func TestTunnelAuth(t *testing.T) {
 		Name: name,
 	}
 	s := &SessionInfo{}
-	hc := &ServerConf{
+	hc := &ProcessorConf{
 		TokenAuth:   true,
 		IdleTimeout: 10,
 		RedirectFlags: RedirectFlags{
 			Clipboard: true,
 		},
 	}
-	h := NewServer(s, hc)
+	h := NewProcessor(s, hc)
 
 	data := client.tunnelAuthRequest()
 	_, _, pkt, err := verifyPacketHeader(data, PKT_TYPE_TUNNEL_AUTH, uint32(TunnelAuthLen+len(name)*2))
@@ -223,17 +223,17 @@ func TestChannelCreation(t *testing.T) {
 	server := "test_server"
 	client := ClientConfig{
 		Server: server,
-		Port: 3389,
+		Port:   3389,
 	}
 	s := &SessionInfo{}
-	hc := &ServerConf{
+	hc := &ProcessorConf{
 		TokenAuth:   true,
 		IdleTimeout: 10,
 		RedirectFlags: RedirectFlags{
 			Clipboard: true,
 		},
 	}
-	h := NewServer(s, hc)
+	h := NewProcessor(s, hc)
 
 	data := client.channelRequest()
 	_, _, pkt, err := verifyPacketHeader(data, PKT_TYPE_CHANNEL_CREATE, uint32(ChannelCreateLen+len(server)*2))

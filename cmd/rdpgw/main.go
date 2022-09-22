@@ -177,7 +177,7 @@ func main() {
 	}
 
 	// create the gateway
-	gwConfig := protocol.ServerConf{
+	gwConfig := protocol.ProcessorConf{
 		IdleTimeout:   conf.Caps.IdleTimeout,
 		TokenAuth:     conf.Caps.TokenAuth,
 		SmartCardAuth: conf.Caps.SmartCardAuth,
@@ -202,6 +202,7 @@ func main() {
 	gw := protocol.Gateway{
 		ServerConf: &gwConfig,
 	}
+	gwserver = &gw
 
 	if conf.Server.Authentication == config.AuthenticationBasic {
 		h := web.BasicAuthHandler{SocketAddress: conf.Server.AuthSocket}
@@ -215,6 +216,7 @@ func main() {
 	}
 	http.Handle("/metrics", promhttp.Handler())
 	http.HandleFunc("/tokeninfo", web.TokenInfo)
+	http.HandleFunc("/list", List)
 
 	if conf.Server.Tls == config.TlsDisable {
 		err = server.ListenAndServe()
@@ -223,5 +225,14 @@ func main() {
 	}
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
+	}
+}
+
+var gwserver *protocol.Gateway
+
+func List(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain")
+	for k, v := range protocol.Connections {
+		fmt.Fprintf(w, "ConnId: %s Connected Since: %s User: %s \n", k, v.Since, v.SessionInfo.UserName)
 	}
 }
