@@ -27,10 +27,10 @@ type ClientConfig struct {
 }
 
 func (c *ClientConfig) ConnectAndForward() error {
-	c.Session.TransportOut.WritePacket(c.handshakeRequest())
+	c.Session.transportOut.WritePacket(c.handshakeRequest())
 
 	for {
-		pt, sz, pkt, err := readMessage(c.Session.TransportIn)
+		pt, sz, pkt, err := readMessage(c.Session.transportIn)
 		if err != nil {
 			log.Printf("Cannot read message from stream %s", err)
 			return err
@@ -44,7 +44,7 @@ func (c *ClientConfig) ConnectAndForward() error {
 				return err
 			}
 			log.Printf("Handshake response received. Caps: %d", caps)
-			c.Session.TransportOut.WritePacket(c.tunnelRequest())
+			c.Session.transportOut.WritePacket(c.tunnelRequest())
 		case PKT_TYPE_TUNNEL_RESPONSE:
 			tid, caps, err := c.tunnelResponse(pkt)
 			if err != nil {
@@ -52,7 +52,7 @@ func (c *ClientConfig) ConnectAndForward() error {
 				return err
 			}
 			log.Printf("Tunnel creation succesful. Tunnel id: %d and caps %d", tid, caps)
-			c.Session.TransportOut.WritePacket(c.tunnelAuthRequest())
+			c.Session.transportOut.WritePacket(c.tunnelAuthRequest())
 		case PKT_TYPE_TUNNEL_AUTH_RESPONSE:
 			flags, timeout, err := c.tunnelAuthResponse(pkt)
 			if err != nil {
@@ -60,7 +60,7 @@ func (c *ClientConfig) ConnectAndForward() error {
 				return err
 			}
 			log.Printf("Tunnel auth succesful. Flags: %d and timeout %d", flags, timeout)
-			c.Session.TransportOut.WritePacket(c.channelRequest())
+			c.Session.transportOut.WritePacket(c.channelRequest())
 		case PKT_TYPE_CHANNEL_RESPONSE:
 			cid, err := c.channelResponse(pkt)
 			if err != nil {
@@ -71,7 +71,7 @@ func (c *ClientConfig) ConnectAndForward() error {
 				log.Printf("Channel id (%d) is smaller than 1. This doesnt work for Windows clients", cid)
 			}
 			log.Printf("Channel creation succesful. Channel id: %d", cid)
-			//go forward(c.LocalConn, c.Session.TransportOut)
+			//go forward(c.LocalConn, c.Session.transportOut)
 		case PKT_TYPE_DATA:
 			receive(pkt, c.LocalConn)
 		default:

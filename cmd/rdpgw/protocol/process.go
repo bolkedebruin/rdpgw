@@ -159,7 +159,7 @@ func (p *Processor) Process(ctx context.Context) error {
 			}
 
 			// avoid concurrency issues
-			// p.TransportIn.Write(createPacket(PKT_TYPE_KEEPALIVE, []byte{}))
+			// p.transportIn.Write(createPacket(PKT_TYPE_KEEPALIVE, []byte{}))
 		case PKT_TYPE_CLOSE_CHANNEL:
 			log.Printf("Close channel")
 			if p.state != SERVER_STATE_OPENED {
@@ -168,8 +168,8 @@ func (p *Processor) Process(ctx context.Context) error {
 			}
 			msg := p.channelCloseResponse(ERROR_SUCCESS)
 			p.tunnel.Write(msg)
-			//p.tunnel.TransportIn.Close()
-			//p.tunnel.TransportOut.Close()
+			//p.tunnel.transportIn.Close()
+			//p.tunnel.transportOut.Close()
 			p.state = SERVER_STATE_CLOSED
 			return nil
 		default:

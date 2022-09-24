@@ -10,8 +10,6 @@ import (
 var (
 	info = protocol.Tunnel{
 		RDGId:        "myid",
-		TransportIn:  nil,
-		TransportOut: nil,
 		TargetServer: "my.remote.server",
 		RemoteAddr:   "10.0.0.1",
 		UserName:     "Frank",

@@ -165,8 +165,8 @@ func (g *Gateway) handleWebsocketProtocol(ctx context.Context, c *websocket.Conn
 	defer inout.Close()
 
 	t.Id = uuid.New().String()
-	t.TransportOut = inout
-	t.TransportIn = inout
+	t.transportOut = inout
+	t.transportIn = inout
 	t.ConnectedOn = time.Now()
 
 	handler := NewProcessor(g, t)
@@ -179,17 +179,17 @@ func (g *Gateway) handleWebsocketProtocol(ctx context.Context, c *websocket.Conn
 // and RDG_OUT_DATA for server -> client data. The handshakeRequest procedure is a bit different
 // to ensure the connections do not get cached or terminated by a proxy prematurely.
 func (g *Gateway) handleLegacyProtocol(w http.ResponseWriter, r *http.Request, t *Tunnel) {
-	log.Printf("Session %t, %t, %t", t.RDGId, t.TransportOut != nil, t.TransportIn != nil)
+	log.Printf("Session %s, %t, %t", t.RDGId, t.transportOut != nil, t.transportIn != nil)
 
 	if r.Method == MethodRDGOUT {
 		out, err := transport.NewLegacy(w)
 		if err != nil {
-			log.Printf("cannot hijack connection to support RDG OUT data channel: %t", err)
+			log.Printf("cannot hijack connection to support RDG OUT data channel: %s", err)
 			return
 		}
-		log.Printf("Opening RDGOUT for client %t", common.GetClientIp(r.Context()))
+		log.Printf("Opening RDGOUT for client %s", common.GetClientIp(r.Context()))
 
-		t.TransportOut = out
+		t.transportOut = out
 		out.SendAccept(true)
 
 		c.Set(t.RDGId, t, cache.DefaultExpiration)
@@ -199,23 +199,23 @@ func (g *Gateway) handleLegacyProtocol(w http.ResponseWriter, r *http.Request, t
 
 		in, err := transport.NewLegacy(w)
 		if err != nil {
-			log.Printf("cannot hijack connection to support RDG IN data channel: %t", err)
+			log.Printf("cannot hijack connection to support RDG IN data channel: %s", err)
 			return
 		}
 		defer in.Close()
 
-		if t.TransportIn == nil {
+		if t.transportIn == nil {
 			t.Id = uuid.New().String()
-			t.TransportIn = in
+			t.transportIn = in
 			c.Set(t.RDGId, t, cache.DefaultExpiration)
 
-			log.Printf("Opening RDGIN for client %t", common.GetClientIp(r.Context()))
+			log.Printf("Opening RDGIN for client %s", common.GetClientIp(r.Context()))
 			in.SendAccept(false)
 
 			// read some initial data
 			in.Drain()
 
-			log.Printf("Legacy handshakeRequest done for client %t", common.GetClientIp(r.Context()))
+			log.Printf("Legacy handshakeRequest done for client %s", common.GetClientIp(r.Context()))
 			handler := NewProcessor(g, t)
 			RegisterTunnel(t, handler)
 			defer RemoveTunnel(t)

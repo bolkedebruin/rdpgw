@@ -289,7 +289,7 @@ func GenerateQueryToken(ctx context.Context, query string, issuer string) (strin
 }
 
 func getTunnel(ctx context.Context) *protocol.Tunnel {
-	s, ok := ctx.Value("Tunnel").(*protocol.Tunnel)
+	s, ok := ctx.Value(common.TunnelCtx).(*protocol.Tunnel)
 	if !ok {
 		log.Printf("cannot get session info from context")
 		return nil
