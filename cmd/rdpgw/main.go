@@ -177,10 +177,7 @@ func main() {
 	}
 
 	// create the gateway
-	gwConfig := protocol.ProcessorConf{
-		IdleTimeout:   conf.Caps.IdleTimeout,
-		TokenAuth:     conf.Caps.TokenAuth,
-		SmartCardAuth: conf.Caps.SmartCardAuth,
+	gw := protocol.Gateway{
 		RedirectFlags: protocol.RedirectFlags{
 			Clipboard:  conf.Caps.EnableClipboard,
 			Drive:      conf.Caps.EnableDrive,
@@ -190,17 +187,18 @@ func main() {
 			DisableAll: conf.Caps.DisableRedirect,
 			EnableAll:  conf.Caps.RedirectAll,
 		},
-		SendBuf:    conf.Server.SendBuf,
-		ReceiveBuf: conf.Server.ReceiveBuf,
+		IdleTimeout:   conf.Caps.IdleTimeout,
+		SmartCardAuth: conf.Caps.SmartCardAuth,
+		TokenAuth:     conf.Caps.TokenAuth,
+		ReceiveBuf:    conf.Server.ReceiveBuf,
+		SendBuf:       conf.Server.SendBuf,
 	}
+
 	if conf.Caps.TokenAuth {
-		gwConfig.VerifyTunnelCreate = security.VerifyPAAToken
-		gwConfig.VerifyServerFunc = security.CheckSession(security.CheckHost)
+		gw.CheckPAACookie = security.CheckPAACookie
+		gw.CheckHost = security.CheckSession(security.CheckHost)
 	} else {
-		gwConfig.VerifyServerFunc = security.CheckHost
-	}
-	gw := protocol.Gateway{
-		ServerConf: &gwConfig,
+		gw.CheckHost = security.CheckHost
 	}
 	gwserver = &gw
 
@@ -233,6 +231,6 @@ var gwserver *protocol.Gateway
 func List(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain")
 	for k, v := range protocol.Connections {
-		fmt.Fprintf(w, "ConnId: %s Connected Since: %s User: %s \n", k, v.Since, v.SessionInfo.UserName)
+		fmt.Fprintf(w, "RDGId: %s Connected Since: %s User: %s \n", k, v.Since, v.SessionInfo.UserName)
 	}
 }

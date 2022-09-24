@@ -33,28 +33,28 @@ type customClaims struct {
 	AccessToken  string `json:"accessToken"`
 }
 
-func CheckSession(next protocol.VerifyServerFunc) protocol.VerifyServerFunc {
+func CheckSession(next protocol.CheckHostFunc) protocol.CheckHostFunc {
 	return func(ctx context.Context, host string) (bool, error) {
 		s := getSessionInfo(ctx)
 		if s == nil {
 			return false, errors.New("no valid session info found in context")
 		}
 
-		if s.RemoteServer != host {
-			log.Printf("Client specified host %s does not match token host %s", host, s.RemoteServer)
+		if s.TargetServer != host {
+			log.Printf("Client specified host %s does not match token host %s", host, s.TargetServer)
 			return false, nil
 		}
 
-		if VerifyClientIP && s.ClientIp != common.GetClientIp(ctx) {
+		if VerifyClientIP && s.RemoteAddr != common.GetClientIp(ctx) {
 			log.Printf("Current client ip address %s does not match token client ip %s",
-				common.GetClientIp(ctx), s.ClientIp)
+				common.GetClientIp(ctx), s.RemoteAddr)
 			return false, nil
 		}
 		return next(ctx, host)
 	}
 }
 
-func VerifyPAAToken(ctx context.Context, tokenString string) (bool, error) {
+func CheckPAACookie(ctx context.Context, tokenString string) (bool, error) {
 	if tokenString == "" {
 		log.Printf("no token to parse")
 		return false, errors.New("no token to parse")
@@ -104,8 +104,8 @@ func VerifyPAAToken(ctx context.Context, tokenString string) (bool, error) {
 
 	s := getSessionInfo(ctx)
 
-	s.RemoteServer = custom.RemoteServer
-	s.ClientIp = custom.ClientIP
+	s.TargetServer = custom.RemoteServer
+	s.RemoteAddr = custom.ClientIP
 	s.UserName = user.Subject
 
 	return true, nil
@@ -288,8 +288,8 @@ func GenerateQueryToken(ctx context.Context, query string, issuer string) (strin
 	return token, err
 }
 
-func getSessionInfo(ctx context.Context) *protocol.SessionInfo {
-	s, ok := ctx.Value("SessionInfo").(*protocol.SessionInfo)
+func getSessionInfo(ctx context.Context) *protocol.Tunnel {
+	s, ok := ctx.Value("Tunnel").(*protocol.Tunnel)
 	if !ok {
 		log.Printf("cannot get session info from context")
 		return nil

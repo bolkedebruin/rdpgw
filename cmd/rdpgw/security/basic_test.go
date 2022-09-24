@@ -7,12 +7,12 @@ import (
 )
 
 var (
-	info = protocol.SessionInfo{
-		ConnId:       "myid",
+	info = protocol.Tunnel{
+		RDGId:        "myid",
 		TransportIn:  nil,
 		TransportOut: nil,
-		RemoteServer: "my.remote.server",
-		ClientIp:     "10.0.0.1",
+		TargetServer: "my.remote.server",
+		RemoteAddr:   "10.0.0.1",
 		UserName:     "Frank",
 	}
 
@@ -20,7 +20,7 @@ var (
 )
 
 func TestCheckHost(t *testing.T) {
-	ctx := context.WithValue(context.Background(), "SessionInfo", &info)
+	ctx := context.WithValue(context.Background(), "Tunnel", &info)
 
 	Hosts = hosts
 

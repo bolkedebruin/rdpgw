@@ -19,7 +19,7 @@ type ClientConfig struct {
 	SmartCardAuth bool
 	PAAToken      string
 	NTLMAuth      bool
-	Session       *SessionInfo
+	Session       *Tunnel
 	LocalConn     net.Conn
 	Server        string
 	Port          int

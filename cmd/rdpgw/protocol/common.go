@@ -22,23 +22,6 @@ type RedirectFlags struct {
 	EnableAll  bool
 }
 
-type SessionInfo struct {
-	// The connection-id (RDG-ConnID) as reported by the client
-	ConnId string
-	// The underlying incoming transport being either websocket or legacy http
-	// in case of websocket TransportOut will equal TransportIn
-	TransportIn transport.Transport
-	// The underlying outgoing transport being either websocket or legacy http
-	// in case of websocket TransportOut will equal TransportOut
-	TransportOut transport.Transport
-	// The remote desktop server (rdp, vnc etc) the clients intends to connect to
-	RemoteServer string
-	// The obtained client ip address
-	ClientIp string
-	// User
-	UserName string
-}
-
 // readMessage parses and defragments a packet from a Transport. It returns
 // at most the bytes that have been reported by the packet
 func readMessage(in transport.Transport) (pt int, n int, msg []byte, err error) {

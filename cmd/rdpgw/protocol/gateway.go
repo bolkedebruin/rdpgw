@@ -7,7 +7,6 @@ import (
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/transport"
 	"github.com/gorilla/websocket"
 	"github.com/patrickmn/go-cache"
-	"github.com/prometheus/client_golang/prometheus"
 	"log"
 	"net"
 	"net/http"
@@ -17,91 +16,88 @@ import (
 )
 
 const (
-	rdgConnectionIdKey = "Rdg-Connection-Id"
+	rdgConnectionIdKey = "Rdg-Connection-RDGId"
 	MethodRDGIN        = "RDG_IN_DATA"
 	MethodRDGOUT       = "RDG_OUT_DATA"
 )
 
-var (
-	connectionCache = prometheus.NewGauge(
-		prometheus.GaugeOpts{
-			Namespace: "rdpgw",
-			Name:      "connection_cache",
-			Help:      "The amount of connections in the cache",
-		})
-
-	websocketConnections = prometheus.NewGauge(
-		prometheus.GaugeOpts{
-			Namespace: "rdpgw",
-			Name:      "websocket_connections",
-			Help:      "The count of websocket connections",
-		})
-
-	legacyConnections = prometheus.NewGauge(
-		prometheus.GaugeOpts{
-			Namespace: "rdpgw",
-			Name:      "legacy_connections",
-			Help:      "The count of legacy https connections",
-		})
-)
+type CheckPAACookieFunc func(context.Context, string) (bool, error)
+type CheckClientNameFunc func(context.Context, string) (bool, error)
+type CheckHostFunc func(context.Context, string) (bool, error)
 
 type Gateway struct {
-	ServerConf *ProcessorConf
+	// CheckPAACookie verifies if the PAA cookie sent by the client is valid
+	CheckPAACookie CheckPAACookieFunc
+
+	// CheckClientName verifies if the client name is allowed to connect
+	CheckClientName CheckClientNameFunc
+
+	// CheckHost verifies if the client is allowed to connect to the remote host
+	CheckHost CheckHostFunc
+
+	// RedirectFlags sets what devices the client is allowed to redirect to the remote host
+	RedirectFlags RedirectFlags
+
+	// IdleTimeOut is used to determine when to disconnect clients that have been idle
+	IdleTimeout int
+
+	// SmartCardAuth sets whether to use smart card based authentication
+	SmartCardAuth bool
+
+	// TokenAuth sets whether to use token/cookie based authentication
+	TokenAuth bool
+
+	ReceiveBuf int
+	SendBuf    int
 }
 
 var upgrader = websocket.Upgrader{}
 var c = cache.New(5*time.Minute, 10*time.Minute)
 
-func init() {
-	prometheus.MustRegister(connectionCache)
-	prometheus.MustRegister(legacyConnections)
-	prometheus.MustRegister(websocketConnections)
-}
-
 func (g *Gateway) HandleGatewayProtocol(w http.ResponseWriter, r *http.Request) {
 	connectionCache.Set(float64(c.ItemCount()))
 
-	var s *SessionInfo
+	var t *Tunnel
 
 	connId := r.Header.Get(rdgConnectionIdKey)
 	x, found := c.Get(connId)
 	if !found {
-		s = &SessionInfo{ConnId: connId}
+		t = &Tunnel{RDGId: connId}
 	} else {
-		s = x.(*SessionInfo)
+		t = x.(*Tunnel)
 	}
-	ctx := context.WithValue(r.Context(), "SessionInfo", s)
+	ctx := context.WithValue(r.Context(), "Tunnel", t)
 
 	if r.Method == MethodRDGOUT {
 		if r.Header.Get("Connection") != "upgrade" && r.Header.Get("Upgrade") != "websocket" {
-			g.handleLegacyProtocol(w, r.WithContext(ctx), s)
+			g.handleLegacyProtocol(w, r.WithContext(ctx), t)
 			return
 		}
 		r.Method = "GET" // force
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
-			log.Printf("Cannot upgrade falling back to old protocol: %s", err)
+			log.Printf("Cannot upgrade falling back to old protocol: %t", err)
 			return
 		}
 		defer conn.Close()
 
 		err = g.setSendReceiveBuffers(conn.UnderlyingConn())
 		if err != nil {
-			log.Printf("Cannot set send/receive buffers: %s", err)
+			log.Printf("Cannot set send/receive buffers: %t", err)
 		}
 
-		g.handleWebsocketProtocol(ctx, conn, s)
+		g.handleWebsocketProtocol(ctx, conn, t)
 	} else if r.Method == MethodRDGIN {
-		g.handleLegacyProtocol(w, r.WithContext(ctx), s)
+		g.handleLegacyProtocol(w, r.WithContext(ctx), t)
 	}
 }
 
 func (g *Gateway) setSendReceiveBuffers(conn net.Conn) error {
-	if g.ServerConf.SendBuf < 1 && g.ServerConf.ReceiveBuf < 1 {
+	if g.SendBuf < 1 && g.ReceiveBuf < 1 {
 		return nil
 	}
 
-	// conn == tls.Conn
+	// conn == tls.Tunnel
 	ptr := reflect.ValueOf(conn)
 	val := reflect.Indirect(ptr)
 
@@ -109,7 +105,7 @@ func (g *Gateway) setSendReceiveBuffers(conn net.Conn) error {
 		return errors.New("didn't get a struct from conn")
 	}
 
-	// this gets net.Conn -> *net.TCPConn -> net.TCPConn
+	// this gets net.Tunnel -> *net.TCPConn -> net.TCPConn
 	ptrConn := val.FieldByName("conn")
 	valConn := reflect.Indirect(ptrConn)
 	if !valConn.IsValid() {
@@ -138,15 +134,15 @@ func (g *Gateway) setSendReceiveBuffers(conn net.Conn) error {
 	}
 	fd := int(ptrSysFd.Int())
 
-	if g.ServerConf.ReceiveBuf > 0 {
-		err := syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_RCVBUF, g.ServerConf.ReceiveBuf)
+	if g.ReceiveBuf > 0 {
+		err := syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_RCVBUF, g.ReceiveBuf)
 		if err != nil {
 			return wrapSyscallError("setsockopt", err)
 		}
 	}
 
-	if g.ServerConf.SendBuf > 0 {
-		err := syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_SNDBUF, g.ServerConf.SendBuf)
+	if g.SendBuf > 0 {
+		err := syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_SNDBUF, g.SendBuf)
 		if err != nil {
 			return wrapSyscallError("setsockopt", err)
 		}
@@ -155,64 +151,66 @@ func (g *Gateway) setSendReceiveBuffers(conn net.Conn) error {
 	return nil
 }
 
-func (g *Gateway) handleWebsocketProtocol(ctx context.Context, c *websocket.Conn, s *SessionInfo) {
+func (g *Gateway) handleWebsocketProtocol(ctx context.Context, c *websocket.Conn, t *Tunnel) {
 	websocketConnections.Inc()
 	defer websocketConnections.Dec()
 
 	inout, _ := transport.NewWS(c)
 	defer inout.Close()
 
-	s.TransportOut = inout
-	s.TransportIn = inout
-	handler := NewProcessor(s, g.ServerConf)
-	RegisterConnection(s.ConnId, handler, s)
-	defer CloseConnection(s.ConnId)
+	t.TransportOut = inout
+	t.TransportIn = inout
+	t.ConnectedOn = time.Now()
+
+	handler := NewProcessor(g, t)
+	RegisterConnection(handler, t)
+	defer RemoveConnection(t.RDGId)
 	handler.Process(ctx)
 }
 
 // The legacy protocol (no websockets) uses an RDG_IN_DATA for client -> server
 // and RDG_OUT_DATA for server -> client data. The handshakeRequest procedure is a bit different
 // to ensure the connections do not get cached or terminated by a proxy prematurely.
-func (g *Gateway) handleLegacyProtocol(w http.ResponseWriter, r *http.Request, s *SessionInfo) {
-	log.Printf("Session %s, %t, %t", s.ConnId, s.TransportOut != nil, s.TransportIn != nil)
+func (g *Gateway) handleLegacyProtocol(w http.ResponseWriter, r *http.Request, t *Tunnel) {
+	log.Printf("Session %t, %t, %t", t.RDGId, t.TransportOut != nil, t.TransportIn != nil)
 
 	if r.Method == MethodRDGOUT {
 		out, err := transport.NewLegacy(w)
 		if err != nil {
-			log.Printf("cannot hijack connection to support RDG OUT data channel: %s", err)
+			log.Printf("cannot hijack connection to support RDG OUT data channel: %t", err)
 			return
 		}
-		log.Printf("Opening RDGOUT for client %s", common.GetClientIp(r.Context()))
+		log.Printf("Opening RDGOUT for client %t", common.GetClientIp(r.Context()))
 
-		s.TransportOut = out
+		t.TransportOut = out
 		out.SendAccept(true)
 
-		c.Set(s.ConnId, s, cache.DefaultExpiration)
+		c.Set(t.RDGId, t, cache.DefaultExpiration)
 	} else if r.Method == MethodRDGIN {
 		legacyConnections.Inc()
 		defer legacyConnections.Dec()
 
 		in, err := transport.NewLegacy(w)
 		if err != nil {
-			log.Printf("cannot hijack connection to support RDG IN data channel: %s", err)
+			log.Printf("cannot hijack connection to support RDG IN data channel: %t", err)
 			return
 		}
 		defer in.Close()
 
-		if s.TransportIn == nil {
-			s.TransportIn = in
-			c.Set(s.ConnId, s, cache.DefaultExpiration)
+		if t.TransportIn == nil {
+			t.TransportIn = in
+			c.Set(t.RDGId, t, cache.DefaultExpiration)
 
-			log.Printf("Opening RDGIN for client %s", common.GetClientIp(r.Context()))
+			log.Printf("Opening RDGIN for client %t", common.GetClientIp(r.Context()))
 			in.SendAccept(false)
 
 			// read some initial data
 			in.Drain()
 
-			log.Printf("Legacy handshakeRequest done for client %s", common.GetClientIp(r.Context()))
-			handler := NewProcessor(s, g.ServerConf)
-			RegisterConnection(s.ConnId, handler, s)
-			defer CloseConnection(s.ConnId)
+			log.Printf("Legacy handshakeRequest done for client %t", common.GetClientIp(r.Context()))
+			handler := NewProcessor(g, t)
+			RegisterConnection(handler, t)
+			defer RemoveConnection(t.RDGId)
 			handler.Process(r.Context())
 		}
 	}

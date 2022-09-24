@@ -14,47 +14,23 @@ import (
 	"time"
 )
 
-type VerifyTunnelCreate func(context.Context, string) (bool, error)
-type VerifyTunnelAuthFunc func(context.Context, string) (bool, error)
-type VerifyServerFunc func(context.Context, string) (bool, error)
-
 type Processor struct {
-	Session              *SessionInfo
-	VerifyTunnelCreate   VerifyTunnelCreate
-	VerifyTunnelAuthFunc VerifyTunnelAuthFunc
-	VerifyServerFunc     VerifyServerFunc
-	RedirectFlags        int
-	IdleTimeout          int
-	SmartCardAuth        bool
-	TokenAuth            bool
-	ClientName           string
-	Remote               net.Conn
-	State                int
+	// gw is the gateway instance on which the connection arrived
+	// Immutable; never nil.
+	gw *Gateway
+
+	// state is the internal state of the processor
+	state int
+
+	// tunnel is the underlying connection with the client
+	tunnel *Tunnel
 }
 
-type ProcessorConf struct {
-	VerifyTunnelCreate   VerifyTunnelCreate
-	VerifyTunnelAuthFunc VerifyTunnelAuthFunc
-	VerifyServerFunc     VerifyServerFunc
-	RedirectFlags        RedirectFlags
-	IdleTimeout          int
-	SmartCardAuth        bool
-	TokenAuth            bool
-	ReceiveBuf           int
-	SendBuf              int
-}
-
-func NewProcessor(s *SessionInfo, conf *ProcessorConf) *Processor {
+func NewProcessor(gw *Gateway, tunnel *Tunnel) *Processor {
 	h := &Processor{
-		State:                SERVER_STATE_INITIALIZED,
-		Session:              s,
-		RedirectFlags:        makeRedirectFlags(conf.RedirectFlags),
-		IdleTimeout:          conf.IdleTimeout,
-		SmartCardAuth:        conf.SmartCardAuth,
-		TokenAuth:            conf.TokenAuth,
-		VerifyTunnelCreate:   conf.VerifyTunnelCreate,
-		VerifyServerFunc:     conf.VerifyServerFunc,
-		VerifyTunnelAuthFunc: conf.VerifyTunnelAuthFunc,
+		gw:     gw,
+		state:  SERVER_STATE_INITIALIZED,
+		tunnel: tunnel,
 	}
 	return h
 }
@@ -63,7 +39,7 @@ const tunnelId = 10
 
 func (p *Processor) Process(ctx context.Context) error {
 	for {
-		pt, sz, pkt, err := readMessage(p.Session.TransportIn)
+		pt, sz, pkt, err := p.tunnel.Read()
 		if err != nil {
 			log.Printf("Cannot read message from stream %p", err)
 			return err
@@ -72,10 +48,10 @@ func (p *Processor) Process(ctx context.Context) error {
 		switch pt {
 		case PKT_TYPE_HANDSHAKE_REQUEST:
 			log.Printf("Client handshakeRequest from %p", common.GetClientIp(ctx))
-			if p.State != SERVER_STATE_INITIALIZED {
-				log.Printf("Handshake attempted while in wrong state %d != %d", p.State, SERVER_STATE_INITIALIZED)
+			if p.state != SERVER_STATE_INITIALIZED {
+				log.Printf("Handshake attempted while in wrong state %d != %d", p.state, SERVER_STATE_INITIALIZED)
 				msg := p.handshakeResponse(0x0, 0x0, 0, E_PROXY_INTERNALERROR)
-				p.Session.TransportOut.WritePacket(msg)
+				p.tunnel.Write(msg)
 				return fmt.Errorf("%x: wrong state", E_PROXY_INTERNALERROR)
 			}
 			major, minor, _, reqAuth := p.handshakeRequest(pkt)
@@ -83,101 +59,102 @@ func (p *Processor) Process(ctx context.Context) error {
 			if err != nil {
 				log.Println(err)
 				msg := p.handshakeResponse(0x0, 0x0, 0, E_PROXY_CAPABILITYMISMATCH)
-				p.Session.TransportOut.WritePacket(msg)
+				p.tunnel.Write(msg)
 				return err
 			}
 			msg := p.handshakeResponse(major, minor, caps, ERROR_SUCCESS)
-			p.Session.TransportOut.WritePacket(msg)
-			p.State = SERVER_STATE_HANDSHAKE
+			p.tunnel.Write(msg)
+			p.state = SERVER_STATE_HANDSHAKE
 		case PKT_TYPE_TUNNEL_CREATE:
 			log.Printf("Tunnel create")
-			if p.State != SERVER_STATE_HANDSHAKE {
+			if p.state != SERVER_STATE_HANDSHAKE {
 				log.Printf("Tunnel create attempted while in wrong state %d != %d",
-					p.State, SERVER_STATE_HANDSHAKE)
+					p.state, SERVER_STATE_HANDSHAKE)
 				msg := p.tunnelResponse(E_PROXY_INTERNALERROR)
-				p.Session.TransportOut.WritePacket(msg)
+				p.tunnel.Write(msg)
 				return fmt.Errorf("%x: PAA cookie rejected, wrong state", E_PROXY_INTERNALERROR)
 			}
 			_, cookie := p.tunnelRequest(pkt)
-			if p.VerifyTunnelCreate != nil {
-				if ok, _ := p.VerifyTunnelCreate(ctx, cookie); !ok {
+			if p.gw.CheckPAACookie != nil {
+				if ok, _ := p.gw.CheckPAACookie(ctx, cookie); !ok {
 					log.Printf("Invalid PAA cookie received from client %p", common.GetClientIp(ctx))
 					msg := p.tunnelResponse(E_PROXY_COOKIE_AUTHENTICATION_ACCESS_DENIED)
-					p.Session.TransportOut.WritePacket(msg)
+					p.tunnel.Write(msg)
 					return fmt.Errorf("%x: invalid PAA cookie", E_PROXY_COOKIE_AUTHENTICATION_ACCESS_DENIED)
 				}
 			}
 			msg := p.tunnelResponse(ERROR_SUCCESS)
-			p.Session.TransportOut.WritePacket(msg)
-			p.State = SERVER_STATE_TUNNEL_CREATE
+			p.tunnel.Write(msg)
+			p.state = SERVER_STATE_TUNNEL_CREATE
 		case PKT_TYPE_TUNNEL_AUTH:
 			log.Printf("Tunnel auth")
-			if p.State != SERVER_STATE_TUNNEL_CREATE {
+			if p.state != SERVER_STATE_TUNNEL_CREATE {
 				log.Printf("Tunnel auth attempted while in wrong state %d != %d",
-					p.State, SERVER_STATE_TUNNEL_CREATE)
+					p.state, SERVER_STATE_TUNNEL_CREATE)
 				msg := p.tunnelAuthResponse(E_PROXY_INTERNALERROR)
-				p.Session.TransportOut.WritePacket(msg)
+				p.tunnel.Write(msg)
 				return fmt.Errorf("%x: Tunnel auth rejected, wrong state", E_PROXY_INTERNALERROR)
 			}
 			client := p.tunnelAuthRequest(pkt)
-			if p.VerifyTunnelAuthFunc != nil {
-				if ok, _ := p.VerifyTunnelAuthFunc(ctx, client); !ok {
+			if p.gw.CheckClientName != nil {
+				if ok, _ := p.gw.CheckClientName(ctx, client); !ok {
 					log.Printf("Invalid client name: %p", client)
 					msg := p.tunnelAuthResponse(ERROR_ACCESS_DENIED)
-					p.Session.TransportOut.WritePacket(msg)
+					p.tunnel.Write(msg)
 					return fmt.Errorf("%x: Tunnel auth rejected, invalid client name", ERROR_ACCESS_DENIED)
 				}
 			}
 			msg := p.tunnelAuthResponse(ERROR_SUCCESS)
-			p.Session.TransportOut.WritePacket(msg)
-			p.State = SERVER_STATE_TUNNEL_AUTHORIZE
+			p.tunnel.Write(msg)
+			p.state = SERVER_STATE_TUNNEL_AUTHORIZE
 		case PKT_TYPE_CHANNEL_CREATE:
 			log.Printf("Channel create")
-			if p.State != SERVER_STATE_TUNNEL_AUTHORIZE {
+			if p.state != SERVER_STATE_TUNNEL_AUTHORIZE {
 				log.Printf("Channel create attempted while in wrong state %d != %d",
-					p.State, SERVER_STATE_TUNNEL_AUTHORIZE)
+					p.state, SERVER_STATE_TUNNEL_AUTHORIZE)
 				msg := p.channelResponse(E_PROXY_INTERNALERROR)
-				p.Session.TransportOut.WritePacket(msg)
+				p.tunnel.Write(msg)
 				return fmt.Errorf("%x: Channel create rejected, wrong state", E_PROXY_INTERNALERROR)
 			}
 			server, port := p.channelRequest(pkt)
 			host := net.JoinHostPort(server, strconv.Itoa(int(port)))
-			if p.VerifyServerFunc != nil {
+			if p.gw.CheckHost != nil {
 				log.Printf("Verifying %p host connection", host)
-				if ok, _ := p.VerifyServerFunc(ctx, host); !ok {
+				if ok, _ := p.gw.CheckHost(ctx, host); !ok {
 					log.Printf("Not allowed to connect to %p by policy handler", host)
 					msg := p.channelResponse(E_PROXY_RAP_ACCESSDENIED)
-					p.Session.TransportOut.WritePacket(msg)
+					p.tunnel.Write(msg)
 					return fmt.Errorf("%x: denied by security policy", E_PROXY_RAP_ACCESSDENIED)
 				}
 			}
 			log.Printf("Establishing connection to RDP server: %p", host)
-			p.Remote, err = net.DialTimeout("tcp", host, time.Second*15)
+			p.tunnel.rwc, err = net.DialTimeout("tcp", host, time.Second*15)
 			if err != nil {
 				log.Printf("Error connecting to %p, %p", host, err)
 				msg := p.channelResponse(E_PROXY_INTERNALERROR)
-				p.Session.TransportOut.WritePacket(msg)
+				p.tunnel.Write(msg)
 				return err
 			}
+			p.tunnel.TargetServer = host
 			log.Printf("Connection established")
 			msg := p.channelResponse(ERROR_SUCCESS)
-			p.Session.TransportOut.WritePacket(msg)
+			p.tunnel.Write(msg)
 
 			// Make sure to start the flow from the RDP server first otherwise connections
 			// might hang eventually
-			go forward(p.Remote, p.Session.TransportOut)
-			p.State = SERVER_STATE_CHANNEL_CREATE
+			go forward(p.tunnel.rwc, p.tunnel.TransportOut)
+			p.state = SERVER_STATE_CHANNEL_CREATE
 		case PKT_TYPE_DATA:
-			if p.State < SERVER_STATE_CHANNEL_CREATE {
-				log.Printf("Data received while in wrong state %d != %d", p.State, SERVER_STATE_CHANNEL_CREATE)
+			if p.state < SERVER_STATE_CHANNEL_CREATE {
+				log.Printf("Data received while in wrong state %d != %d", p.state, SERVER_STATE_CHANNEL_CREATE)
 				return errors.New("wrong state")
 			}
-			p.State = SERVER_STATE_OPENED
-			receive(pkt, p.Remote)
+			p.state = SERVER_STATE_OPENED
+			receive(pkt, p.tunnel.rwc)
 		case PKT_TYPE_KEEPALIVE:
 			// keepalives can be received while the channel is not open yet
-			if p.State < SERVER_STATE_CHANNEL_CREATE {
-				log.Printf("Keepalive received while in wrong state %d != %d", p.State, SERVER_STATE_CHANNEL_CREATE)
+			if p.state < SERVER_STATE_CHANNEL_CREATE {
+				log.Printf("Keepalive received while in wrong state %d != %d", p.state, SERVER_STATE_CHANNEL_CREATE)
 				return errors.New("wrong state")
 			}
 
@@ -185,15 +162,15 @@ func (p *Processor) Process(ctx context.Context) error {
 			// p.TransportIn.Write(createPacket(PKT_TYPE_KEEPALIVE, []byte{}))
 		case PKT_TYPE_CLOSE_CHANNEL:
 			log.Printf("Close channel")
-			if p.State != SERVER_STATE_OPENED {
-				log.Printf("Channel closed while in wrong state %d != %d", p.State, SERVER_STATE_OPENED)
+			if p.state != SERVER_STATE_OPENED {
+				log.Printf("Channel closed while in wrong state %d != %d", p.state, SERVER_STATE_OPENED)
 				return errors.New("wrong state")
 			}
 			msg := p.channelCloseResponse(ERROR_SUCCESS)
-			p.Session.TransportOut.WritePacket(msg)
-			//p.Session.TransportIn.Close()
-			//p.Session.TransportOut.Close()
-			p.State = SERVER_STATE_CLOSED
+			p.tunnel.Write(msg)
+			//p.tunnel.TransportIn.Close()
+			//p.tunnel.TransportOut.Close()
+			p.state = SERVER_STATE_CLOSED
 			return nil
 		default:
 			log.Printf("Unknown packet (size %d): %x", sz, pkt)
@@ -226,10 +203,10 @@ func (p *Processor) handshakeRequest(data []byte) (major byte, minor byte, versi
 }
 
 func (p *Processor) matchAuth(clientAuthCaps uint16) (caps uint16, err error) {
-	if p.SmartCardAuth {
+	if p.gw.SmartCardAuth {
 		caps = caps | HTTP_EXTENDED_AUTH_SC
 	}
-	if p.TokenAuth {
+	if p.gw.TokenAuth {
 		caps = caps | HTTP_EXTENDED_AUTH_PAA
 	}
 
@@ -298,12 +275,12 @@ func (p *Processor) tunnelAuthResponse(errorCode int) []byte {
 	binary.Write(buf, binary.LittleEndian, uint16(0))                                                                                        // reserved
 
 	// idle timeout
-	if p.IdleTimeout < 0 {
-		p.IdleTimeout = 0
+	if p.gw.IdleTimeout < 0 {
+		p.gw.IdleTimeout = 0
 	}
 
-	binary.Write(buf, binary.LittleEndian, uint32(p.RedirectFlags)) // redir flags
-	binary.Write(buf, binary.LittleEndian, uint32(p.IdleTimeout))   // timeout in minutes
+	binary.Write(buf, binary.LittleEndian, uint32(makeRedirectFlags(p.gw.RedirectFlags))) // redir flags
+	binary.Write(buf, binary.LittleEndian, uint32(p.gw.IdleTimeout))                      // timeout in minutes
 
 	return createPacket(PKT_TYPE_TUNNEL_AUTH_RESPONSE, buf.Bytes())
 }

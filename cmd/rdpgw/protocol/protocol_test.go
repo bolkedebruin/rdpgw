@@ -40,11 +40,10 @@ func TestHandshake(t *testing.T) {
 	client := ClientConfig{
 		PAAToken: "abab",
 	}
-	s := &SessionInfo{}
-	hc := &ProcessorConf{
-		TokenAuth: true,
-	}
-	h := NewProcessor(s, hc)
+	gw := &Gateway{}
+	tunnel := &Tunnel{}
+
+	h := NewProcessor(gw, tunnel)
 
 	data := client.handshakeRequest()
 
@@ -79,33 +78,30 @@ func TestHandshake(t *testing.T) {
 	}
 }
 
-func capsHelper(h Processor) uint16 {
+func capsHelper(gw Gateway) uint16 {
 	var caps uint16
-	if h.TokenAuth {
+	if gw.TokenAuth {
 		caps = caps | HTTP_EXTENDED_AUTH_PAA
 	}
-	if h.SmartCardAuth {
+	if gw.SmartCardAuth {
 		caps = caps | HTTP_EXTENDED_AUTH_SC
 	}
 	return caps
 }
 
 func TestMatchAuth(t *testing.T) {
-	s := &SessionInfo{}
-	hc := &ProcessorConf{
-		TokenAuth:     false,
-		SmartCardAuth: false,
-	}
+	gw := &Gateway{}
+	tunnel := &Tunnel{}
 
-	h := NewProcessor(s, hc)
+	h := NewProcessor(gw, tunnel)
 
 	in := uint16(0)
 	caps, err := h.matchAuth(in)
 	if err != nil {
-		t.Fatalf("in caps: %x <= server caps %x, but %s", in, capsHelper(*h), err)
+		t.Fatalf("in caps: %x <= server caps %x, but %s", in, capsHelper(*gw), err)
 	}
 	if caps > in {
-		t.Fatalf("returned server caps %x > client cpas %x", capsHelper(*h), in)
+		t.Fatalf("returned server caps %x > client cpas %x", capsHelper(*gw), in)
 	}
 
 	in = HTTP_EXTENDED_AUTH_PAA
@@ -116,7 +112,7 @@ func TestMatchAuth(t *testing.T) {
 		t.Logf("(SUCCESS) server cannot satisfy client caps : %s", err)
 	}
 
-	h.SmartCardAuth = true
+	gw.SmartCardAuth = true
 	caps, err = h.matchAuth(in)
 	if err == nil {
 		t.Fatalf("server cannot satisfy client caps %x but error is nil (server caps %x)", in, caps)
@@ -124,10 +120,10 @@ func TestMatchAuth(t *testing.T) {
 		t.Logf("(SUCCESS) server cannot satisfy client caps : %s", err)
 	}
 
-	h.TokenAuth = true
+	gw.TokenAuth = true
 	caps, err = h.matchAuth(in)
 	if err != nil {
-		t.Fatalf("server caps %x (orig: %x) should match client request %x, %s", caps, capsHelper(*h), in, err)
+		t.Fatalf("server caps %x (orig: %x) should match client request %x, %s", caps, capsHelper(*gw), in, err)
 	}
 }
 
@@ -135,11 +131,10 @@ func TestTunnelCreation(t *testing.T) {
 	client := ClientConfig{
 		PAAToken: "abab",
 	}
-	s := &SessionInfo{}
-	hc := &ProcessorConf{
-		TokenAuth: true,
-	}
-	h := NewProcessor(s, hc)
+	gw := &Gateway{TokenAuth: true}
+	tunnel := &Tunnel{}
+
+	h := NewProcessor(gw, tunnel)
 
 	data := client.tunnelRequest()
 	_, _, pkt, err := verifyPacketHeader(data, PKT_TYPE_TUNNEL_CREATE,
@@ -179,15 +174,13 @@ func TestTunnelAuth(t *testing.T) {
 	client := ClientConfig{
 		Name: name,
 	}
-	s := &SessionInfo{}
-	hc := &ProcessorConf{
-		TokenAuth:   true,
-		IdleTimeout: 10,
-		RedirectFlags: RedirectFlags{
-			Clipboard: true,
-		},
+	gw := &Gateway{
+		TokenAuth:     true,
+		IdleTimeout:   10,
+		RedirectFlags: RedirectFlags{Clipboard: true},
 	}
-	h := NewProcessor(s, hc)
+	tunnel := &Tunnel{}
+	h := NewProcessor(gw, tunnel)
 
 	data := client.tunnelAuthRequest()
 	_, _, pkt, err := verifyPacketHeader(data, PKT_TYPE_TUNNEL_AUTH, uint32(TunnelAuthLen+len(name)*2))
@@ -213,9 +206,9 @@ func TestTunnelAuth(t *testing.T) {
 		t.Fatalf("tunnelAuthResponse failed got flags %d, expected %d",
 			flags, flags|HTTP_TUNNEL_REDIR_DISABLE_CLIPBOARD)
 	}
-	if int(timeout) != hc.IdleTimeout {
+	if int(timeout) != gw.IdleTimeout {
 		t.Fatalf("tunnelAuthResponse failed got timeout %d, expected %d",
-			timeout, hc.IdleTimeout)
+			timeout, gw.IdleTimeout)
 	}
 }
 
@@ -225,15 +218,15 @@ func TestChannelCreation(t *testing.T) {
 		Server: server,
 		Port:   3389,
 	}
-	s := &SessionInfo{}
-	hc := &ProcessorConf{
+	gw := &Gateway{
 		TokenAuth:   true,
 		IdleTimeout: 10,
 		RedirectFlags: RedirectFlags{
 			Clipboard: true,
 		},
 	}
-	h := NewProcessor(s, hc)
+	tunnel := &Tunnel{}
+	h := NewProcessor(gw, tunnel)
 
 	data := client.channelRequest()
 	_, _, pkt, err := verifyPacketHeader(data, PKT_TYPE_CHANNEL_CREATE, uint32(ChannelCreateLen+len(server)*2))
