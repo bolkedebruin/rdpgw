@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/common"
 	"log"
 	"strings"
 )
@@ -23,10 +24,10 @@ func CheckHost(ctx context.Context, host string) (bool, error) {
 	case "roundrobin", "unsigned":
 		var username string
 
-		s := getSessionInfo(ctx)
+		s := getTunnel(ctx)
 		if s == nil || s.UserName == "" {
 			var ok bool
-			username, ok = ctx.Value("preferred_username").(string)
+			username, ok = ctx.Value(common.UsernameCtx).(string)
 			if !ok {
 				return false, errors.New("no valid session info or username found in context")
 			}

@@ -2,6 +2,7 @@ package security
 
 import (
 	"context"
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/common"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/protocol"
 	"testing"
 )
@@ -20,7 +21,7 @@ var (
 )
 
 func TestCheckHost(t *testing.T) {
-	ctx := context.WithValue(context.Background(), "Tunnel", &info)
+	ctx := context.WithValue(context.Background(), common.TunnelCtx, &info)
 
 	Hosts = hosts
 

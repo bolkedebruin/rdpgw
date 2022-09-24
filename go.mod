@@ -6,6 +6,7 @@ require (
 	github.com/coreos/go-oidc/v3 v3.2.0
 	github.com/fatih/structs v1.1.0
 	github.com/go-jose/go-jose/v3 v3.0.0
+	github.com/google/uuid v1.1.2
 	github.com/gorilla/sessions v1.2.1
 	github.com/gorilla/websocket v1.5.0
 	github.com/knadh/koanf v1.4.2

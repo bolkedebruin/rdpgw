@@ -7,19 +7,19 @@ type Monitor struct {
 	Tunnel    *Tunnel
 }
 
-func RegisterConnection(h *Processor, t *Tunnel) {
+func RegisterTunnel(t *Tunnel, p *Processor) {
 	if Connections == nil {
 		Connections = make(map[string]*Monitor)
 	}
 
-	Connections[t.RDGId] = &Monitor{
-		Processor: h,
+	Connections[t.Id] = &Monitor{
+		Processor: p,
 		Tunnel:    t,
 	}
 }
 
-func RemoveConnection(connId string) {
-	delete(Connections, connId)
+func RemoveTunnel(t *Tunnel) {
+	delete(Connections, t.Id)
 }
 
 // CalculateSpeedPerSecond calculate moving average.

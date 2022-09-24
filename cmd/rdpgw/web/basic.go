@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/common"
 	"github.com/bolkedebruin/rdpgw/shared/auth"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -12,7 +13,7 @@ import (
 )
 
 const (
-	protocol = "unix"
+	protocolGrpc = "unix"
 )
 
 type BasicAuthHandler struct {
@@ -27,7 +28,7 @@ func (h *BasicAuthHandler) BasicAuth(next http.HandlerFunc) http.HandlerFunc {
 
 			conn, err := grpc.Dial(h.SocketAddress, grpc.WithTransportCredentials(insecure.NewCredentials()),
 				grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
-					return net.Dial(protocol, addr)
+					return net.Dial(protocolGrpc, addr)
 				}))
 			if err != nil {
 				log.Printf("Cannot reach authentication provider: %s", err)
@@ -51,7 +52,7 @@ func (h *BasicAuthHandler) BasicAuth(next http.HandlerFunc) http.HandlerFunc {
 			if !res.Authenticated {
 				log.Printf("User %s is not authenticated for this service", username)
 			} else {
-				ctx := context.WithValue(r.Context(), "preferred_username", username)
+				ctx := context.WithValue(r.Context(), common.UsernameCtx, username)
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}

@@ -35,7 +35,7 @@ type customClaims struct {
 
 func CheckSession(next protocol.CheckHostFunc) protocol.CheckHostFunc {
 	return func(ctx context.Context, host string) (bool, error) {
-		s := getSessionInfo(ctx)
+		s := getTunnel(ctx)
 		if s == nil {
 			return false, errors.New("no valid session info found in context")
 		}
@@ -62,7 +62,7 @@ func CheckPAACookie(ctx context.Context, tokenString string) (bool, error) {
 
 	token, err := jwt.ParseSigned(tokenString)
 	if err != nil {
-		log.Printf("cannot parse token due to: %s", err)
+		log.Printf("cannot parse token due to: %tunnel", err)
 		return false, err
 	}
 
@@ -79,7 +79,7 @@ func CheckPAACookie(ctx context.Context, tokenString string) (bool, error) {
 	// Claims automagically checks the signature...
 	err = token.Claims(SigningKey, &standard, &custom)
 	if err != nil {
-		log.Printf("token signature validation failed due to %s", err)
+		log.Printf("token signature validation failed due to %tunnel", err)
 		return false, err
 	}
 
@@ -90,7 +90,7 @@ func CheckPAACookie(ctx context.Context, tokenString string) (bool, error) {
 	})
 
 	if err != nil {
-		log.Printf("token validation failed due to %s", err)
+		log.Printf("token validation failed due to %tunnel", err)
 		return false, err
 	}
 
@@ -98,15 +98,15 @@ func CheckPAACookie(ctx context.Context, tokenString string) (bool, error) {
 	tokenSource := Oauth2Config.TokenSource(ctx, &oauth2.Token{AccessToken: custom.AccessToken})
 	user, err := OIDCProvider.UserInfo(ctx, tokenSource)
 	if err != nil {
-		log.Printf("Cannot get user info for access token: %s", err)
+		log.Printf("Cannot get user info for access token: %tunnel", err)
 		return false, err
 	}
 
-	s := getSessionInfo(ctx)
+	tunnel := getTunnel(ctx)
 
-	s.TargetServer = custom.RemoteServer
-	s.RemoteAddr = custom.ClientIP
-	s.UserName = user.Subject
+	tunnel.TargetServer = custom.RemoteServer
+	tunnel.RemoteAddr = custom.ClientIP
+	tunnel.UserName = user.Subject
 
 	return true, nil
 }
@@ -288,7 +288,7 @@ func GenerateQueryToken(ctx context.Context, query string, issuer string) (strin
 	return token, err
 }
 
-func getSessionInfo(ctx context.Context) *protocol.Tunnel {
+func getTunnel(ctx context.Context) *protocol.Tunnel {
 	s, ok := ctx.Value("Tunnel").(*protocol.Tunnel)
 	if !ok {
 		log.Printf("cannot get session info from context")

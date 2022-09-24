@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/common"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/transport"
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/patrickmn/go-cache"
 	"log"
@@ -16,7 +17,7 @@ import (
 )
 
 const (
-	rdgConnectionIdKey = "Rdg-Connection-RDGId"
+	rdgConnectionIdKey = "Rdg-Connection-Id"
 	MethodRDGIN        = "RDG_IN_DATA"
 	MethodRDGOUT       = "RDG_OUT_DATA"
 )
@@ -59,14 +60,19 @@ func (g *Gateway) HandleGatewayProtocol(w http.ResponseWriter, r *http.Request) 
 
 	var t *Tunnel
 
+	ctx := context.WithValue(r.Context(), common.TunnelCtx, t)
+
 	connId := r.Header.Get(rdgConnectionIdKey)
 	x, found := c.Get(connId)
 	if !found {
-		t = &Tunnel{RDGId: connId}
+		t = &Tunnel{
+			RDGId:      connId,
+			RemoteAddr: ctx.Value(common.ClientIPCtx).(string),
+			UserName:   ctx.Value(common.UsernameCtx).(string),
+		}
 	} else {
 		t = x.(*Tunnel)
 	}
-	ctx := context.WithValue(r.Context(), "Tunnel", t)
 
 	if r.Method == MethodRDGOUT {
 		if r.Header.Get("Connection") != "upgrade" && r.Header.Get("Upgrade") != "websocket" {
@@ -158,13 +164,14 @@ func (g *Gateway) handleWebsocketProtocol(ctx context.Context, c *websocket.Conn
 	inout, _ := transport.NewWS(c)
 	defer inout.Close()
 
+	t.Id = uuid.New().String()
 	t.TransportOut = inout
 	t.TransportIn = inout
 	t.ConnectedOn = time.Now()
 
 	handler := NewProcessor(g, t)
-	RegisterConnection(handler, t)
-	defer RemoveConnection(t.RDGId)
+	RegisterTunnel(t, handler)
+	defer RemoveTunnel(t)
 	handler.Process(ctx)
 }
 
@@ -198,6 +205,7 @@ func (g *Gateway) handleLegacyProtocol(w http.ResponseWriter, r *http.Request, t
 		defer in.Close()
 
 		if t.TransportIn == nil {
+			t.Id = uuid.New().String()
 			t.TransportIn = in
 			c.Set(t.RDGId, t, cache.DefaultExpiration)
 
@@ -209,8 +217,8 @@ func (g *Gateway) handleLegacyProtocol(w http.ResponseWriter, r *http.Request, t
 
 			log.Printf("Legacy handshakeRequest done for client %t", common.GetClientIp(r.Context()))
 			handler := NewProcessor(g, t)
-			RegisterConnection(handler, t)
-			defer RemoveConnection(t.RDGId)
+			RegisterTunnel(t, handler)
+			defer RemoveTunnel(t)
 			handler.Process(r.Context())
 		}
 	}

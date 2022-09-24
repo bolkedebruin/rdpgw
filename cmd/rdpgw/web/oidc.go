@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/common"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/gorilla/sessions"
 	"github.com/patrickmn/go-cache"
@@ -119,7 +120,7 @@ func (h *OIDC) Authenticated(next http.Handler) http.Handler {
 			return
 		}
 
-		ctx := context.WithValue(r.Context(), "preferred_username", session.Values["preferred_username"])
+		ctx := context.WithValue(r.Context(), common.UsernameCtx, session.Values["preferred_username"])
 		ctx = context.WithValue(ctx, "access_token", session.Values["access_token"])
 
 		next.ServeHTTP(w, r.WithContext(ctx))

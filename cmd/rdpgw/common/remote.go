@@ -12,6 +12,8 @@ const (
 	ClientIPCtx       = "ClientIP"
 	ProxyAddressesCtx = "ProxyAddresses"
 	RemoteAddressCtx  = "RemoteAddress"
+	TunnelCtx         = "TUNNEL"
+	UsernameCtx       = "preferred_username"
 )
 
 func EnrichContext(next http.Handler) http.Handler {

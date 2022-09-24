@@ -92,7 +92,7 @@ func readHeader(data []byte) (packetType uint16, size uint32, packet []byte, err
 }
 
 // forwards data from a Connection to Transport and wraps it in the rdpgw protocol
-func forward(in net.Conn, out transport.Transport) {
+func forward(in net.Conn, tunnel *Tunnel) {
 	defer in.Close()
 
 	b1 := new(bytes.Buffer)
@@ -106,7 +106,7 @@ func forward(in net.Conn, out transport.Transport) {
 		}
 		binary.Write(b1, binary.LittleEndian, uint16(n))
 		b1.Write(buf[:n])
-		out.WritePacket(createPacket(PKT_TYPE_DATA, b1.Bytes()))
+		tunnel.Write(createPacket(PKT_TYPE_DATA, b1.Bytes()))
 		b1.Reset()
 	}
 }

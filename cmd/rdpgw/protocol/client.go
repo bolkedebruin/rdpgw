@@ -71,7 +71,7 @@ func (c *ClientConfig) ConnectAndForward() error {
 				log.Printf("Channel id (%d) is smaller than 1. This doesnt work for Windows clients", cid)
 			}
 			log.Printf("Channel creation succesful. Channel id: %d", cid)
-			go forward(c.LocalConn, c.Session.TransportOut)
+			//go forward(c.LocalConn, c.Session.TransportOut)
 		case PKT_TYPE_DATA:
 			receive(pkt, c.LocalConn)
 		default:
