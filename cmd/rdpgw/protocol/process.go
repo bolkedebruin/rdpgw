@@ -24,6 +24,9 @@ type Processor struct {
 
 	// tunnel is the underlying connection with the client
 	tunnel *Tunnel
+
+	// ctl is a channel to control the processor in case of events
+	ctl chan int
 }
 
 func NewProcessor(gw *Gateway, tunnel *Tunnel) *Processor {
@@ -31,6 +34,7 @@ func NewProcessor(gw *Gateway, tunnel *Tunnel) *Processor {
 		gw:     gw,
 		state:  SERVER_STATE_INITIALIZED,
 		tunnel: tunnel,
+		ctl:    make(chan int),
 	}
 	return h
 }
@@ -168,8 +172,6 @@ func (p *Processor) Process(ctx context.Context) error {
 			}
 			msg := p.channelCloseResponse(ERROR_SUCCESS)
 			p.tunnel.Write(msg)
-			//p.tunnel.transportIn.Close()
-			//p.tunnel.transportOut.Close()
 			p.state = SERVER_STATE_CLOSED
 			return nil
 		default:

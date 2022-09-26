@@ -1,11 +1,17 @@
 package protocol
 
+import "fmt"
+
 var Connections map[string]*Monitor
 
 type Monitor struct {
 	Processor *Processor
 	Tunnel    *Tunnel
 }
+
+const (
+	ctlDisconnect = -1
+)
 
 func RegisterTunnel(t *Tunnel, p *Processor) {
 	if Connections == nil {
@@ -20,6 +26,19 @@ func RegisterTunnel(t *Tunnel, p *Processor) {
 
 func RemoveTunnel(t *Tunnel) {
 	delete(Connections, t.Id)
+}
+
+func Disconnect(id string) error {
+	if Connections == nil {
+		return fmt.Errorf("%s connection does not exist", id)
+	}
+
+	if m, ok := Connections[id]; !ok {
+		m.Processor.ctl <- ctlDisconnect
+		return nil
+	}
+
+	return fmt.Errorf("%s connection does not exist", id)
 }
 
 // CalculateSpeedPerSecond calculate moving average.

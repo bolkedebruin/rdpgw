@@ -45,8 +45,8 @@ func (s *AuthServiceImpl) Authenticate(ctx context.Context, message *auth.UserPa
 	})
 
 	r := &auth.AuthResponse{}
-	r.Authenticated = true
-	return r, nil
+	r.Authenticated = false
+
 	if err != nil {
 		log.Printf("Error authenticating user: %s due to: %s", message.Username, err)
 		r.Error = err.Error()

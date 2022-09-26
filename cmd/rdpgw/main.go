@@ -200,7 +200,6 @@ func main() {
 	} else {
 		gw.CheckHost = security.CheckHost
 	}
-	gwserver = &gw
 
 	if conf.Server.Authentication == config.AuthenticationBasic {
 		h := web.BasicAuthHandler{SocketAddress: conf.Server.AuthSocket}
@@ -214,7 +213,6 @@ func main() {
 	}
 	http.Handle("/metrics", promhttp.Handler())
 	http.HandleFunc("/tokeninfo", web.TokenInfo)
-	http.HandleFunc("/list", List)
 
 	if conf.Server.Tls == config.TlsDisable {
 		err = server.ListenAndServe()
@@ -223,16 +221,5 @@ func main() {
 	}
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
-	}
-}
-
-var gwserver *protocol.Gateway
-
-func List(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/plain")
-	for k, v := range protocol.Connections {
-		fmt.Fprintf(w, "Id: %s Rdg-Id: %s User: %s From: %s Connected Since: %s Bytes Sent: %d Bytes Received: %d Last Seen: %s Target: %s\n",
-			k, v.Tunnel.RDGId, v.Tunnel.UserName, v.Tunnel.RemoteAddr, v.Tunnel.ConnectedOn, v.Tunnel.BytesSent, v.Tunnel.BytesReceived,
-			v.Tunnel.LastSeen, v.Tunnel.TargetServer)
 	}
 }
