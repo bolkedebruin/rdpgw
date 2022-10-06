@@ -201,13 +201,13 @@ func (h *Handler) HandleDownload(w http.ResponseWriter, r *http.Request) {
 	rdp.Connection.Domain = domain
 	rdp.Connection.FullAddress = host
 	rdp.Connection.GatewayHostname = h.gatewayAddress.Host
-	rdp.Connection.GatewayCredentialSource = SourceCookie
+	rdp.Connection.GatewayCredentialsSource = SourceCookie
 	rdp.Connection.GatewayAccessToken = token
 	rdp.Session.NetworkAutodetect = opts.NetworkAutoDetect != 0
 	rdp.Session.BandwidthAutodetect = opts.BandwidthAutoDetect != 0
 	rdp.Session.ConnectionType = opts.ConnectionType
 	rdp.Display.SmartSizing = true
 	rdp.Display.BitmapCacheSize = 32000
-	
+
 	http.ServeContent(w, r, fn, time.Now(), strings.NewReader(rdp.String()))
 }
