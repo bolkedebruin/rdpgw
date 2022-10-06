@@ -60,7 +60,7 @@ func (g *Gateway) HandleGatewayProtocol(w http.ResponseWriter, r *http.Request) 
 
 	var t *Tunnel
 
-	ctx := context.WithValue(r.Context(), common.TunnelCtx, t)
+	ctx := r.Context()
 
 	connId := r.Header.Get(rdgConnectionIdKey)
 	x, found := c.Get(connId)
@@ -70,9 +70,15 @@ func (g *Gateway) HandleGatewayProtocol(w http.ResponseWriter, r *http.Request) 
 			RemoteAddr: ctx.Value(common.ClientIPCtx).(string),
 			UserName:   ctx.Value(common.UsernameCtx).(string),
 		}
+		// username can be nil with openid as it's only available later
+		username := ctx.Value(common.UsernameCtx)
+		if username != nil {
+			t.UserName = username.(string)
+		}
 	} else {
 		t = x.(*Tunnel)
 	}
+	ctx = context.WithValue(ctx, common.TunnelCtx, t)
 
 	if r.Method == MethodRDGOUT {
 		if r.Header.Get("Connection") != "upgrade" && r.Header.Get("Upgrade") != "websocket" {

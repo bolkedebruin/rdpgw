@@ -28,8 +28,8 @@ type RdpConnection struct {
 	AlternateFullAddress     string `rdp:"alternate full address"`
 	Username                 string `rdp:"username"`
 	Domain                   string `rdp:"domain"`
-	GatewayCredentialSource  int    `rdp:"gatewaycredentialsource" default:"0"`
-	GatewayCredentialMethode int    `rdp:"gatewayprofileusagemethod" default:"0"`
+	GatewayCredentialsSource int    `rdp:"gatewaycredentialssource" default:"0"`
+	GatewayCredentialMethod  int    `rdp:"gatewayprofileusagemethod" default:"0"`
 	GatewayUsageMethod       int    `rdp:"gatewayusagemethod" default:"0"`
 	GatewayAccessToken       string `rdp:"gatewayaccesstoken"`
 	PromptCredentialsOnce    bool   `rdp:"promptcredentialonce" default:"true"`
