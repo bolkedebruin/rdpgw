@@ -68,9 +68,9 @@ func (g *Gateway) HandleGatewayProtocol(w http.ResponseWriter, r *http.Request) 
 		t = &Tunnel{
 			RDGId:      connId,
 			RemoteAddr: ctx.Value(common.ClientIPCtx).(string),
-			UserName:   ctx.Value(common.UsernameCtx).(string),
 		}
-		// username can be nil with openid as it's only available later
+		// username can be nil with openid & kerberos as it's only available later
+		// todo grab kerberos principal now?
 		username := ctx.Value(common.UsernameCtx)
 		if username != nil {
 			t.UserName = username.(string)

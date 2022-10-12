@@ -21,13 +21,15 @@ const (
 	SessionStoreCookie = "cookie"
 	SessionStoreFile   = "file"
 
-	AuthenticationOpenId = "openid"
-	AuthenticationBasic  = "local"
+	AuthenticationOpenId   = "openid"
+	AuthenticationBasic    = "local"
+	AuthenticationKerberos = "kerberos"
 )
 
 type Configuration struct {
 	Server   ServerConfig   `koanf:"server"`
 	OpenId   OpenIDConfig   `koanf:"openid"`
+	Kerberos KerberosConfig `koanf:"kerberos"`
 	Caps     RDGCapsConfig  `koanf:"caps"`
 	Security SecurityConfig `koanf:"security"`
 	Client   ClientConfig   `koanf:"client"`
@@ -48,6 +50,11 @@ type ServerConfig struct {
 	Tls                  string   `koanf:"tls"`
 	Authentication       string   `koanf:"authentication"`
 	AuthSocket           string   `koanf:"authsocket"`
+}
+
+type KerberosConfig struct {
+	Keytab   string `koanf:"keytab"`
+	Krb5Conf string `koanf:"krb5conf"`
 }
 
 type OpenIDConfig struct {
@@ -161,6 +168,7 @@ func Load(configFile string) Configuration {
 	k.UnmarshalWithConf("Caps", &Conf.Caps, koanfTag)
 	k.UnmarshalWithConf("Security", &Conf.Security, koanfTag)
 	k.UnmarshalWithConf("Client", &Conf.Client, koanfTag)
+	k.UnmarshalWithConf("Kerberos", &Conf.Kerberos, koanfTag)
 
 	if len(Conf.Security.PAATokenEncryptionKey) != 32 {
 		Conf.Security.PAATokenEncryptionKey, _ = security.GenerateRandomString(32)
@@ -204,6 +212,10 @@ func Load(configFile string) Configuration {
 
 	if !Conf.Caps.TokenAuth && Conf.Server.Authentication == "openid" {
 		log.Fatalf("openid is configured but tokenauth disabled")
+	}
+
+	if Conf.Server.Authentication == AuthenticationKerberos && Conf.Kerberos.Keytab == "" {
+		log.Fatalf("kerberos is configured but no keytab was specified")
 	}
 
 	// prepend '//' if required for URL parsing

@@ -4,8 +4,12 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"github.com/bolkedebruin/gokrb5/v8/keytab"
+	"github.com/bolkedebruin/gokrb5/v8/service"
+	"github.com/bolkedebruin/gokrb5/v8/spnego"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/common"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/config"
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/kdcproxy"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/protocol"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/security"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/web"
@@ -204,6 +208,19 @@ func main() {
 	if conf.Server.Authentication == config.AuthenticationBasic {
 		h := web.BasicAuthHandler{SocketAddress: conf.Server.AuthSocket}
 		http.Handle("/remoteDesktopGateway/", common.EnrichContext(h.BasicAuth(gw.HandleGatewayProtocol)))
+	} else if conf.Server.Authentication == config.AuthenticationKerberos {
+		keytab, err := keytab.Load(conf.Kerberos.Keytab)
+		if err != nil {
+			log.Fatalf("Cannot load keytab: %s", err)
+		}
+		http.Handle("/remoteDesktopGateway/", common.EnrichContext(
+			spnego.SPNEGOKRB5Authenticate(
+				http.HandlerFunc(gw.HandleGatewayProtocol),
+				keytab,
+				service.Logger(log.Default()))),
+		)
+		k := kdcproxy.InitKdcProxy(conf.Kerberos.Krb5Conf)
+		http.HandleFunc("/KdcProxy", k.Handler)
 	} else {
 		// openid
 		oidc := initOIDC(url, store)
