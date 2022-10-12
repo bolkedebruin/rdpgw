@@ -11,6 +11,7 @@ require (
 	github.com/gorilla/sessions v1.2.1
 	github.com/gorilla/websocket v1.5.0
 	github.com/jcmturner/gofork v1.7.6
+	github.com/jcmturner/goidentity/v6 v6.0.1
 	github.com/knadh/koanf v1.4.2
 	github.com/msteinert/pam v1.0.0
 	github.com/patrickmn/go-cache v2.1.0+incompatible
@@ -31,7 +32,6 @@ require (
 	github.com/hashicorp/go-uuid v1.0.3 // indirect
 	github.com/jcmturner/aescts/v2 v2.0.0 // indirect
 	github.com/jcmturner/dnsutils/v2 v2.0.0 // indirect
-	github.com/jcmturner/goidentity/v6 v6.0.1 // indirect
 	github.com/jcmturner/rpc/v2 v2.0.3 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect

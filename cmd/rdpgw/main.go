@@ -215,7 +215,7 @@ func main() {
 		}
 		http.Handle("/remoteDesktopGateway/", common.EnrichContext(
 			spnego.SPNEGOKRB5Authenticate(
-				http.HandlerFunc(gw.HandleGatewayProtocol),
+				common.FixKerberosContext(http.HandlerFunc(gw.HandleGatewayProtocol)),
 				keytab,
 				service.Logger(log.Default()))),
 		)

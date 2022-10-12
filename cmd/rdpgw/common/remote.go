@@ -2,6 +2,7 @@ package common
 
 import (
 	"context"
+	"github.com/jcmturner/goidentity/v6"
 	"log"
 	"net"
 	"net/http"
@@ -39,6 +40,18 @@ func EnrichContext(next http.Handler) http.Handler {
 		if h == "" {
 			clientIp, _, _ := net.SplitHostPort(r.RemoteAddr)
 			ctx = context.WithValue(ctx, ClientIPCtx, clientIp)
+		}
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func FixKerberosContext(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+
+		id := goidentity.FromHTTPRequestContext(r)
+		if id != nil {
+			ctx = context.WithValue(ctx, UsernameCtx, id.UserName())
 		}
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
