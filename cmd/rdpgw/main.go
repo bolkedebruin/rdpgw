@@ -226,7 +226,7 @@ func main() {
 		oidc := initOIDC(url, store)
 		http.Handle("/connect", common.EnrichContext(oidc.Authenticated(http.HandlerFunc(h.HandleDownload))))
 		http.Handle("/remoteDesktopGateway/", common.EnrichContext(http.HandlerFunc(gw.HandleGatewayProtocol)))
-		http.HandleFunc("/callback", oidc.HandleCallback)
+		http.Handle("/callback", common.EnrichContext(http.HandlerFunc(oidc.HandleCallback)))
 	}
 	http.Handle("/metrics", promhttp.Handler())
 	http.HandleFunc("/tokeninfo", web.TokenInfo)

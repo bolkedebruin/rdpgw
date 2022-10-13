@@ -51,7 +51,7 @@ func (p *Processor) Process(ctx context.Context) error {
 
 		switch pt {
 		case PKT_TYPE_HANDSHAKE_REQUEST:
-			log.Printf("Client handshakeRequest from %s", common.GetClientIp(ctx))
+			log.Printf("Client handshakeRequest from %s", p.tunnel.User.GetAttribute(common.AttrClientIp))
 			if p.state != SERVER_STATE_INITIALIZED {
 				log.Printf("Handshake attempted while in wrong state %d != %d", p.state, SERVER_STATE_INITIALIZED)
 				msg := p.handshakeResponse(0x0, 0x0, 0, E_PROXY_INTERNALERROR)
@@ -81,7 +81,7 @@ func (p *Processor) Process(ctx context.Context) error {
 			_, cookie := p.tunnelRequest(pkt)
 			if p.gw.CheckPAACookie != nil {
 				if ok, _ := p.gw.CheckPAACookie(ctx, cookie); !ok {
-					log.Printf("Invalid PAA cookie received from client %s", common.GetClientIp(ctx))
+					log.Printf("Invalid PAA cookie received from client %s", p.tunnel.User.GetAttribute(common.AttrClientIp))
 					msg := p.tunnelResponse(E_PROXY_COOKIE_AUTHENTICATION_ACCESS_DENIED)
 					p.tunnel.Write(msg)
 					return fmt.Errorf("%x: invalid PAA cookie", E_PROXY_COOKIE_AUTHENTICATION_ACCESS_DENIED)
@@ -180,9 +180,9 @@ func (p *Processor) Process(ctx context.Context) error {
 	}
 }
 
-// Creates a packet the is a response to a handshakeRequest request
+// Creates a packet and is a response to a handshakeRequest request
 // HTTP_EXTENDED_AUTH_SSPI_NTLM is not supported in Linux
-// but could be in Windows. However the NTLM protocol is insecure
+// but could be in Windows. However, the NTLM protocol is insecure
 func (p *Processor) handshakeResponse(major byte, minor byte, caps uint16, errorCode int) []byte {
 	buf := new(bytes.Buffer)
 	binary.Write(buf, binary.LittleEndian, uint32(errorCode)) // error_code

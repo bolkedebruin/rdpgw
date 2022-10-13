@@ -35,19 +35,21 @@ type customClaims struct {
 
 func CheckSession(next protocol.CheckHostFunc) protocol.CheckHostFunc {
 	return func(ctx context.Context, host string) (bool, error) {
-		s := getTunnel(ctx)
-		if s == nil {
+		tunnel := getTunnel(ctx)
+		if tunnel == nil {
 			return false, errors.New("no valid session info found in context")
 		}
 
-		if s.TargetServer != host {
-			log.Printf("Client specified host %s does not match token host %s", host, s.TargetServer)
+		if tunnel.TargetServer != host {
+			log.Printf("Client specified host %s does not match token host %s", host, tunnel.TargetServer)
 			return false, nil
 		}
 
-		if VerifyClientIP && s.RemoteAddr != common.GetClientIp(ctx) {
+		// use identity from context rather then set by tunnel
+		id := common.FromCtx(ctx)
+		if VerifyClientIP && tunnel.RemoteAddr != id.GetAttribute(common.AttrClientIp) {
 			log.Printf("Current client ip address %s does not match token client ip %s",
-				common.GetClientIp(ctx), s.RemoteAddr)
+				id.GetAttribute(common.AttrClientIp), tunnel.RemoteAddr)
 			return false, nil
 		}
 		return next(ctx, host)
@@ -106,7 +108,7 @@ func CheckPAACookie(ctx context.Context, tokenString string) (bool, error) {
 
 	tunnel.TargetServer = custom.RemoteServer
 	tunnel.RemoteAddr = custom.ClientIP
-	tunnel.UserName = user.Subject
+	tunnel.User.SetUserName(user.Subject)
 
 	return true, nil
 }
@@ -127,10 +129,11 @@ func GeneratePAAToken(ctx context.Context, username string, server string) (stri
 		Subject: username,
 	}
 
+	id := common.FromCtx(ctx)
 	private := customClaims{
 		RemoteServer: server,
-		ClientIP:     common.GetClientIp(ctx),
-		AccessToken:  common.GetAccessToken(ctx),
+		ClientIP:     id.GetAttribute(common.AttrClientIp).(string),
+		AccessToken:  id.GetAttribute(common.AttrAccessToken).(string),
 	}
 
 	if token, err := jwt.Signed(sig).Claims(standard).Claims(private).CompactSerialize(); err != nil {
@@ -289,7 +292,7 @@ func GenerateQueryToken(ctx context.Context, query string, issuer string) (strin
 }
 
 func getTunnel(ctx context.Context) *protocol.Tunnel {
-	s, ok := ctx.Value(common.TunnelCtx).(*protocol.Tunnel)
+	s, ok := ctx.Value(protocol.CtxTunnel).(*protocol.Tunnel)
 	if !ok {
 		log.Printf("cannot get session info from context")
 		return nil

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/common"
 	"log"
 	"strings"
 )
@@ -22,23 +21,14 @@ func CheckHost(ctx context.Context, host string) (bool, error) {
 		// todo get from context?
 		return false, errors.New("cannot verify host in 'signed' mode as token data is missing")
 	case "roundrobin", "unsigned":
-		var username string
-
 		s := getTunnel(ctx)
-		if s == nil || s.UserName == "" {
-			var ok bool
-			username, ok = ctx.Value(common.UsernameCtx).(string)
-			if !ok {
-				return false, errors.New("no valid session info or username found in context")
-			}
-		} else {
-			username = s.UserName
+		if s.User.UserName() == "" {
+			return false, errors.New("no valid session info or username found in context")
 		}
-		log.Printf("Checking host for user %s", username)
+
+		log.Printf("Checking host for user %s", s.User.UserName())
 		for _, h := range Hosts {
-			if username != "" {
-				h = strings.Replace(h, "{{ preferred_username }}", username, 1)
-			}
+			h = strings.Replace(h, "{{ preferred_username }}", s.User.UserName(), 1)
 			if h == host {
 				return true, nil
 			}

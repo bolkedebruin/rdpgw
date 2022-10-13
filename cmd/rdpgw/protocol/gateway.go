@@ -61,24 +61,20 @@ func (g *Gateway) HandleGatewayProtocol(w http.ResponseWriter, r *http.Request) 
 	var t *Tunnel
 
 	ctx := r.Context()
+	id := common.FromRequestCtx(r)
 
 	connId := r.Header.Get(rdgConnectionIdKey)
 	x, found := c.Get(connId)
 	if !found {
 		t = &Tunnel{
 			RDGId:      connId,
-			RemoteAddr: ctx.Value(common.ClientIPCtx).(string),
-		}
-		// username can be nil with openid & kerberos as it's only available later
-		// todo grab kerberos principal now?
-		username := ctx.Value(common.UsernameCtx)
-		if username != nil {
-			t.UserName = username.(string)
+			RemoteAddr: id.GetAttribute(common.AttrRemoteAddr).(string),
+			User:       id,
 		}
 	} else {
 		t = x.(*Tunnel)
 	}
-	ctx = context.WithValue(ctx, common.TunnelCtx, t)
+	ctx = context.WithValue(ctx, CtxTunnel, t)
 
 	if r.Method == MethodRDGOUT {
 		if r.Header.Get("Connection") != "upgrade" && r.Header.Get("Upgrade") != "websocket" {
@@ -187,13 +183,14 @@ func (g *Gateway) handleWebsocketProtocol(ctx context.Context, c *websocket.Conn
 func (g *Gateway) handleLegacyProtocol(w http.ResponseWriter, r *http.Request, t *Tunnel) {
 	log.Printf("Session %s, %t, %t", t.RDGId, t.transportOut != nil, t.transportIn != nil)
 
+	id := common.FromRequestCtx(r)
 	if r.Method == MethodRDGOUT {
 		out, err := transport.NewLegacy(w)
 		if err != nil {
 			log.Printf("cannot hijack connection to support RDG OUT data channel: %s", err)
 			return
 		}
-		log.Printf("Opening RDGOUT for client %s", common.GetClientIp(r.Context()))
+		log.Printf("Opening RDGOUT for client %s", id.GetAttribute(common.AttrClientIp))
 
 		t.transportOut = out
 		out.SendAccept(true)
@@ -215,13 +212,13 @@ func (g *Gateway) handleLegacyProtocol(w http.ResponseWriter, r *http.Request, t
 			t.transportIn = in
 			c.Set(t.RDGId, t, cache.DefaultExpiration)
 
-			log.Printf("Opening RDGIN for client %s", common.GetClientIp(r.Context()))
+			log.Printf("Opening RDGIN for client %s", id.GetAttribute(common.AttrClientIp))
 			in.SendAccept(false)
 
 			// read some initial data
 			in.Drain()
 
-			log.Printf("Legacy handshakeRequest done for client %s", common.GetClientIp(r.Context()))
+			log.Printf("Legacy handshakeRequest done for client %s", id.GetAttribute(common.AttrClientIp))
 			handler := NewProcessor(g, t)
 			RegisterTunnel(t, handler)
 			defer RemoveTunnel(t)

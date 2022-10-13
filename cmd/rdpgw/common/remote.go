@@ -10,16 +10,17 @@ import (
 )
 
 const (
-	ClientIPCtx       = "ClientIP"
-	ProxyAddressesCtx = "ProxyAddresses"
-	RemoteAddressCtx  = "RemoteAddress"
-	TunnelCtx         = "TUNNEL"
-	UsernameCtx       = "preferred_username"
+	CtxAccessToken = "github.com/bolkedebruin/rdpgw/oidc/access_token"
 )
 
 func EnrichContext(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
+		id := FromRequestCtx(r)
+		if id == nil {
+			id = NewUser()
+		}
+		log.Printf("Identity SessionId: %s, UserName: %s: Authenticated: %t",
+			id.SessionId(), id.UserName(), id.Authenticated())
 
 		h := r.Header.Get("X-Forwarded-For")
 		if h != "" {
@@ -32,41 +33,36 @@ func EnrichContext(next http.Handler) http.Handler {
 			if len(ips) > 1 {
 				proxies = ips[1:]
 			}
-			ctx = context.WithValue(ctx, ClientIPCtx, clientIp)
-			ctx = context.WithValue(ctx, ProxyAddressesCtx, proxies)
+			id.SetAttribute(AttrClientIp, clientIp)
+			id.SetAttribute(AttrProxies, proxies)
 		}
 
-		ctx = context.WithValue(ctx, RemoteAddressCtx, r.RemoteAddr)
+		id.SetAttribute(AttrRemoteAddr, r.RemoteAddr)
 		if h == "" {
 			clientIp, _, _ := net.SplitHostPort(r.RemoteAddr)
-			ctx = context.WithValue(ctx, ClientIPCtx, clientIp)
+			id.SetAttribute(AttrClientIp, clientIp)
 		}
-		next.ServeHTTP(w, r.WithContext(ctx))
+		next.ServeHTTP(w, AddToRequestCtx(id, r))
 	})
 }
 
 func FixKerberosContext(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-
-		id := goidentity.FromHTTPRequestContext(r)
-		if id != nil {
-			ctx = context.WithValue(ctx, UsernameCtx, id.UserName())
+		gid := goidentity.FromHTTPRequestContext(r)
+		if gid != nil {
+			id := FromRequestCtx(r)
+			id.SetUserName(gid.UserName())
+			id.SetAuthenticated(gid.Authenticated())
+			id.SetDomain(gid.Domain())
+			id.SetAuthTime(gid.AuthTime())
+			r = AddToRequestCtx(id, r)
 		}
-		next.ServeHTTP(w, r.WithContext(ctx))
+		next.ServeHTTP(w, r)
 	})
 }
 
-func GetClientIp(ctx context.Context) string {
-	s, ok := ctx.Value(ClientIPCtx).(string)
-	if !ok {
-		return ""
-	}
-	return s
-}
-
 func GetAccessToken(ctx context.Context) string {
-	token, ok := ctx.Value("access_token").(string)
+	token, ok := ctx.Value(CtxAccessToken).(string)
 	if !ok {
 		log.Printf("cannot get access token from context")
 		return ""

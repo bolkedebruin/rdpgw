@@ -12,14 +12,16 @@ var (
 		RDGId:        "myid",
 		TargetServer: "my.remote.server",
 		RemoteAddr:   "10.0.0.1",
-		UserName:     "Frank",
 	}
 
 	hosts = []string{"localhost:3389", "my-{{ preferred_username }}-host:3389"}
 )
 
 func TestCheckHost(t *testing.T) {
-	ctx := context.WithValue(context.Background(), common.TunnelCtx, &info)
+	info.User = common.NewUser()
+	info.User.SetUserName("MYNAME")
+
+	ctx := context.WithValue(context.Background(), protocol.CtxTunnel, &info)
 
 	Hosts = hosts
 
@@ -40,14 +42,7 @@ func TestCheckHost(t *testing.T) {
 		t.Fatalf("%s should NOT be allowed with host selection %s (err: %s)", host, HostSelection, err)
 	}
 
-	host = "my-Frank-host:3389"
-	if ok, err := CheckHost(ctx, host); !ok {
-		t.Fatalf("%s should be allowed with host selection %s (err: %s)", host, HostSelection, err)
-	}
-
-	info.UserName = ""
-	ctx = context.WithValue(ctx, "preferred_username", "dummy")
-	host = "my-dummy-host:3389"
+	host = "my-MYNAME-host:3389"
 	if ok, err := CheckHost(ctx, host); !ok {
 		t.Fatalf("%s should be allowed with host selection %s (err: %s)", host, HostSelection, err)
 	}

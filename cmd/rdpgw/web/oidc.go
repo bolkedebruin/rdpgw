@@ -1,7 +1,6 @@
 package web
 
 import (
-	"context"
 	"encoding/hex"
 	"encoding/json"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/common"
@@ -15,8 +14,10 @@ import (
 )
 
 const (
-	CacheExpiration = time.Minute * 2
-	CleanupInterval = time.Minute * 5
+	CacheExpiration         = time.Minute * 2
+	CleanupInterval         = time.Minute * 5
+	sessionKeyAuthenticated = "authenticated"
+	oidcKeyUserName         = "preferred_username"
 )
 
 type OIDC struct {
@@ -90,10 +91,14 @@ func (h *OIDC) HandleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	id := common.FromRequestCtx(r)
+	id.SetUserName(data[oidcKeyUserName].(string))
+	id.SetAuthenticated(true)
+	id.SetAuthTime(time.Now())
+	id.SetAttribute(common.AttrAccessToken, oauth2Token.AccessToken)
+
 	session.Options.MaxAge = MaxAge
-	session.Values["preferred_username"] = data["preferred_username"]
-	session.Values["authenticated"] = true
-	session.Values["access_token"] = oauth2Token.AccessToken
+	session.Values[common.CTXKey] = id
 
 	if err = session.Save(r, w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -110,8 +115,8 @@ func (h *OIDC) Authenticated(next http.Handler) http.Handler {
 			return
 		}
 
-		found := session.Values["authenticated"]
-		if found == nil || !found.(bool) {
+		id := session.Values[common.CTXKey].(common.Identity)
+		if id == nil {
 			seed := make([]byte, 16)
 			rand.Read(seed)
 			state := hex.EncodeToString(seed)
@@ -120,9 +125,7 @@ func (h *OIDC) Authenticated(next http.Handler) http.Handler {
 			return
 		}
 
-		ctx := context.WithValue(r.Context(), common.UsernameCtx, session.Values["preferred_username"])
-		ctx = context.WithValue(ctx, "access_token", session.Values["access_token"])
-
-		next.ServeHTTP(w, r.WithContext(ctx))
+		// replace the identity with the one from the sessions
+		next.ServeHTTP(w, common.AddToRequestCtx(id, r))
 	})
 }
