@@ -35,6 +35,13 @@ signed with a 256 bit HMAC. Hosts provided by the user are verified against what
 the server. Finally, the client's ip address needs to match the one it obtained the token with.
 
 ## How to build & install
+
+__NOTE__: a docker image is available on docker hub, which removes the need for building and installing go.
+
+Ensure that you have `go` version 1.19 or above installed. In addition to that you need a working `make` which is typicall in the build tools of your distro (e.g. `build-essential` on debian/ubuntu).
+
+Then clone the repo and issues the following.
+
 ```bash
 cd rdpgw
 make
@@ -48,11 +55,14 @@ template.
 ```yaml
 # web server configuration. 
 Server:
- # can be set to openid (default) and local. If openid is used rdpgw expects
+ # can be set to openid, kerberos and local. If openid is used rdpgw expects
  # a configured openid provider, make sure to set caps.tokenauth to true. If local
  # rdpgw connects to rdpgw-auth over a socket to verify users and password. Note:
- # rdpgw-auth needs to be run as root or setuid in order to work
- Authentication: openid
+ # rdpgw-auth needs to be run as root or setuid in order to work. If kerberos is
+ # used a keytab and krb5conf need to be supplied. local and kerberos authentication
+ # can be stacked, so that the clients selects what it wants.
+ Authentication: 
+  - openid
  # The socket to connect to if using local auth. Ensure rdpgw auth is configured to
  # use the same socket.
  AuthSocket: /tmp/rdpgw-auth.sock
@@ -98,6 +108,9 @@ OpenId:
  ProviderUrl: http://keycloak/auth/realms/test
  ClientId: rdpgw
  ClientSecret: your-secret
+Kerberos:
+ Keytab: /etc/keytabs/rdpgw.keytab
+ Krb5conf: /etc/krb5.conf
 # enabled / disabled capabilities
 Caps:
  SmartCardAuth: false
