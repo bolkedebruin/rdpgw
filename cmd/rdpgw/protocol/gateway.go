@@ -3,7 +3,7 @@ package protocol
 import (
 	"context"
 	"errors"
-	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/common"
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/identity"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/transport"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -61,14 +61,14 @@ func (g *Gateway) HandleGatewayProtocol(w http.ResponseWriter, r *http.Request) 
 	var t *Tunnel
 
 	ctx := r.Context()
-	id := common.FromRequestCtx(r)
+	id := identity.FromRequestCtx(r)
 
 	connId := r.Header.Get(rdgConnectionIdKey)
 	x, found := c.Get(connId)
 	if !found {
 		t = &Tunnel{
 			RDGId:      connId,
-			RemoteAddr: id.GetAttribute(common.AttrRemoteAddr).(string),
+			RemoteAddr: id.GetAttribute(identity.AttrRemoteAddr).(string),
 			User:       id,
 		}
 	} else {
@@ -183,14 +183,14 @@ func (g *Gateway) handleWebsocketProtocol(ctx context.Context, c *websocket.Conn
 func (g *Gateway) handleLegacyProtocol(w http.ResponseWriter, r *http.Request, t *Tunnel) {
 	log.Printf("Session %s, %t, %t", t.RDGId, t.transportOut != nil, t.transportIn != nil)
 
-	id := common.FromRequestCtx(r)
+	id := identity.FromRequestCtx(r)
 	if r.Method == MethodRDGOUT {
 		out, err := transport.NewLegacy(w)
 		if err != nil {
 			log.Printf("cannot hijack connection to support RDG OUT data channel: %s", err)
 			return
 		}
-		log.Printf("Opening RDGOUT for client %s", id.GetAttribute(common.AttrClientIp))
+		log.Printf("Opening RDGOUT for client %s", id.GetAttribute(identity.AttrClientIp))
 
 		t.transportOut = out
 		out.SendAccept(true)
@@ -212,13 +212,13 @@ func (g *Gateway) handleLegacyProtocol(w http.ResponseWriter, r *http.Request, t
 			t.transportIn = in
 			c.Set(t.RDGId, t, cache.DefaultExpiration)
 
-			log.Printf("Opening RDGIN for client %s", id.GetAttribute(common.AttrClientIp))
+			log.Printf("Opening RDGIN for client %s", id.GetAttribute(identity.AttrClientIp))
 			in.SendAccept(false)
 
 			// read some initial data
 			in.Drain()
 
-			log.Printf("Legacy handshakeRequest done for client %s", id.GetAttribute(common.AttrClientIp))
+			log.Printf("Legacy handshakeRequest done for client %s", id.GetAttribute(identity.AttrClientIp))
 			handler := NewProcessor(g, t)
 			RegisterTunnel(t, handler)
 			defer RemoveTunnel(t)

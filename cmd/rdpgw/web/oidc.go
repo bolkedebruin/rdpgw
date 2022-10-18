@@ -3,9 +3,8 @@ package web
 import (
 	"encoding/hex"
 	"encoding/json"
-	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/common"
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/identity"
 	"github.com/coreos/go-oidc/v3/oidc"
-	"github.com/gorilla/sessions"
 	"github.com/patrickmn/go-cache"
 	"golang.org/x/oauth2"
 	"math/rand"
@@ -14,23 +13,20 @@ import (
 )
 
 const (
-	CacheExpiration         = time.Minute * 2
-	CleanupInterval         = time.Minute * 5
-	sessionKeyAuthenticated = "authenticated"
-	oidcKeyUserName         = "preferred_username"
+	CacheExpiration = time.Minute * 2
+	CleanupInterval = time.Minute * 5
+	oidcKeyUserName = "preferred_username"
 )
 
 type OIDC struct {
 	oAuth2Config      *oauth2.Config
 	oidcTokenVerifier *oidc.IDTokenVerifier
 	stateStore        *cache.Cache
-	sessionStore      sessions.Store
 }
 
 type OIDCConfig struct {
 	OAuth2Config      *oauth2.Config
 	OIDCTokenVerifier *oidc.IDTokenVerifier
-	SessionStore      sessions.Store
 }
 
 func (c *OIDCConfig) New() *OIDC {
@@ -38,7 +34,6 @@ func (c *OIDCConfig) New() *OIDC {
 		oAuth2Config:      c.OAuth2Config,
 		oidcTokenVerifier: c.OIDCTokenVerifier,
 		stateStore:        cache.New(CacheExpiration, CleanupInterval),
-		sessionStore:      c.SessionStore,
 	}
 }
 
@@ -85,22 +80,13 @@ func (h *OIDC) HandleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, err := h.sessionStore.Get(r, RdpGwSession)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	id := common.FromRequestCtx(r)
+	id := identity.FromRequestCtx(r)
 	id.SetUserName(data[oidcKeyUserName].(string))
 	id.SetAuthenticated(true)
 	id.SetAuthTime(time.Now())
-	id.SetAttribute(common.AttrAccessToken, oauth2Token.AccessToken)
+	id.SetAttribute(identity.AttrAccessToken, oauth2Token.AccessToken)
 
-	session.Options.MaxAge = MaxAge
-	session.Values[common.CTXKey] = id
-
-	if err = session.Save(r, w); err != nil {
+	if err = SaveSessionIdentity(r, w, id); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 
@@ -109,14 +95,9 @@ func (h *OIDC) HandleCallback(w http.ResponseWriter, r *http.Request) {
 
 func (h *OIDC) Authenticated(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		session, err := h.sessionStore.Get(r, RdpGwSession)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
+		id := identity.FromRequestCtx(r)
 
-		id := session.Values[common.CTXKey].(common.Identity)
-		if id == nil {
+		if !id.Authenticated() {
 			seed := make([]byte, 16)
 			rand.Read(seed)
 			state := hex.EncodeToString(seed)
@@ -126,6 +107,6 @@ func (h *OIDC) Authenticated(next http.Handler) http.Handler {
 		}
 
 		// replace the identity with the one from the sessions
-		next.ServeHTTP(w, common.AddToRequestCtx(id, r))
+		next.ServeHTTP(w, r)
 	})
 }

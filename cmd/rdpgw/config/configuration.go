@@ -48,7 +48,7 @@ type ServerConfig struct {
 	SendBuf              int      `koanf:"sendbuf"`
 	ReceiveBuf           int      `koanf:"receivebuf"`
 	Tls                  string   `koanf:"tls"`
-	Authentication       string   `koanf:"authentication"`
+	Authentication       []string `koanf:"authentication"`
 	AuthSocket           string   `koanf:"authsocket"`
 }
 
@@ -206,15 +206,15 @@ func Load(configFile string) Configuration {
 		log.Fatalf("host selection is set to `signed` but `querytokensigningkey` is not set")
 	}
 
-	if Conf.Server.Authentication == "local" && Conf.Server.Tls == "disable" {
+	if Conf.Server.BasicAuthEnabled() && Conf.Server.Tls == "disable" {
 		log.Fatalf("basicauth=local and tls=disable are mutually exclusive")
 	}
 
-	if !Conf.Caps.TokenAuth && Conf.Server.Authentication == "openid" {
+	if !Conf.Caps.TokenAuth && Conf.Server.OpenIDEnabled() {
 		log.Fatalf("openid is configured but tokenauth disabled")
 	}
 
-	if Conf.Server.Authentication == AuthenticationKerberos && Conf.Kerberos.Keytab == "" {
+	if Conf.Server.KerberosEnabled() && Conf.Kerberos.Keytab == "" {
 		log.Fatalf("kerberos is configured but no keytab was specified")
 	}
 
@@ -225,4 +225,25 @@ func Load(configFile string) Configuration {
 
 	return Conf
 
+}
+
+func (s *ServerConfig) OpenIDEnabled() bool {
+	return s.matchAuth("openid")
+}
+
+func (s *ServerConfig) KerberosEnabled() bool {
+	return s.matchAuth("kerberos")
+}
+
+func (s *ServerConfig) BasicAuthEnabled() bool {
+	return s.matchAuth("local")
+}
+
+func (s *ServerConfig) matchAuth(needle string) bool {
+	for _, q := range s.Authentication {
+		if q == needle {
+			return true
+		}
+	}
+	return false
 }

@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/common"
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/identity"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/protocol"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/go-jose/go-jose/v3"
@@ -46,10 +46,10 @@ func CheckSession(next protocol.CheckHostFunc) protocol.CheckHostFunc {
 		}
 
 		// use identity from context rather then set by tunnel
-		id := common.FromCtx(ctx)
-		if VerifyClientIP && tunnel.RemoteAddr != id.GetAttribute(common.AttrClientIp) {
+		id := identity.FromCtx(ctx)
+		if VerifyClientIP && tunnel.RemoteAddr != id.GetAttribute(identity.AttrClientIp) {
 			log.Printf("Current client ip address %s does not match token client ip %s",
-				id.GetAttribute(common.AttrClientIp), tunnel.RemoteAddr)
+				id.GetAttribute(identity.AttrClientIp), tunnel.RemoteAddr)
 			return false, nil
 		}
 		return next(ctx, host)
@@ -129,11 +129,11 @@ func GeneratePAAToken(ctx context.Context, username string, server string) (stri
 		Subject: username,
 	}
 
-	id := common.FromCtx(ctx)
+	id := identity.FromCtx(ctx)
 	private := customClaims{
 		RemoteServer: server,
-		ClientIP:     id.GetAttribute(common.AttrClientIp).(string),
-		AccessToken:  id.GetAttribute(common.AttrAccessToken).(string),
+		ClientIP:     id.GetAttribute(identity.AttrClientIp).(string),
+		AccessToken:  id.GetAttribute(identity.AttrAccessToken).(string),
 	}
 
 	if token, err := jwt.Signed(sig).Claims(standard).Claims(private).CompactSerialize(); err != nil {

@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/identity"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/security"
 	"net/http"
 	"net/http/httptest"
@@ -113,9 +114,13 @@ func TestHandler_HandleDownload(t *testing.T) {
 	}
 
 	rr := httptest.NewRecorder()
+	id := identity.NewUser()
+
+	id.SetUserName(testuser)
+	id.SetAuthenticated(true)
+
+	req = identity.AddToRequestCtx(id, req)
 	ctx := req.Context()
-	ctx = context.WithValue(ctx, "preferred_username", testuser)
-	req = req.WithContext(ctx)
 
 	u, _ := url.Parse(gateway)
 	c := Config{

@@ -5,7 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/gorilla/sessions"
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/identity"
 	"log"
 	"math/rand"
 	"net/http"
@@ -14,17 +14,11 @@ import (
 	"time"
 )
 
-const (
-	RdpGwSession = "RDPGWSESSION"
-	MaxAge       = 120
-)
-
 type TokenGeneratorFunc func(context.Context, string, string) (string, error)
 type UserTokenGeneratorFunc func(context.Context, string) (string, error)
 type QueryInfoFunc func(context.Context, string, string) (string, error)
 
 type Config struct {
-	SessionStore       sessions.Store
 	PAATokenGenerator  TokenGeneratorFunc
 	UserTokenGenerator UserTokenGeneratorFunc
 	QueryInfo          QueryInfoFunc
@@ -46,7 +40,6 @@ type RdpOpts struct {
 }
 
 type Handler struct {
-	sessionStore       sessions.Store
 	paaTokenGenerator  TokenGeneratorFunc
 	enableUserToken    bool
 	userTokenGenerator UserTokenGeneratorFunc
@@ -63,7 +56,6 @@ func (c *Config) NewHandler() *Handler {
 		log.Fatal("Not enough hosts to connect to specified")
 	}
 	return &Handler{
-		sessionStore:       c.SessionStore,
 		paaTokenGenerator:  c.PAATokenGenerator,
 		enableUserToken:    c.EnableUserToken,
 		userTokenGenerator: c.UserTokenGenerator,
@@ -132,13 +124,13 @@ func (h *Handler) getHost(ctx context.Context, u *url.URL) (string, error) {
 }
 
 func (h *Handler) HandleDownload(w http.ResponseWriter, r *http.Request) {
+	id := identity.FromRequestCtx(r)
 	ctx := r.Context()
-	userName, ok := ctx.Value("preferred_username").(string)
 
 	opts := h.rdpOpts
 
-	if !ok {
-		log.Printf("preferred_username not found in context")
+	if !id.Authenticated() {
+		log.Printf("unauthenticated user %s", id.UserName())
 		http.Error(w, errors.New("cannot find session or user").Error(), http.StatusInternalServerError)
 		return
 	}
@@ -149,13 +141,13 @@ func (h *Handler) HandleDownload(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	host = strings.Replace(host, "{{ preferred_username }}", userName, 1)
+	host = strings.Replace(host, "{{ preferred_username }}", id.UserName(), 1)
 
 	// split the username into user and domain
-	var user = userName
+	var user = id.UserName()
 	var domain = opts.DefaultDomain
 	if opts.SplitUserDomain {
-		creds := strings.SplitN(userName, "@", 2)
+		creds := strings.SplitN(id.UserName(), "@", 2)
 		user = creds[0]
 		if len(creds) > 1 {
 			domain = creds[1]
@@ -203,6 +195,8 @@ func (h *Handler) HandleDownload(w http.ResponseWriter, r *http.Request) {
 	rdp.Connection.GatewayHostname = h.gatewayAddress.Host
 	rdp.Connection.GatewayCredentialsSource = SourceCookie
 	rdp.Connection.GatewayAccessToken = token
+	rdp.Connection.GatewayCredentialMethod = 1
+	rdp.Connection.GatewayUsageMethod = 1
 	rdp.Session.NetworkAutodetect = opts.NetworkAutoDetect != 0
 	rdp.Session.BandwidthAutodetect = opts.BandwidthAutoDetect != 0
 	rdp.Session.ConnectionType = opts.ConnectionType

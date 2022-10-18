@@ -2,7 +2,7 @@ package security
 
 import (
 	"context"
-	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/common"
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/identity"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/protocol"
 	"testing"
 )
@@ -18,7 +18,7 @@ var (
 )
 
 func TestCheckHost(t *testing.T) {
-	info.User = common.NewUser()
+	info.User = identity.NewUser()
 	info.User.SetUserName("MYNAME")
 
 	ctx := context.WithValue(context.Background(), protocol.CtxTunnel, &info)

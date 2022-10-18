@@ -1,59 +1,11 @@
-package common
+package identity
 
 import (
-	"context"
+	"bytes"
+	"encoding/gob"
 	"github.com/google/uuid"
-	"net/http"
 	"time"
 )
-
-const (
-	CTXKey = "github.com/bolkedebruin/rdpgw/common/identity"
-
-	AttrRemoteAddr  = "remoteAddr"
-	AttrClientIp    = "clientIp"
-	AttrProxies     = "proxyAddresses"
-	AttrAccessToken = "accessToken" // todo remove for security reasons
-)
-
-type Identity interface {
-	UserName() string
-	SetUserName(string)
-	DisplayName() string
-	SetDisplayName(string)
-	Domain() string
-	SetDomain(string)
-	Authenticated() bool
-	SetAuthenticated(bool)
-	AuthTime() time.Time
-	SetAuthTime(time2 time.Time)
-	SessionId() string
-	SetAttribute(string, interface{})
-	GetAttribute(string) interface{}
-	Attributes() map[string]interface{}
-	DelAttribute(string)
-	Email() string
-	SetEmail(string)
-	Expiry() time.Time
-	SetExpiry(time.Time)
-}
-
-func AddToRequestCtx(id Identity, r *http.Request) *http.Request {
-	ctx := r.Context()
-	ctx = context.WithValue(ctx, CTXKey, id)
-	return r.WithContext(ctx)
-}
-
-func FromRequestCtx(r *http.Request) Identity {
-	return FromCtx(r.Context())
-}
-
-func FromCtx(ctx context.Context) Identity {
-	if id, ok := ctx.Value(CTXKey).(Identity); ok {
-		return id
-	}
-	return nil
-}
 
 type User struct {
 	authenticated   bool
@@ -66,6 +18,19 @@ type User struct {
 	expiry          time.Time
 	attributes      map[string]interface{}
 	groupMembership map[string]bool
+}
+
+type user struct {
+	Authenticated   bool
+	UserName        string
+	Domain          string
+	DisplayName     string
+	Email           string
+	AuthTime        time.Time
+	SessionId       string
+	Expiry          time.Time
+	Attributes      map[string]interface{}
+	GroupMembership map[string]bool
 }
 
 func NewUser() *User {
@@ -157,4 +122,49 @@ func (u *User) Expiry() time.Time {
 
 func (u *User) SetExpiry(t time.Time) {
 	u.expiry = t
+}
+
+func (u *User) Marshal() ([]byte, error) {
+	buf := new(bytes.Buffer)
+	enc := gob.NewEncoder(buf)
+	uu := user{
+		Authenticated:   u.authenticated,
+		UserName:        u.userName,
+		Domain:          u.domain,
+		DisplayName:     u.displayName,
+		Email:           u.email,
+		AuthTime:        u.authTime,
+		SessionId:       u.sessionId,
+		Expiry:          u.expiry,
+		Attributes:      u.attributes,
+		GroupMembership: u.groupMembership,
+	}
+	err := enc.Encode(uu)
+
+	if err != nil {
+		return []byte{}, err
+	}
+	return buf.Bytes(), nil
+}
+
+func (u *User) Unmarshal(b []byte) error {
+	buf := bytes.NewBuffer(b)
+	dec := gob.NewDecoder(buf)
+	var uu user
+	err := dec.Decode(&uu)
+	if err != nil {
+		return err
+	}
+	u.sessionId = uu.SessionId
+	u.userName = uu.UserName
+	u.domain = uu.Domain
+	u.displayName = uu.DisplayName
+	u.email = uu.Email
+	u.authenticated = uu.Authenticated
+	u.authTime = uu.AuthTime
+	u.expiry = uu.Expiry
+	u.attributes = uu.Attributes
+	u.groupMembership = uu.GroupMembership
+
+	return nil
 }

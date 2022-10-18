@@ -2,7 +2,7 @@ package web
 
 import (
 	"context"
-	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/common"
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/identity"
 	"github.com/bolkedebruin/rdpgw/shared/auth"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -53,11 +53,11 @@ func (h *BasicAuthHandler) BasicAuth(next http.HandlerFunc) http.HandlerFunc {
 				log.Printf("User %s is not authenticated for this service", username)
 			} else {
 				log.Printf("User %s authenticated", username)
-				id := common.FromRequestCtx(r)
+				id := identity.FromRequestCtx(r)
 				id.SetUserName(username)
 				id.SetAuthenticated(true)
 				id.SetAuthTime(time.Now())
-				next.ServeHTTP(w, common.AddToRequestCtx(id, r))
+				next.ServeHTTP(w, identity.AddToRequestCtx(id, r))
 				return
 			}
 
@@ -66,7 +66,7 @@ func (h *BasicAuthHandler) BasicAuth(next http.HandlerFunc) http.HandlerFunc {
 		// username or password is wrong, then set a WWW-Authenticate
 		// header to inform the client that we expect them to use basic
 		// authentication and send a 401 Unauthorized response.
-		w.Header().Set("WWW-Authenticate", `Basic realm="restricted", charset="UTF-8"`)
+		w.Header().Add("WWW-Authenticate", `Basic realm="restricted", charset="UTF-8"`)
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 	}
 }

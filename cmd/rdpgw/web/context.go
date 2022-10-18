@@ -1,7 +1,7 @@
-package common
+package web
 
 import (
-	"context"
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/identity"
 	"github.com/jcmturner/goidentity/v6"
 	"log"
 	"net"
@@ -9,16 +9,22 @@ import (
 	"strings"
 )
 
-const (
-	CtxAccessToken = "github.com/bolkedebruin/rdpgw/oidc/access_token"
-)
-
 func EnrichContext(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		id := FromRequestCtx(r)
-		if id == nil {
-			id = NewUser()
+		id, err := GetSessionIdentity(r)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
+
+		if id == nil {
+			id = identity.NewUser()
+			if err := SaveSessionIdentity(r, w, id); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+
 		log.Printf("Identity SessionId: %s, UserName: %s: Authenticated: %t",
 			id.SessionId(), id.UserName(), id.Authenticated())
 
@@ -33,39 +39,30 @@ func EnrichContext(next http.Handler) http.Handler {
 			if len(ips) > 1 {
 				proxies = ips[1:]
 			}
-			id.SetAttribute(AttrClientIp, clientIp)
-			id.SetAttribute(AttrProxies, proxies)
+			id.SetAttribute(identity.AttrClientIp, clientIp)
+			id.SetAttribute(identity.AttrProxies, proxies)
 		}
 
-		id.SetAttribute(AttrRemoteAddr, r.RemoteAddr)
+		id.SetAttribute(identity.AttrRemoteAddr, r.RemoteAddr)
 		if h == "" {
 			clientIp, _, _ := net.SplitHostPort(r.RemoteAddr)
-			id.SetAttribute(AttrClientIp, clientIp)
+			id.SetAttribute(identity.AttrClientIp, clientIp)
 		}
-		next.ServeHTTP(w, AddToRequestCtx(id, r))
+		next.ServeHTTP(w, identity.AddToRequestCtx(id, r))
 	})
 }
 
-func FixKerberosContext(next http.Handler) http.Handler {
+func TransposeSPNEGOContext(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gid := goidentity.FromHTTPRequestContext(r)
 		if gid != nil {
-			id := FromRequestCtx(r)
+			id := identity.FromRequestCtx(r)
 			id.SetUserName(gid.UserName())
 			id.SetAuthenticated(gid.Authenticated())
 			id.SetDomain(gid.Domain())
 			id.SetAuthTime(gid.AuthTime())
-			r = AddToRequestCtx(id, r)
+			r = identity.AddToRequestCtx(id, r)
 		}
 		next.ServeHTTP(w, r)
 	})
-}
-
-func GetAccessToken(ctx context.Context) string {
-	token, ok := ctx.Value(CtxAccessToken).(string)
-	if !ok {
-		log.Printf("cannot get access token from context")
-		return ""
-	}
-	return token
 }

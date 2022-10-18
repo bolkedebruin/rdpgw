@@ -6,7 +6,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/common"
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/identity"
 	"io"
 	"log"
 	"net"
@@ -51,7 +51,7 @@ func (p *Processor) Process(ctx context.Context) error {
 
 		switch pt {
 		case PKT_TYPE_HANDSHAKE_REQUEST:
-			log.Printf("Client handshakeRequest from %s", p.tunnel.User.GetAttribute(common.AttrClientIp))
+			log.Printf("Client handshakeRequest from %s", p.tunnel.User.GetAttribute(identity.AttrClientIp))
 			if p.state != SERVER_STATE_INITIALIZED {
 				log.Printf("Handshake attempted while in wrong state %d != %d", p.state, SERVER_STATE_INITIALIZED)
 				msg := p.handshakeResponse(0x0, 0x0, 0, E_PROXY_INTERNALERROR)
@@ -81,7 +81,7 @@ func (p *Processor) Process(ctx context.Context) error {
 			_, cookie := p.tunnelRequest(pkt)
 			if p.gw.CheckPAACookie != nil {
 				if ok, _ := p.gw.CheckPAACookie(ctx, cookie); !ok {
-					log.Printf("Invalid PAA cookie received from client %s", p.tunnel.User.GetAttribute(common.AttrClientIp))
+					log.Printf("Invalid PAA cookie received from client %s", p.tunnel.User.GetAttribute(identity.AttrClientIp))
 					msg := p.tunnelResponse(E_PROXY_COOKIE_AUTHENTICATION_ACCESS_DENIED)
 					p.tunnel.Write(msg)
 					return fmt.Errorf("%x: invalid PAA cookie", E_PROXY_COOKIE_AUTHENTICATION_ACCESS_DENIED)

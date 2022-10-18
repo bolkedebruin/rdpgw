@@ -7,14 +7,13 @@ import (
 	"github.com/bolkedebruin/gokrb5/v8/keytab"
 	"github.com/bolkedebruin/gokrb5/v8/service"
 	"github.com/bolkedebruin/gokrb5/v8/spnego"
-	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/common"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/config"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/kdcproxy"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/protocol"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/security"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/web"
 	"github.com/coreos/go-oidc/v3/oidc"
-	"github.com/gorilla/sessions"
+	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/thought-machine/go-flags"
 	"golang.org/x/crypto/acme/autocert"
@@ -26,13 +25,18 @@ import (
 	"strconv"
 )
 
+const (
+	gatewayEndPoint  = "/remoteDesktopGateway/"
+	kdcProxyEndPoint = "/KdcProxy"
+)
+
 var opts struct {
 	ConfigFile string `short:"c" long:"conf" default:"rdpgw.yaml" description:"config file (yaml)"`
 }
 
 var conf config.Configuration
 
-func initOIDC(callbackUrl *url.URL, store sessions.Store) *web.OIDC {
+func initOIDC(callbackUrl *url.URL) *web.OIDC {
 	// set oidc config
 	provider, err := oidc.NewProvider(context.Background(), conf.OpenId.ProviderUrl)
 	if err != nil {
@@ -56,7 +60,6 @@ func initOIDC(callbackUrl *url.URL, store sessions.Store) *web.OIDC {
 	o := web.OIDCConfig{
 		OAuth2Config:      &oauthConfig,
 		OIDCTokenVerifier: verifier,
-		SessionStore:      store,
 	}
 
 	return o.New()
@@ -91,19 +94,13 @@ func main() {
 	security.Hosts = conf.Server.Hosts
 
 	// init session store
-	sessionConf := web.SessionManagerConf{
-		SessionKey:           []byte(conf.Server.SessionKey),
-		SessionEncryptionKey: []byte(conf.Server.SessionEncryptionKey),
-		StoreType:            conf.Server.SessionStore,
-	}
-	store := sessionConf.Init()
+	web.InitStore([]byte(conf.Server.SessionKey), []byte(conf.Server.SessionEncryptionKey), conf.Server.SessionStore)
 
 	// configure web backend
 	w := &web.Config{
 		QueryInfo:        security.QueryInfo,
 		QueryTokenIssuer: conf.Security.QueryTokenIssuer,
 		EnableUserToken:  conf.Security.EnableUserToken,
-		SessionStore:     store,
 		Hosts:            conf.Server.Hosts,
 		HostSelection:    conf.Server.HostSelection,
 		RdpOpts: web.RdpOpts{
@@ -128,6 +125,7 @@ func main() {
 	log.Printf("Starting remote desktop gateway server")
 	cfg := &tls.Config{}
 
+	// configure tls security
 	if conf.Server.Tls == config.TlsDisable {
 		log.Printf("TLS disabled - rdp gw connections require tls, make sure to have a terminator")
 	} else {
@@ -174,13 +172,7 @@ func main() {
 		}
 	}
 
-	server := http.Server{
-		Addr:         ":" + strconv.Itoa(conf.Server.Port),
-		TLSConfig:    cfg,
-		TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler)), // disable http2
-	}
-
-	// create the gateway
+	// gateway confg
 	gw := protocol.Gateway{
 		RedirectFlags: protocol.RedirectFlags{
 			Clipboard:  conf.Caps.EnableClipboard,
@@ -205,31 +197,72 @@ func main() {
 		gw.CheckHost = security.CheckHost
 	}
 
-	if conf.Server.Authentication == config.AuthenticationBasic {
-		h := web.BasicAuthHandler{SocketAddress: conf.Server.AuthSocket}
-		http.Handle("/remoteDesktopGateway/", common.EnrichContext(h.BasicAuth(gw.HandleGatewayProtocol)))
-	} else if conf.Server.Authentication == config.AuthenticationKerberos {
+	r := mux.NewRouter()
+
+	// ensure identity is set in context and get some extra info
+	r.Use(web.EnrichContext)
+
+	// prometheus metrics
+	r.Handle("/metrics", promhttp.Handler())
+
+	// for sso callbacks
+	r.HandleFunc("/tokeninfo", web.TokenInfo)
+
+	// gateway endpoint
+	rdp := r.PathPrefix(gatewayEndPoint).Subrouter()
+
+	// openid
+	if conf.Server.OpenIDEnabled() {
+		log.Printf("enabling openid extended authentication")
+		o := initOIDC(url)
+		r.Handle("/connect", o.Authenticated(http.HandlerFunc(h.HandleDownload)))
+		r.HandleFunc("/callback", o.HandleCallback)
+
+		// only enable un-auth endpoint for openid only config
+		if !conf.Server.KerberosEnabled() || !conf.Server.BasicAuthEnabled() {
+			rdp.Name("gw").HandlerFunc(gw.HandleGatewayProtocol)
+		}
+	}
+
+	// for stacking of authentication
+	auth := web.NewAuthMux()
+
+	// basic auth
+	if conf.Server.BasicAuthEnabled() {
+		log.Printf("enabling basic authentication")
+		q := web.BasicAuthHandler{SocketAddress: conf.Server.AuthSocket}
+		rdp.Headers("Authorization", "Basic*").HandlerFunc(q.BasicAuth(gw.HandleGatewayProtocol))
+		auth.Register(`Basic realm="restricted", charset="UTF-8"`)
+	}
+
+	// spnego / kerberos
+	if conf.Server.KerberosEnabled() {
+		log.Printf("enabling kerberos authentication")
 		keytab, err := keytab.Load(conf.Kerberos.Keytab)
 		if err != nil {
 			log.Fatalf("Cannot load keytab: %s", err)
 		}
-		http.Handle("/remoteDesktopGateway/", common.EnrichContext(
-			spnego.SPNEGOKRB5Authenticate(
-				common.FixKerberosContext(http.HandlerFunc(gw.HandleGatewayProtocol)),
+		rdp.Headers("Authorization", "Negotiate*").Handler(
+			spnego.SPNEGOKRB5Authenticate(web.TransposeSPNEGOContext(http.HandlerFunc(gw.HandleGatewayProtocol)),
 				keytab,
-				service.Logger(log.Default()))),
-		)
+				service.Logger(log.Default())))
+
+		// kdcproxy
 		k := kdcproxy.InitKdcProxy(conf.Kerberos.Krb5Conf)
-		http.HandleFunc("/KdcProxy", k.Handler)
-	} else {
-		// openid
-		oidc := initOIDC(url, store)
-		http.Handle("/connect", common.EnrichContext(oidc.Authenticated(http.HandlerFunc(h.HandleDownload))))
-		http.Handle("/remoteDesktopGateway/", common.EnrichContext(http.HandlerFunc(gw.HandleGatewayProtocol)))
-		http.Handle("/callback", common.EnrichContext(http.HandlerFunc(oidc.HandleCallback)))
+		r.HandleFunc(kdcProxyEndPoint, k.Handler).Methods("POST")
+		auth.Register("Negotiate")
 	}
-	http.Handle("/metrics", promhttp.Handler())
-	http.HandleFunc("/tokeninfo", web.TokenInfo)
+
+	// allow stacking of authentication
+	rdp.Use(auth.Route)
+
+	// setup server
+	server := http.Server{
+		Addr:         ":" + strconv.Itoa(conf.Server.Port),
+		Handler:      r,
+		TLSConfig:    cfg,
+		TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler)), // disable http2
+	}
 
 	if conf.Server.Tls == config.TlsDisable {
 		err = server.ListenAndServe()

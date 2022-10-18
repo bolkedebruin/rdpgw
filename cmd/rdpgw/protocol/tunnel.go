@@ -1,7 +1,7 @@
 package protocol
 
 import (
-	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/common"
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/identity"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/transport"
 	"net"
 	"time"
@@ -27,7 +27,7 @@ type Tunnel struct {
 	// The obtained client ip address
 	RemoteAddr string
 	// User
-	User common.Identity
+	User identity.Identity
 
 	// rwc is the underlying connection to the remote desktop server.
 	// It is of the type *net.TCPConn
