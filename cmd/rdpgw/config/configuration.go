@@ -236,7 +236,7 @@ func (s *ServerConfig) KerberosEnabled() bool {
 }
 
 func (s *ServerConfig) BasicAuthEnabled() bool {
-	return s.matchAuth("local")
+	return s.matchAuth("local") || s.matchAuth("basic")
 }
 
 func (s *ServerConfig) matchAuth(needle string) bool {

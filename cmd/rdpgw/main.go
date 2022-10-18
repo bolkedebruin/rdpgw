@@ -226,12 +226,13 @@ func main() {
 
 	// for stacking of authentication
 	auth := web.NewAuthMux()
+	rdp.MatcherFunc(web.NoAuthz).HandlerFunc(auth.SetAuthenticate)
 
 	// basic auth
 	if conf.Server.BasicAuthEnabled() {
 		log.Printf("enabling basic authentication")
 		q := web.BasicAuthHandler{SocketAddress: conf.Server.AuthSocket}
-		rdp.Headers("Authorization", "Basic*").HandlerFunc(q.BasicAuth(gw.HandleGatewayProtocol))
+		rdp.NewRoute().HeadersRegexp("Authorization", "Basic").HandlerFunc(q.BasicAuth(gw.HandleGatewayProtocol))
 		auth.Register(`Basic realm="restricted", charset="UTF-8"`)
 	}
 
@@ -242,7 +243,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("Cannot load keytab: %s", err)
 		}
-		rdp.Headers("Authorization", "Negotiate*").Handler(
+		rdp.NewRoute().HeadersRegexp("Authorization", "Negotiate").Handler(
 			spnego.SPNEGOKRB5Authenticate(web.TransposeSPNEGOContext(http.HandlerFunc(gw.HandleGatewayProtocol)),
 				keytab,
 				service.Logger(log.Default())))
@@ -252,9 +253,6 @@ func main() {
 		r.HandleFunc(kdcProxyEndPoint, k.Handler).Methods("POST")
 		auth.Register("Negotiate")
 	}
-
-	// allow stacking of authentication
-	rdp.Use(auth.Route)
 
 	// setup server
 	server := http.Server{

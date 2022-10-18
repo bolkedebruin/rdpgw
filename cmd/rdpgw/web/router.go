@@ -1,6 +1,7 @@
 package web
 
 import (
+	"github.com/gorilla/mux"
 	"net/http"
 )
 
@@ -16,16 +17,13 @@ func (a *AuthMux) Register(s string) {
 	a.headers = append(a.headers, s)
 }
 
-func (a *AuthMux) Route(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		h := r.Header.Get("Authorization")
-		if h == "" {
-			for _, s := range a.headers {
-				w.Header().Add("WWW-Authenticate", s)
-				http.Error(w, "Unauthorized", http.StatusUnauthorized)
-				return
-			}
-		}
-		next.ServeHTTP(w, r)
-	})
+func (a *AuthMux) SetAuthenticate(w http.ResponseWriter, r *http.Request) {
+	for _, s := range a.headers {
+		w.Header().Add("WWW-Authenticate", s)
+	}
+	http.Error(w, "Unauthorized", http.StatusUnauthorized)
+}
+
+func NoAuthz(r *http.Request, rm *mux.RouteMatch) bool {
+	return r.Header.Get("Authorization") == ""
 }
