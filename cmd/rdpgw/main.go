@@ -94,7 +94,11 @@ func main() {
 	security.Hosts = conf.Server.Hosts
 
 	// init session store
-	web.InitStore([]byte(conf.Server.SessionKey), []byte(conf.Server.SessionEncryptionKey), conf.Server.SessionStore)
+	web.InitStore([]byte(conf.Server.SessionKey),
+		[]byte(conf.Server.SessionEncryptionKey),
+		conf.Server.SessionStore,
+		conf.Server.MaxSessionLength,
+	)
 
 	// configure web backend
 	w := &web.Config{

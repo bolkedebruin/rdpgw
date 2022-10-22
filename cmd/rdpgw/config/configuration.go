@@ -45,6 +45,7 @@ type ServerConfig struct {
 	SessionKey           string   `koanf:"sessionkey"`
 	SessionEncryptionKey string   `koanf:"sessionencryptionkey"`
 	SessionStore         string   `koanf:"sessionstore"`
+	MaxSessionLength     int      `koanf:"maxsessionlength"`
 	SendBuf              int      `koanf:"sendbuf"`
 	ReceiveBuf           int      `koanf:"receivebuf"`
 	Tls                  string   `koanf:"tls"`

@@ -17,7 +17,7 @@ const (
 
 var sessionStore sessions.Store
 
-func InitStore(sessionKey []byte, encryptionKey []byte, storeType string) {
+func InitStore(sessionKey []byte, encryptionKey []byte, storeType string, maxLength int) {
 	if len(sessionKey) < 32 {
 		log.Fatal("Session key too small")
 	}
@@ -30,8 +30,11 @@ func InitStore(sessionKey []byte, encryptionKey []byte, storeType string) {
 		fs := sessions.NewFilesystemStore(os.TempDir(), sessionKey, encryptionKey)
 
 		// set max length
-		log.Printf("Setting maximum session storage to %d bytes", maxSessionLength)
-		fs.MaxLength(maxSessionLength)
+		if maxLength == 0 {
+			maxLength = maxSessionLength
+		}
+		log.Printf("Setting maximum session storage to %d bytes", maxLength)
+		fs.MaxLength(maxLength)
 
 		sessionStore = fs
 	} else {
