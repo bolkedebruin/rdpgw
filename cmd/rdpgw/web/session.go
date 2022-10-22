@@ -9,9 +9,10 @@ import (
 )
 
 const (
-	rdpGwSession = "RDPGWSESSION"
-	MaxAge       = 120
-	identityKey  = "RDPGWID"
+	rdpGwSession     = "RDPGWSESSION"
+	MaxAge           = 120
+	identityKey      = "RDPGWID"
+	maxSessionLength = 8192
 )
 
 var sessionStore sessions.Store
@@ -26,7 +27,13 @@ func InitStore(sessionKey []byte, encryptionKey []byte, storeType string) {
 
 	if storeType == "file" {
 		log.Println("Filesystem is used as session storage")
-		sessionStore = sessions.NewFilesystemStore(os.TempDir(), sessionKey, encryptionKey)
+		fs := sessions.NewFilesystemStore(os.TempDir(), sessionKey, encryptionKey)
+
+		// set max length
+		log.Printf("Setting maximum session storage to %d bytes", maxSessionLength)
+		fs.MaxLength(maxSessionLength)
+
+		sessionStore = fs
 	} else {
 		log.Println("Cookies are used as session storage")
 		sessionStore = sessions.NewCookieStore(sessionKey, encryptionKey)
