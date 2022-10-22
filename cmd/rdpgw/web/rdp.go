@@ -122,6 +122,14 @@ func NewRdp() *RdpBuilder {
 	}
 }
 
+func (rb *RdpBuilder) SetExtraSettings(extraFileSettings map[string]interface{}) {
+	setExtraSettingsInStruct(&rb.Connection, extraFileSettings)
+	setExtraSettingsInStruct(&rb.Session, extraFileSettings)
+	setExtraSettingsInStruct(&rb.DeviceRedirect, extraFileSettings)
+	setExtraSettingsInStruct(&rb.Display, extraFileSettings)
+	setExtraSettingsInStruct(&rb.RemoteApp, extraFileSettings)
+}
+
 func (rb *RdpBuilder) String() string {
 	var sb strings.Builder
 
@@ -223,6 +231,73 @@ func initStruct(st interface{}) {
 			err := f.Set(b)
 			if err != nil {
 				log.Fatalf("Cannot set bool field")
+			}
+		}
+	}
+}
+
+func setExtraSettingsInStruct(st interface{}, extraFileSettings map[string]interface{}) {
+	s := structs.New(st)
+	for _, f := range s.Fields() {
+		key := f.Tag("rdp")
+		if key == "" {
+			continue
+		}
+
+		value, ok := extraFileSettings[key]
+		if !ok {
+			continue
+		}
+
+		switch f.Kind() {
+		case reflect.String:
+			switch val := value.(type) {
+			case string:
+				f.Set(val)
+			default:
+				log.Printf("Cannot set %s field", key)
+			}
+		case reflect.Int:
+			switch val := value.(type) {
+			case string:
+				i, err := strconv.Atoi(val)
+				if err != nil {
+					log.Printf("Cannot set %s field", key)
+				}
+				f.Set(i)
+			case int:
+				f.Set(val)
+			case bool:
+				if val {
+					f.Set(1)
+				} else {
+					f.Set(0)
+				}
+			default:
+				log.Printf("Cannot set %s field", key)
+			}
+		case reflect.Bool:
+			switch val := value.(type) {
+			case string:
+				i, err := strconv.Atoi(val)
+				if err != nil {
+					log.Printf("Cannot set %s field", key)
+				}
+				if i != 0 {
+					f.Set(true)
+				} else {
+					f.Set(false)
+				}
+			case int:
+				if val != 0 {
+					f.Set(true)
+				} else {
+					f.Set(false)
+				}
+			case bool:
+				f.Set(val)
+			default:
+				log.Printf("Cannot set %s field", key)
 			}
 		}
 	}

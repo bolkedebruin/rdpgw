@@ -31,12 +31,14 @@ type Config struct {
 }
 
 type RdpOpts struct {
-	UsernameTemplate    string
-	SplitUserDomain     bool
-	DefaultDomain       string
-	NetworkAutoDetect   int
-	BandwidthAutoDetect int
-	ConnectionType      int
+	UsernameTemplate            string
+	SplitUserDomain             bool
+	DefaultDomain               string
+	NetworkAutoDetect           int
+	BandwidthAutoDetect         int
+	ConnectionType              int
+	AllowExtraSettingsFromQuery bool
+	ExtraSettings               map[string]interface{}
 }
 
 type Handler struct {
@@ -202,6 +204,19 @@ func (h *Handler) HandleDownload(w http.ResponseWriter, r *http.Request) {
 	rdp.Session.ConnectionType = opts.ConnectionType
 	rdp.Display.SmartSizing = true
 	rdp.Display.BitmapCacheSize = 32000
+
+	extraSettings := make(map[string]interface{})
+	for k, v := range opts.ExtraSettings {
+		extraSettings[k] = v
+	}
+	if opts.AllowExtraSettingsFromQuery {
+		query := r.URL.Query()
+		query.Del("host")
+		for k, v := range query {
+			extraSettings[k] = v[len(v)-1]
+		}
+	}
+	rdp.SetExtraSettings(extraSettings)
 
 	http.ServeContent(w, r, fn, time.Now(), strings.NewReader(rdp.String()))
 }

@@ -89,12 +89,14 @@ type SecurityConfig struct {
 }
 
 type ClientConfig struct {
-	NetworkAutoDetect   int    `koanf:"networkautodetect"`
-	BandwidthAutoDetect int    `koanf:"bandwidthautodetect"`
-	ConnectionType      int    `koanf:"connectiontype"`
-	UsernameTemplate    string `koanf:"usernametemplate"`
-	SplitUserDomain     bool   `koanf:"splituserdomain"`
-	DefaultDomain       string `koanf:"defaultdomain"`
+	NetworkAutoDetect           int               `koanf:"networkautodetect"`
+	BandwidthAutoDetect         int               `koanf:"bandwidthautodetect"`
+	ConnectionType              int               `koanf:"connectiontype"`
+	UsernameTemplate            string            `koanf:"usernametemplate"`
+	SplitUserDomain             bool              `koanf:"splituserdomain"`
+	DefaultDomain               string            `koanf:"defaultdomain"`
+	ExtraSettings               map[string]interface{} `koanf:"extrasettings"`
+	AllowExtraSettingsFromQuery bool              `koanf:"allowextrasettingsfromquery"`
 }
 
 func ToCamel(s string) string {
@@ -139,16 +141,17 @@ func Load(configFile string) Configuration {
 	var k = koanf.New(".")
 
 	k.Load(confmap.Provider(map[string]interface{}{
-		"Server.Tls":                 "auto",
-		"Server.Port":                443,
-		"Server.SessionStore":        "cookie",
-		"Server.HostSelection":       "roundrobin",
-		"Server.Authentication":      "openid",
-		"Server.AuthSocket":          "/tmp/rdpgw-auth.sock",
-		"Client.NetworkAutoDetect":   1,
-		"Client.BandwidthAutoDetect": 1,
-		"Security.VerifyClientIp":    true,
-		"Caps.TokenAuth":             true,
+		"Server.Tls":                         "auto",
+		"Server.Port":                        443,
+		"Server.SessionStore":                "cookie",
+		"Server.HostSelection":               "roundrobin",
+		"Server.Authentication":              "openid",
+		"Server.AuthSocket":                  "/tmp/rdpgw-auth.sock",
+		"Client.NetworkAutoDetect":           1,
+		"Client.BandwidthAutoDetect":         1,
+		"Client.AllowExtraSettingsFromQuery": false,
+		"Security.VerifyClientIp":            true,
+		"Caps.TokenAuth":                     true,
 	}, "."), nil)
 
 	if err := k.Load(file.Provider(configFile), yaml.Parser()); err != nil {
