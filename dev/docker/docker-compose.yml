@@ -21,7 +21,7 @@ services:
         - 8080:8080
       restart: on-failure
       command:
-        - start-dev --import-realm --http-relative-path=/aut
+        - start-dev --import-realm --http-relative-path=/auth
       healthcheck:
         test: ["CMD", "curl", "-f", "http://localhost:8080/auth"]
         interval: 30s
