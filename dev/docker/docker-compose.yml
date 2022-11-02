@@ -11,18 +11,17 @@ services:
       image: quay.io/keycloak/keycloak:latest
       hostname: keycloak
       volumes:
-        - ${PWD}/realm-export.json:/export/realm-export.json
+        - ${PWD}/realm-export.json:/opt/keycloak/data/import/realm-export.json
       environment:
         KEYCLOAK_USER: admin
         KEYCLOAK_PASSWORD: admin
-        KEYCLOAK_IMPORT: /export/realm-export.json
         KEYCLOAK_ADMIN: admin
         KEYCLOAK_ADMIN_PASSWORD: admin
       ports:
         - 8080:8080
       restart: on-failure
       command:
-        - start-dev
+        - start-dev --import-realm --http-relative-path=/aut
       healthcheck:
         test: ["CMD", "curl", "-f", "http://localhost:8080/auth"]
         interval: 30s
