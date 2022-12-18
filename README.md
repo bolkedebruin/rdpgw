@@ -38,7 +38,7 @@ the server. Finally, the client's ip address needs to match the one it obtained 
 
 __NOTE__: a docker image is available on docker hub, which removes the need for building and installing go.
 
-Ensure that you have `go` version 1.19 or above installed. In addition to that you need a working `make` which is typicall in the build tools of your distro (e.g. `build-essential` on debian/ubuntu).
+Ensure that you have `make` (comes with standard build tools, like `build-essential` on Debian), `go` (version 1.19 or above), and development files for PAM (`libpam0g-dev` on Debian) installed.
 
 Then clone the repo and issues the following.
 
