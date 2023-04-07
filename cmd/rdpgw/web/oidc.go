@@ -3,10 +3,12 @@ package web
 import (
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/identity"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/patrickmn/go-cache"
 	"golang.org/x/oauth2"
+	"log"
 	"math/rand"
 	"net/http"
 	"time"
@@ -15,7 +17,6 @@ import (
 const (
 	CacheExpiration = time.Minute * 2
 	CleanupInterval = time.Minute * 5
-	oidcKeyUserName = "preferred_username"
 )
 
 type OIDC struct {
@@ -81,7 +82,15 @@ func (h *OIDC) HandleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	id := identity.FromRequestCtx(r)
-	id.SetUserName(data[oidcKeyUserName].(string))
+
+	userName := findUsernameInClaims(data)
+	if userName == "" {
+		err = errors.New("no odic claim for username found")
+		log.Print(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+
+	id.SetUserName(userName)
 	id.SetAuthenticated(true)
 	id.SetAuthTime(time.Now())
 	id.SetAttribute(identity.AttrAccessToken, oauth2Token.AccessToken)
@@ -91,6 +100,18 @@ func (h *OIDC) HandleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.Redirect(w, r, url, http.StatusFound)
+}
+
+func findUsernameInClaims(data map[string]interface{}) string {
+	candidates := []string{"preferred_username", "unique_name", "upn"}
+	for _, claim := range candidates {
+		userName, found := data[claim].(string)
+		if found {
+			return userName
+		}
+	}
+
+	return ""
 }
 
 func (h *OIDC) Authenticated(next http.Handler) http.Handler {
