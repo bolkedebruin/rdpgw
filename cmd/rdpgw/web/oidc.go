@@ -15,7 +15,6 @@ import (
 const (
 	CacheExpiration = time.Minute * 2
 	CleanupInterval = time.Minute * 5
-	oidcKeyUserName = "preferred_username"
 )
 
 type OIDC struct {
@@ -81,7 +80,13 @@ func (h *OIDC) HandleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	id := identity.FromRequestCtx(r)
-	id.SetUserName(data[oidcKeyUserName].(string))
+
+	userName := findUsernameInClaims(data)
+	if userName == "" {
+		http.Error(w, "no oidc claim for username found", http.StatusInternalServerError)
+	}
+
+	id.SetUserName(userName)
 	id.SetAuthenticated(true)
 	id.SetAuthTime(time.Now())
 	id.SetAttribute(identity.AttrAccessToken, oauth2Token.AccessToken)
@@ -91,6 +96,18 @@ func (h *OIDC) HandleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.Redirect(w, r, url, http.StatusFound)
+}
+
+func findUsernameInClaims(data map[string]interface{}) string {
+	candidates := []string{"preferred_username", "unique_name", "upn"}
+	for _, claim := range candidates {
+		userName, found := data[claim].(string)
+		if found {
+			return userName
+		}
+	}
+
+	return ""
 }
 
 func (h *OIDC) Authenticated(next http.Handler) http.Handler {
