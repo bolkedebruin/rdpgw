@@ -3,12 +3,10 @@ package web
 import (
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/identity"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/patrickmn/go-cache"
 	"golang.org/x/oauth2"
-	"log"
 	"math/rand"
 	"net/http"
 	"time"
@@ -85,9 +83,7 @@ func (h *OIDC) HandleCallback(w http.ResponseWriter, r *http.Request) {
 
 	userName := findUsernameInClaims(data)
 	if userName == "" {
-		err = errors.New("no odic claim for username found")
-		log.Print(err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, "no oidc claim for username found", http.StatusInternalServerError)
 	}
 
 	id.SetUserName(userName)
