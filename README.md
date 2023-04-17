@@ -177,7 +177,6 @@ In this way you can integrate, for example, it with [pam-jwt](https://github.com
 
 ## TODO
 * Integrate Open Policy Agent
-* Integrate GOKRB5
 * Integrate uber-go/zap
 * Research: TLS defragmentation 
 * Improve Web Interface
