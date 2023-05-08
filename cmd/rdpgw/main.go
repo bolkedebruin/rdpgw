@@ -108,14 +108,12 @@ func main() {
 		Hosts:            conf.Server.Hosts,
 		HostSelection:    conf.Server.HostSelection,
 		RdpOpts: web.RdpOpts{
-			UsernameTemplate:    conf.Client.UsernameTemplate,
-			SplitUserDomain:     conf.Client.SplitUserDomain,
-			DefaultDomain:       conf.Client.DefaultDomain,
-			NetworkAutoDetect:   conf.Client.NetworkAutoDetect,
-			BandwidthAutoDetect: conf.Client.BandwidthAutoDetect,
-			ConnectionType:      conf.Client.ConnectionType,
+			UsernameTemplate: conf.Client.UsernameTemplate,
+			SplitUserDomain:  conf.Client.SplitUserDomain,
+			DefaultDomain:    conf.Client.DefaultDomain,
 		},
 		GatewayAddress: url,
+		TemplateFile:   conf.Client.Defaults,
 	}
 
 	if conf.Caps.TokenAuth {

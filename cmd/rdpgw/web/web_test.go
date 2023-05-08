@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/identity"
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/rdp"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/security"
 	"net/http"
 	"net/http/httptest"
@@ -149,7 +150,7 @@ func TestHandler_HandleDownload(t *testing.T) {
 		t.Errorf("content disposition is nil")
 	}
 
-	data := rdpToMap(strings.Split(rr.Body.String(), crlf))
+	data := rdpToMap(strings.Split(rr.Body.String(), rdp.CRLF))
 	if data["username"] != testuser {
 		t.Errorf("username key in rdp does not match: got %v want %v", data["username"], testuser)
 	}

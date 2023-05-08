@@ -5,7 +5,12 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/config/parsers"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/identity"
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/rdp"
+	"github.com/knadh/koanf/providers/file"
+	"github.com/knadh/koanf/v2"
+	"hash/maphash"
 	"log"
 	"math/rand"
 	"net/http"
@@ -28,6 +33,7 @@ type Config struct {
 	HostSelection      string
 	GatewayAddress     *url.URL
 	RdpOpts            RdpOpts
+	TemplateFile       string
 }
 
 type RdpOpts struct {
@@ -49,12 +55,14 @@ type Handler struct {
 	hosts              []string
 	hostSelection      string
 	rdpOpts            RdpOpts
+	rdpDefaults        string
 }
 
 func (c *Config) NewHandler() *Handler {
 	if len(c.Hosts) < 1 {
 		log.Fatal("Not enough hosts to connect to specified")
 	}
+
 	return &Handler{
 		paaTokenGenerator:  c.PAATokenGenerator,
 		enableUserToken:    c.EnableUserToken,
@@ -65,12 +73,13 @@ func (c *Config) NewHandler() *Handler {
 		hosts:              c.Hosts,
 		hostSelection:      c.HostSelection,
 		rdpOpts:            c.RdpOpts,
+		rdpDefaults:        c.TemplateFile,
 	}
 }
 
 func (h *Handler) selectRandomHost() string {
-	rand.Seed(time.Now().Unix())
-	host := h.hosts[rand.Intn(len(h.hosts))]
+	r := rand.New(rand.NewSource(int64(new(maphash.Hash).Sum64())))
+	host := h.hosts[r.Intn(len(h.hosts))]
 	return host
 }
 
@@ -188,20 +197,25 @@ func (h *Handler) HandleDownload(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", "attachment; filename="+fn)
 	w.Header().Set("Content-Type", "application/x-rdp")
 
-	rdp := NewRdp()
-	rdp.Connection.Username = render
-	rdp.Connection.Domain = domain
-	rdp.Connection.FullAddress = host
-	rdp.Connection.GatewayHostname = h.gatewayAddress.Host
-	rdp.Connection.GatewayCredentialsSource = SourceCookie
-	rdp.Connection.GatewayAccessToken = token
-	rdp.Connection.GatewayCredentialMethod = 1
-	rdp.Connection.GatewayUsageMethod = 1
-	rdp.Session.NetworkAutodetect = opts.NetworkAutoDetect != 0
-	rdp.Session.BandwidthAutodetect = opts.BandwidthAutoDetect != 0
-	rdp.Session.ConnectionType = opts.ConnectionType
-	rdp.Display.SmartSizing = true
-	rdp.Display.BitmapCacheSize = 32000
+	d := rdp.NewRdp()
 
-	http.ServeContent(w, r, fn, time.Now(), strings.NewReader(rdp.String()))
+	if h.rdpDefaults != "" {
+		var k = koanf.New(".")
+		if err := k.Load(file.Provider(h.rdpDefaults), parsers.Parser()); err != nil {
+			log.Fatalf("cannot load rdp template file from %s", h.rdpDefaults)
+		}
+		tag := koanf.UnmarshalConf{Tag: "rdp"}
+		k.UnmarshalWithConf("", &d.Settings, tag)
+	}
+
+	d.Settings.Username = render
+	d.Settings.Domain = domain
+	d.Settings.FullAddress = host
+	d.Settings.GatewayHostname = h.gatewayAddress.Host
+	d.Settings.GatewayCredentialsSource = rdp.SourceCookie
+	d.Settings.GatewayAccessToken = token
+	d.Settings.GatewayCredentialMethod = 1
+	d.Settings.GatewayUsageMethod = 1
+
+	http.ServeContent(w, r, fn, time.Now(), strings.NewReader(d.String()))
 }

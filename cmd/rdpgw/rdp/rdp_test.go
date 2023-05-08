@@ -1,4 +1,4 @@
-package web
+package rdp
 
 import (
 	"log"
@@ -12,18 +12,18 @@ const (
 
 func TestRdpBuilder(t *testing.T) {
 	builder := NewRdp()
-	builder.Connection.GatewayHostname = "my.yahoo.com"
-	builder.Session.AutoReconnectionEnabled = true
-	builder.Display.SmartSizing = true
+	builder.Settings.GatewayHostname = "my.yahoo.com"
+	builder.Settings.AutoReconnectionEnabled = true
+	builder.Settings.SmartSizing = true
 
 	s := builder.String()
-	if !strings.Contains(s, "gatewayhostname:s:"+GatewayHostName+crlf) {
+	if !strings.Contains(s, "gatewayhostname:s:"+GatewayHostName+CRLF) {
 		t.Fatalf("%s does not contain `gatewayhostname:s:%s", s, GatewayHostName)
 	}
 	if strings.Contains(s, "autoreconnectionenabled") {
 		t.Fatalf("autoreconnectionenabled is in %s, but is default value", s)
 	}
-	if !strings.Contains(s, "smart sizing:i:1"+crlf) {
+	if !strings.Contains(s, "smart sizing:i:1"+CRLF) {
 		t.Fatalf("%s does not contain smart sizing:i:1", s)
 
 	}
@@ -31,7 +31,7 @@ func TestRdpBuilder(t *testing.T) {
 }
 
 func TestInitStruct(t *testing.T) {
-	conn := RdpConnection{}
+	conn := RdpSettings{}
 	initStruct(&conn)
 
 	if conn.PromptCredentialsOnce != true {

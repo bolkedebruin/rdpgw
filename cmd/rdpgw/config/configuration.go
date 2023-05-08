@@ -89,12 +89,11 @@ type SecurityConfig struct {
 }
 
 type ClientConfig struct {
-	NetworkAutoDetect   int    `koanf:"networkautodetect"`
-	BandwidthAutoDetect int    `koanf:"bandwidthautodetect"`
-	ConnectionType      int    `koanf:"connectiontype"`
-	UsernameTemplate    string `koanf:"usernametemplate"`
-	SplitUserDomain     bool   `koanf:"splituserdomain"`
-	DefaultDomain       string `koanf:"defaultdomain"`
+	Defaults string `koanf:"defaults"`
+	// kept for backwards compatibility
+	UsernameTemplate string `koanf:"usernametemplate"`
+	SplitUserDomain  bool   `koanf:"splituserdomain"`
+	DefaultDomain    string `koanf:"defaultdomain"`
 }
 
 func ToCamel(s string) string {
