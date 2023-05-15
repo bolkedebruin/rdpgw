@@ -11,7 +11,7 @@ const (
 )
 
 func TestRdpBuilder(t *testing.T) {
-	builder := NewRdp()
+	builder := NewBuilder()
 	builder.Settings.GatewayHostname = "my.yahoo.com"
 	builder.Settings.AutoReconnectionEnabled = true
 	builder.Settings.SmartSizing = true

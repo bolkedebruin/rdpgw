@@ -14,9 +14,6 @@ OpenId:
  ClientSecret: 01cd304c-6f43-4480-9479-618eb6fd578f
 Client:
  UsernameTemplate: "{{ username }}"
- NetworkAutoDetect: 0
- BandwidthAutoDetect: 1
- ConnectionType: 6
 Security:
   PAATokenSigningKey: prettypleasereplacemeinproductio
 Caps:

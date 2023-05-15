@@ -1,13 +1,13 @@
 package web
 
 import (
+	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/identity"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/patrickmn/go-cache"
 	"golang.org/x/oauth2"
-	"math/rand"
 	"net/http"
 	"time"
 )
@@ -116,7 +116,11 @@ func (h *OIDC) Authenticated(next http.Handler) http.Handler {
 
 		if !id.Authenticated() {
 			seed := make([]byte, 16)
-			rand.Read(seed)
+			_, err := rand.Read(seed)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
 			state := hex.EncodeToString(seed)
 			h.stateStore.Set(state, r.RequestURI, cache.DefaultExpiration)
 			http.Redirect(w, r, h.oAuth2Config.AuthCodeURL(state), http.StatusFound)

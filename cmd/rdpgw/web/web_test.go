@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 )
@@ -169,6 +170,51 @@ func TestHandler_HandleDownload(t *testing.T) {
 			data["full address"], hosts)
 	}
 
+}
+
+func TestHandler_HandleDownloadWithRdpTemplate(t *testing.T) {
+	f, err := os.CreateTemp("", "rdp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(f.Name())
+
+	err = os.WriteFile(f.Name(), []byte("domain:s:testdomain\r\n"), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req, err := http.NewRequest("GET", "/connect", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rr := httptest.NewRecorder()
+	id := identity.NewUser()
+
+	id.SetUserName(testuser)
+	id.SetAuthenticated(true)
+
+	req = identity.AddToRequestCtx(id, req)
+
+	u, _ := url.Parse(gateway)
+	c := Config{
+		HostSelection:     "roundrobin",
+		Hosts:             hosts,
+		PAATokenGenerator: paaTokenMock,
+		GatewayAddress:    u,
+		RdpOpts:           RdpOpts{SplitUserDomain: true},
+		TemplateFile:      f.Name(),
+	}
+	h := c.NewHandler()
+
+	hh := http.HandlerFunc(h.HandleDownload)
+	hh.ServeHTTP(rr, req)
+
+	data := rdpToMap(strings.Split(rr.Body.String(), rdp.CRLF))
+	if data["domain"] != "testdomain" {
+		t.Errorf("domain key in rdp does not match: got %v want %v", data["domain"], "testdomain")
+	}
 }
 
 func paaTokenMock(ctx context.Context, username string, host string) (string, error) {

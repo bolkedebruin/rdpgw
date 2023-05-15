@@ -110,7 +110,6 @@ func main() {
 		RdpOpts: web.RdpOpts{
 			UsernameTemplate: conf.Client.UsernameTemplate,
 			SplitUserDomain:  conf.Client.SplitUserDomain,
-			DefaultDomain:    conf.Client.DefaultDomain,
 		},
 		GatewayAddress: url,
 		TemplateFile:   conf.Client.Defaults,

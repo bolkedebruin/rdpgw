@@ -2,9 +2,9 @@ package transport
 
 import (
 	"bufio"
+	"crypto/rand"
 	"errors"
 	"io"
-	"math/rand"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -12,14 +12,14 @@ import (
 )
 
 const (
-	crlf               = "\r\n"
+	crlf   = "\r\n"
 	HttpOK = "HTTP/1.1 200 OK\r\n"
 )
 
 type LegacyPKT struct {
-	Conn net.Conn
+	Conn          net.Conn
 	ChunkedReader io.Reader
-	Writer *bufio.Writer
+	Writer        *bufio.Writer
 }
 
 func NewLegacy(w http.ResponseWriter) (*LegacyPKT, error) {
@@ -27,9 +27,9 @@ func NewLegacy(w http.ResponseWriter) (*LegacyPKT, error) {
 	if ok {
 		conn, rw, err := hj.Hijack()
 		l := &LegacyPKT{
-			Conn: conn,
+			Conn:          conn,
 			ChunkedReader: httputil.NewChunkedReader(rw.Reader),
-			Writer: rw.Writer,
+			Writer:        rw.Writer,
 		}
 		return l, err
 	}
@@ -37,7 +37,7 @@ func NewLegacy(w http.ResponseWriter) (*LegacyPKT, error) {
 	return nil, errors.New("cannot hijack connection")
 }
 
-func (t *LegacyPKT) ReadPacket() (n int, p []byte, err error){
+func (t *LegacyPKT) ReadPacket() (n int, p []byte, err error) {
 	buf := make([]byte, 4096) // bufio.defaultBufSize
 	n, err = t.ChunkedReader.Read(buf)
 	p = make([]byte, n)

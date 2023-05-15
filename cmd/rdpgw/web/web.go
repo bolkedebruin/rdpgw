@@ -2,17 +2,15 @@ package web
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/config/parsers"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/identity"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/rdp"
-	"github.com/knadh/koanf/providers/file"
-	"github.com/knadh/koanf/v2"
 	"hash/maphash"
 	"log"
-	"math/rand"
+	rnd "math/rand"
 	"net/http"
 	"net/url"
 	"strings"
@@ -37,12 +35,8 @@ type Config struct {
 }
 
 type RdpOpts struct {
-	UsernameTemplate    string
-	SplitUserDomain     bool
-	DefaultDomain       string
-	NetworkAutoDetect   int
-	BandwidthAutoDetect int
-	ConnectionType      int
+	UsernameTemplate string
+	SplitUserDomain  bool
 }
 
 type Handler struct {
@@ -78,7 +72,7 @@ func (c *Config) NewHandler() *Handler {
 }
 
 func (h *Handler) selectRandomHost() string {
-	r := rand.New(rand.NewSource(int64(new(maphash.Hash).Sum64())))
+	r := rnd.New(rnd.NewSource(int64(new(maphash.Hash).Sum64())))
 	host := h.hosts[r.Intn(len(h.hosts))]
 	return host
 }
@@ -154,7 +148,7 @@ func (h *Handler) HandleDownload(w http.ResponseWriter, r *http.Request) {
 
 	// split the username into user and domain
 	var user = id.UserName()
-	var domain = opts.DefaultDomain
+	var domain = ""
 	if opts.SplitUserDomain {
 		creds := strings.SplitN(id.UserName(), "@", 2)
 		user = creds[0]
@@ -178,6 +172,7 @@ func (h *Handler) HandleDownload(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("Cannot generate PAA token for user %s due to %s", user, err)
 		http.Error(w, errors.New("unable to generate gateway credentials").Error(), http.StatusInternalServerError)
+		return
 	}
 
 	if h.enableUserToken {
@@ -185,31 +180,40 @@ func (h *Handler) HandleDownload(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Printf("Cannot generate token for user %s due to %s", user, err)
 			http.Error(w, errors.New("unable to generate gateway credentials").Error(), http.StatusInternalServerError)
+			return
 		}
 		render = strings.Replace(render, "{{ token }}", userToken, 1)
 	}
 
 	// authenticated
 	seed := make([]byte, 16)
-	rand.Read(seed)
+	_, err = rand.Read(seed)
+	if err != nil {
+		log.Printf("Cannot generate random seed due to %s", err)
+		http.Error(w, errors.New("unable to generate random sequence").Error(), http.StatusInternalServerError)
+		return
+	}
 	fn := hex.EncodeToString(seed) + ".rdp"
 
 	w.Header().Set("Content-Disposition", "attachment; filename="+fn)
 	w.Header().Set("Content-Type", "application/x-rdp")
 
-	d := rdp.NewRdp()
-
-	if h.rdpDefaults != "" {
-		var k = koanf.New(".")
-		if err := k.Load(file.Provider(h.rdpDefaults), parsers.Parser()); err != nil {
-			log.Fatalf("cannot load rdp template file from %s", h.rdpDefaults)
+	var d *rdp.Builder
+	if h.rdpDefaults == "" {
+		d = rdp.NewBuilder()
+	} else {
+		d, err = rdp.NewBuilderFromFile(h.rdpDefaults)
+		if err != nil {
+			log.Printf("Cannot load RDP template file %s due to %s", h.rdpDefaults, err)
+			http.Error(w, errors.New("unable to load RDP template").Error(), http.StatusInternalServerError)
+			return
 		}
-		tag := koanf.UnmarshalConf{Tag: "rdp"}
-		k.UnmarshalWithConf("", &d.Settings, tag)
 	}
 
 	d.Settings.Username = render
-	d.Settings.Domain = domain
+	if domain != "" {
+		d.Settings.Domain = domain
+	}
 	d.Settings.FullAddress = host
 	d.Settings.GatewayHostname = h.gatewayAddress.Host
 	d.Settings.GatewayCredentialsSource = rdp.SourceCookie

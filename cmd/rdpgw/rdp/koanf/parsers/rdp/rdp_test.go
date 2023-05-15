@@ -1,4 +1,4 @@
-package parsers
+package rdp
 
 import (
 	"github.com/stretchr/testify/assert"

@@ -93,7 +93,6 @@ type ClientConfig struct {
 	// kept for backwards compatibility
 	UsernameTemplate string `koanf:"usernametemplate"`
 	SplitUserDomain  bool   `koanf:"splituserdomain"`
-	DefaultDomain    string `koanf:"defaultdomain"`
 }
 
 func ToCamel(s string) string {

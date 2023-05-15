@@ -3,7 +3,10 @@ package rdp
 import (
 	"errors"
 	"fmt"
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/rdp/koanf/parsers/rdp"
 	"github.com/fatih/structs"
+	"github.com/knadh/koanf/providers/file"
+	"github.com/knadh/koanf/v2"
 	"log"
 	"reflect"
 	"strconv"
@@ -81,21 +84,38 @@ type RdpSettings struct {
 	RemoteApplicationProgram              string `rdp:"remoteapplicationprogram"`
 }
 
-type RdpBuilder struct {
+type Builder struct {
 	Settings RdpSettings
 }
 
-func NewRdp() *RdpBuilder {
+func NewBuilder() *Builder {
 	c := RdpSettings{}
 
 	initStruct(&c)
 
-	return &RdpBuilder{
+	return &Builder{
 		Settings: c,
 	}
 }
 
-func (rb *RdpBuilder) String() string {
+func NewBuilderFromFile(filename string) (*Builder, error) {
+	c := RdpSettings{}
+	initStruct(&c)
+
+	var k = koanf.New(".")
+	if err := k.Load(file.Provider(filename), rdp.Parser()); err != nil {
+		return nil, err
+	}
+	t := koanf.UnmarshalConf{Tag: "rdp"}
+	if err := k.UnmarshalWithConf("", &c, t); err != nil {
+		return nil, err
+	}
+	return &Builder{
+		Settings: c,
+	}, nil
+}
+
+func (rb *Builder) String() string {
 	var sb strings.Builder
 
 	addStructToString(rb.Settings, &sb)
