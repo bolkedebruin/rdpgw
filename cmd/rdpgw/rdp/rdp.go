@@ -27,6 +27,12 @@ const (
 )
 
 type RdpSettings struct {
+	AllowFontSmoothing                    string `rdp:"allow font smoothing" default:"0"`
+	AllowDesktopComposition               string `rdp:"allow desktop composition" default:"0"`
+	DisableFullWindowDrag                 string `rdp:"disable full window drag" default:"0"`
+	DisableMenuAnims                      string `rdp:"disable menu anims" default:"0"`
+	DisableThemes                         string `rdp:"disable themes" default:"0"`
+	DisableCursorSetting                  string `rdp:"disable cursor setting" default:"0"`
 	GatewayHostname                       string `rdp:"gatewayhostname"`
 	FullAddress                           string `rdp:"full address"`
 	AlternateFullAddress                  string `rdp:"alternate full address"`
@@ -75,6 +81,7 @@ type RdpSettings struct {
 	DesktopWidth                          int    `rdp:"desktopwidth"`
 	DesktopScaleFactor                    int    `rdp:"desktopscalefactor"`
 	BitmapCacheSize                       int    `rdp:"bitmapcachesize" default:"1500"`
+	BitmapCachePersistEnable              bool   `rdp:"bitmapcachepersistenable" default:"true"`
 	RemoteApplicationCmdLine              string `rdp:"remoteapplicationcmdline"`
 	RemoteAppExpandWorkingDir             bool   `rdp:"remoteapplicationexpandworkingdir" default:"true"`
 	RemoteApplicationFile                 string `rdp:"remoteapplicationfile" default:"true"`
