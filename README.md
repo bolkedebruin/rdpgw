@@ -127,14 +127,12 @@ Client:
   # the example below uses the ASCII field separator to distinguish
   # between user and token 
   UsernameTemplate: "{{ username }}@bla.com\x1f{{ token }}"
-  # rdp file settings see: 
-  # https://docs.microsoft.com/en-us/windows-server/remote/remote-desktop-services/clients/rdp-files
-  NetworkAutoDetect: 0
-  BandwidthAutoDetect: 1
-  ConnectionType: 6
   # If true puts splits "user@domain.com" into the user and domain component so that
   # domain gets set in the rdp file and the domain name is stripped from the username
   SplitUserDomain: false
+  # Default RDP file settings, see UPGRADING.md and:
+  # https://docs.microsoft.com/en-us/windows-server/remote/remote-desktop-services/clients/rdp-files
+  Defaults: /path/to/defaults.rdp
 Security:
   # a random string of 32 characters to secure cookies on the client
   # make sure to share this amongst different pods
