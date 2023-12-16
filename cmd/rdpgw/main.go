@@ -232,7 +232,7 @@ func main() {
 	// basic auth
 	if conf.Server.BasicAuthEnabled() {
 		log.Printf("enabling basic authentication")
-		q := web.BasicAuthHandler{SocketAddress: conf.Server.AuthSocket}
+		q := web.BasicAuthHandler{SocketAddress: conf.Server.AuthSocket, Timeout: conf.Server.BasicAuthTimeout}
 		rdp.NewRoute().HeadersRegexp("Authorization", "Basic").HandlerFunc(q.BasicAuth(gw.HandleGatewayProtocol))
 		auth.Register(`Basic realm="restricted", charset="UTF-8"`)
 	}
