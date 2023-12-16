@@ -66,6 +66,8 @@ Server:
  # The socket to connect to if using local auth. Ensure rdpgw auth is configured to
  # use the same socket.
  AuthSocket: /tmp/rdpgw-auth.sock
+ # Basic auth timeout (in seconds). Useful if you're planning on waiting for MFA
+ BasicAuthTimeout: 5
  # The default option 'auto' uses a certificate file if provided and found otherwise
  # it uses letsencrypt to obtain a certificate, the latter requires that the host is reachable
  # from letsencrypt servers. If TLS termination happens somewhere else (e.g. a load balancer)

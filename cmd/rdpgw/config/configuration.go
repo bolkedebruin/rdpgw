@@ -51,6 +51,7 @@ type ServerConfig struct {
 	Tls                  string   `koanf:"tls"`
 	Authentication       []string `koanf:"authentication"`
 	AuthSocket           string   `koanf:"authsocket"`
+	BasicAuthTimeout     int      `koanf:"basicauthtimeout"`
 }
 
 type KerberosConfig struct {
@@ -143,6 +144,7 @@ func Load(configFile string) Configuration {
 		"Server.HostSelection":       "roundrobin",
 		"Server.Authentication":      "openid",
 		"Server.AuthSocket":          "/tmp/rdpgw-auth.sock",
+		"Server.BasicAuthTimeout":    5,
 		"Client.NetworkAutoDetect":   1,
 		"Client.BandwidthAutoDetect": 1,
 		"Security.VerifyClientIp":    true,

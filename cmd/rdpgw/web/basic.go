@@ -18,6 +18,7 @@ const (
 
 type BasicAuthHandler struct {
 	SocketAddress string
+	Timeout       int
 }
 
 func (h *BasicAuthHandler) BasicAuth(next http.HandlerFunc) http.HandlerFunc {
@@ -38,7 +39,7 @@ func (h *BasicAuthHandler) BasicAuth(next http.HandlerFunc) http.HandlerFunc {
 			defer conn.Close()
 
 			c := auth.NewAuthenticateClient(conn)
-			ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(h.Timeout))
 			defer cancel()
 
 			req := &auth.UserPass{Username: username, Password: password}
