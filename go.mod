@@ -6,7 +6,7 @@ require (
 	github.com/bolkedebruin/gokrb5/v8 v8.5.0
 	github.com/coreos/go-oidc/v3 v3.5.0
 	github.com/fatih/structs v1.1.0
-	github.com/go-jose/go-jose/v3 v3.0.1
+	github.com/go-jose/go-jose/v3 v3.0.3
 	github.com/google/uuid v1.3.0
 	github.com/gorilla/mux v1.8.0
 	github.com/gorilla/sessions v1.2.1
@@ -23,7 +23,7 @@ require (
 	github.com/prometheus/client_golang v1.15.0
 	github.com/stretchr/testify v1.8.1
 	github.com/thought-machine/go-flags v1.6.2
-	golang.org/x/crypto v0.17.0
+	golang.org/x/crypto v0.19.0
 	golang.org/x/oauth2 v0.7.0
 	google.golang.org/grpc v1.56.3
 	google.golang.org/protobuf v1.30.0
@@ -51,7 +51,7 @@ require (
 	github.com/prometheus/procfs v0.9.0 // indirect
 	github.com/rogpeppe/go-internal v1.10.0 // indirect
 	golang.org/x/net v0.17.0 // indirect
-	golang.org/x/sys v0.15.0 // indirect
+	golang.org/x/sys v0.17.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/genproto v0.0.0-20230410155749-daa745c078e1 // indirect
