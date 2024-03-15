@@ -99,7 +99,7 @@ func (h *OIDC) HandleCallback(w http.ResponseWriter, r *http.Request) {
 }
 
 func findUsernameInClaims(data map[string]interface{}) string {
-	candidates := []string{"preferred_username", "unique_name", "upn"}
+	candidates := []string{"preferred_username", "unique_name", "upn", "username"}
 	for _, claim := range candidates {
 		userName, found := data[claim].(string)
 		if found {
