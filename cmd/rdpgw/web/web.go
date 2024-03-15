@@ -37,6 +37,7 @@ type Config struct {
 type RdpOpts struct {
 	UsernameTemplate string
 	SplitUserDomain  bool
+	NoUsername bool
 }
 
 type Handler struct {
@@ -210,9 +211,11 @@ func (h *Handler) HandleDownload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	d.Settings.Username = render
-	if domain != "" {
-		d.Settings.Domain = domain
+	if !NoUsername {
+		d.Settings.Username = render
+		if domain != "" {
+			d.Settings.Domain = domain
+		}
 	}
 	d.Settings.FullAddress = host
 	d.Settings.GatewayHostname = h.gatewayAddress.Host
