@@ -18,21 +18,57 @@ on Kubernetes.
 RDPGW aims to provide a full open source replacement for MS Remote Desktop Gateway, 
 including access policies.
 
-## Multi Factor Authentication (MFA)
-RDPGW provides multi factor authentication out of the box with OpenID Connect integration. Thus
-you can integrate your remote desktops with Keycloak, Okta, Google, Azure, Apple or Facebook 
-if you want. 
-
 ## Security
 
-__NOTE__: rdogw now supports PAM authentication as well if you configure it to use 'local' authentication. Further documentation pending.
+RDPGW wants to be secure when you set it up from the start. It supports several authentication
+mechanisms such as OpenID Connect, Kerberos and PAM. 
 
-RDPGW wants to be secure when you set it up from the beginning. It does this by having OpenID
-Connect integration enabled by default. Cookies are encrypted and signed on the client side relying
+Technically, cookies are encrypted and signed on the client side relying
 on [Gorilla Sessions](https://www.gorillatoolkit.org/pkg/sessions). PAA tokens (gateway access tokens)
 are generated and signed according to the JWT spec by using [jwt-go](https://github.com/dgrijalva/jwt-go)
-signed with a 256 bit HMAC. Hosts provided by the user are verified against what was provided by
-the server. Finally, the client's ip address needs to match the one it obtained the token with.
+signed with a 256 bit HMAC. 
+
+### Multi Factor Authentication (MFA)
+RDPGW provides multi-factor authentication out of the box with OpenID Connect integration. Thus
+you can integrate your remote desktops with Keycloak, Okta, Google, Azure, Apple or Facebook
+if you want.
+
+### Security requirements
+
+Several security requirements are stipulated by the client that is connecting to it and some are 
+enforced by the gateway. The client requires that the server's TLS certificate is valid and that
+it is signed by a trusted authority. In addition, the common name in the certificate needs to 
+match the DNS hostname of the gateway. If these requirements are not met the client will refuse
+to connect.
+
+The gateway has several security phases. In the authentication phase the client's credentials are
+verified. Depending the authentication mechanism used, the client's credentials are verified against
+an OpenID Connect provider, Kerberos or a local PAM service. 
+
+If OpenID Connect is used the user will
+need to connect to a webpage provided by the gateway to authenticate, which in turn will redirect
+the user to the OpenID Connect provider. If the authentication is successful the browser will download
+a RDP file with temporary credentials that allow the user to connect to the gateway by using a remote
+desktop client.
+
+If Kerberos is used the client will need to have a valid ticket granting ticket (TGT). The gateway
+will proxy the TGT request to the KDC. Therefore, the gateway needs to be able to connect to the KDC
+and a krb5.conf file needs to be provided. The proxy works without the need for an RDP file and thus
+the client can connect directly to the gateway.
+
+If local authentication is used the client will need to provide a username and password that is verified
+against PAM. This requires, to ensure privilege separation, that ```rdpgw-auth``` is also running and a
+valid PAM configuration is provided per typical configuration. 
+
+Finally, RDP hosts that the client wants to connect to are verified against what was provided by / allowed by 
+the server. Next to that the client's ip address needs to match the one it obtained the gateway token with if 
+using OpenID Connect. Due to proxies and NAT this is not always possible and thus can be disabled. However, this 
+is a security risk.
+
+### Mixing authentication mechanisms
+
+RDPGW allows you to mix authentication mechanisms in case functionally possible. PAM and Kerberos can be used
+together, but OpenID Connect can only be used by itself.
 
 ## How to build & install
 
