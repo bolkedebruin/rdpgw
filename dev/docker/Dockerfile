@@ -41,7 +41,7 @@ COPY --chown=1001 run.sh run.sh
 COPY --chown=1001 --from=builder /opt/rdpgw /opt/rdpgw
 COPY --chown=1001 --from=builder /etc/passwd /etc/passwd
 COPY --chown=1001 --from=builder /etc/ssl/certs /etc/ssl/certs
-COPY --chown=1001 rdpgw.yaml /opt/rdpgw/rdpgw.yaml
+#COPY --chown=1001 rdpgw.yaml /opt/rdpgw/rdpgw.yaml
 
 WORKDIR /opt/rdpgw
 ENTRYPOINT ["/bin/sh", "/run.sh"]

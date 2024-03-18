@@ -8,6 +8,7 @@ import (
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
 	"log"
+	"os"
 	"strings"
 )
 
@@ -152,8 +153,12 @@ func Load(configFile string) Configuration {
 		"Caps.TokenAuth":             true,
 	}, "."), nil)
 
-	if err := k.Load(file.Provider(configFile), yaml.Parser()); err != nil {
-		log.Fatalf("Error loading config from file: %v", err)
+	if _, err := os.Stat(configFile); os.IsNotExist(err) {
+		log.Printf("Config file %s not found, using defaults and environment", configFile)
+	} else {
+		if err := k.Load(file.Provider(configFile), yaml.Parser()); err != nil {
+			log.Fatalf("Error loading config from file: %v", err)
+		}
 	}
 
 	if err := k.Load(env.ProviderWithValue("RDPGW_", ".", func(s string, v string) (string, interface{}) {
@@ -161,7 +166,7 @@ func Load(configFile string) Configuration {
 		key = ToCamel(key)
 		return key, v
 	}), nil); err != nil {
-		log.Fatalf("Error loading config from file: %v", err)
+		log.Fatalf("Error loading config from environment: %v", err)
 	}
 
 	koanfTag := koanf.UnmarshalConf{Tag: "koanf"}
