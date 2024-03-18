@@ -18,10 +18,10 @@ require (
 	github.com/knadh/koanf/providers/env v0.1.0
 	github.com/knadh/koanf/providers/file v0.1.0
 	github.com/knadh/koanf/v2 v2.1.0
-	github.com/msteinert/pam v1.2.0
+	github.com/msteinert/pam/v2 v2.0.0
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/prometheus/client_golang v1.19.0
-	github.com/stretchr/testify v1.8.1
+	github.com/stretchr/testify v1.9.0
 	github.com/thought-machine/go-flags v1.6.3
 	golang.org/x/crypto v0.21.0
 	golang.org/x/oauth2 v0.18.0

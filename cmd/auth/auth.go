@@ -3,8 +3,9 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/bolkedebruin/rdpgw/shared/auth"
-	"github.com/msteinert/pam"
+	"github.com/msteinert/pam/v2"
 	"github.com/thought-machine/go-flags"
 	"google.golang.org/grpc"
 	"log"
@@ -52,7 +53,13 @@ func (s *AuthServiceImpl) Authenticate(ctx context.Context, message *auth.UserPa
 		r.Error = err.Error()
 		return r, err
 	}
-
+	defer func() {
+		err := t.End()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "end: %v\n", err)
+			os.Exit(1)
+		}
+	}()
 	if err = t.Authenticate(0); err != nil {
 		log.Printf("Authentication for user: %s failed due to: %s", message.Username, err)
 		r.Error = err.Error()
