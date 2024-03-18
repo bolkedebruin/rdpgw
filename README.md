@@ -336,7 +336,9 @@ docker-compose build
 docker-compose up
 ```
 
-You can then connect to the gateway at `https://localhost:9443/connect` which will start the authentication flow.
+You can then connect to the gateway at `https://localhost:9443/connect` which will start the authentication flow. You
+can login with 'admin/admin'. The RDP file will download and you can open it with a remote desktop client. Also
+for logging in 'admin/admin' will work.
 
 ## Use
 Point your browser to `https://your-gateway/connect`. After authentication
