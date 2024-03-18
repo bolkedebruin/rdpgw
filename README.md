@@ -320,15 +320,23 @@ make install
 
 ## Testing locally
 A convenience docker-compose allows you to test the RDPGW locally. It uses [Keycloak](http://www.keycloak.org) 
-and [xrdp](http://www.xrdp.org) and exposes it services on port 443. You will need to allow your browser
+and [xrdp](http://www.xrdp.org) and exposes it services on port 9443. You will need to allow your browser
 to connect to localhost with and self signed security certificate. For chrome set `chrome://flags/#allow-insecure-localhost`.
 The username to login to both Keycloak and xrdp is `admin` as is the password.
+
+__NOTE__: The redirecting relies on DNS. Make sure to add ``127.0.0.1	keycloak`` to your `/etc/hosts` file to ensure
+that the redirect works.
+
+__NOTE__: The local testing environment uses a self signed certificate. This works for MAC clients, but not for Windows.
+If you want to test it on Windows you will need to provide a valid certificate.
 
 ```bash
 cd dev/docker
 docker-compose build
 docker-compose up
 ```
+
+You can then connect to the gateway at `https://localhost:9443/connect` which will start the authentication flow.
 
 ## Use
 Point your browser to `https://your-gateway/connect`. After authentication

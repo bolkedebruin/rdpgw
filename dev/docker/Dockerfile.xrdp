@@ -1,4 +1,4 @@
-FROM rattydave/docker-ubuntu-xrdp-mate-custom:20.04
+FROM rattydave/docker-ubuntu-xrdp-mate-custom:latest
 
 RUN cd /etc/xrdp/ && \
     openssl req -x509 -newkey rsa:2048 -nodes -keyout key.pem -out cert.pem -days 3650 \
