@@ -49,6 +49,17 @@ services:
         condition: service_healthy
     environment:
       RDPGW_SERVER__SESSION_STORE: file
+      RDPGW_SERVER__CERT_FILE: /opt/rdpgw/server.pem
+      RDPGW_SERVER__KEY_FILE: /opt/rdpgw/key.pem
+      RDPGW_SERVER__GATEWAY_ADDRESS: localhost:9443
+      RDPGW_SERVER__PORT: 9443
+      RDPGW_SERVER__HOSTS: xrdp:3389
+      RDPGW_SERVER__ROUND_ROBIN: "false"
+      RDPGW_OPENID__PROVIDER_URL: "http://keycloak:8080/auth/realms/rdpgw"
+      RDPGW_OPENID__CLIENT_ID: rdpgw
+      RDPGW_OPENID__CLIENT_SECRET: 01cd304c-6f43-4480-9479-618eb6fd578f
+      RDPGW_CLIENT__USERNAME_TEMPLATE: "{{ username }}"
+      RDPGW_CAPS__TOKEN_AUTH: "true"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://keycloak:8080"]
       interval: 10s
