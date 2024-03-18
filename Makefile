@@ -50,7 +50,7 @@ install: build
 
 .PHONY: mod
 mod:
-	go mod tidy -compat=1.20
+	go mod tidy -compat=1.22
 
 # ------------------------------------------------------------------------------
 #  test
