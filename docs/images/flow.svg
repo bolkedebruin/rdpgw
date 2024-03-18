@@ -1,0 +1,22 @@
+<svg width="500" height="300" xmlns="http://www.w3.org/2000/svg">
+    <!-- Rectangles -->
+    <rect x="50" y="50" width="150" height="50" fill="lightblue" stroke="black" stroke-width="2"/>
+    <rect x="200" y="50" width="150" height="50" fill="lightblue" stroke="black" stroke-width="2"/>
+    <rect x="50" y="150" width="150" height="50" fill="lightblue" stroke="black" stroke-width="2"/>
+    <rect x="200" y="150" width="150" height="50" fill="lightblue" stroke="black" stroke-width="2"/>
+    <rect x="350" y="150" width="150" height="50" fill="lightblue" stroke="black" stroke-width="2"/>
+    
+    <!-- Text -->
+    <text x="75" y="85" font-family="Arial" font-size="16" fill="black">Client</text>
+    <text x="235" y="85" font-family="Arial" font-size="16" fill="black">RDP Gateway</text>
+    <text x="65" y="185" font-family="Arial" font-size="16" fill="black">RDP GW Auth</text>
+    <text x="215" y="185" font-family="Arial" font-size="16" fill="black">PAM</text>
+    <text x="365" y="185" font-family="Arial" font-size="16" fill="black">Passwd or LDAP</text>
+    
+    <!-- Lines -->
+    <line x1="100" y1="75" x2="200" y2="75" stroke="black" stroke-width="2"/>
+    <line x1="200" y1="100" x2="100" y2="175" stroke="black" stroke-width="2"/>
+    <line x1="100" y1="175" x2="200" y2="175" stroke="black" stroke-width="2"/>
+    <line x1="200" y1="200" x2="350" y2="200" stroke="black" stroke-width="2"/>
+</svg>
+

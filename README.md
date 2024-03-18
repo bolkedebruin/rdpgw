@@ -67,26 +67,137 @@ is a security risk.
 
 ### Mixing authentication mechanisms
 
-RDPGW allows you to mix authentication mechanisms in case functionally possible. PAM and Kerberos can be used
-together, but OpenID Connect can only be used by itself.
+It is technically possible to mix authentication mechanisms. Currently, you can mix local and Kerberos. If you enable 
+OpenID Connect it is not possible to mix it with local or Kerberos at the moment.
 
-## How to build & install
+### Open ID Connect
+![OpenID Connect](docs/images/flow-openid.svg)
 
-__NOTE__: a docker image is available on docker hub, which removes the need for building and installing go.
+To use OpenID Connect make sure you have properly configured your OpenID Connect provider, and you have a client id
+and secret. The client id and secret are used to authenticate the gateway to the OpenID Connect provider. The provider
+will then authenticate the user and provide the gateway with a token. The gateway will then use this token to generate
+a PAA token that is used to connect to the RDP host.
 
-Ensure that you have `make` (comes with standard build tools, like `build-essential` on Debian), `go` (version 1.19 or above), and development files for PAM (`libpam0g-dev` on Debian) installed.
+To enable OpenID Connect make sure to set the following variables in the configuration file.
 
-Then clone the repo and issues the following.
-
-```bash
-cd rdpgw
-make
-make install
+```yaml
+Server:
+  Authentication: 
+    - openid
+OpenId:
+    ProviderUrl: http://<provider_url>
+    ClientId: <your client id>
+    ClientSecret: <your-secret>
+Caps:
+  TokenAuth: true
 ```
 
+As you can see in the flow diagram when using OpenID Connect the user will use a browser to connect to the gateway first at
+https://your-gateway/connect. If authentication is successful the browser will download a RDP file with temporary credentials
+that allow the user to connect to the gateway by using a remote desktop client.
+
+### Kerberos
+![Kerberos](docs/images/flow-kerberos.svg)
+
+__NOTE__: Kerberos is heavily reliant on DNS (forward and reverse). Make sure that your DNS is properly configured. 
+Next to that, its errors  are not always very descriptive. It is beyond the scope of this project to provide a full 
+Kerberos tutorial.
+
+To use Kerberos make sure you have a keytab and krb5.conf file. The keytab is used to authenticate the gateway to the KDC
+and the krb5.conf file is used to configure the KDC. The keytab needs to contain a valid principal for the gateway. 
+
+Use `ktutil` or a similar tool provided by your Kerberos server to create a keytab file for the newly created service principal.
+Place this keytab file in a secure location on the server and make sure that the file is only readable by the user that runs
+the gateway.
+
+```plaintext
+ktutil
+addent -password -p HTTP/rdpgw.example.com@YOUR.REALM -k 1 -e aes256-cts-hmac-sha1-96
+wkt rdpgw.keytab
+```
+
+Then set the following in the configuration file.
+
+```yaml
+Server:
+  Authentication:
+    - kerberos
+Kerberos:
+    Keytab: /etc/keytabs/rdpgw.keytab
+    Krb5conf: /etc/krb5.conf
+Caps:
+  TokenAuth: false
+```
+
+The client can then connect directly to the gateway without the need for a RDP file.
+
+
+### PAM / Local / Basic Auth
+![PAM](docs/images/flow-pam.svg)
+
+The gateway can also support authentication against PAM. Sometimes this is referred to as local or passwd authentication,
+but it also supports LDAP authentication or even Active Directory if you have the correct modules installed. Typically 
+(for passwd), PAM requires that it is accessed as root. Therefore, the gateway comes with a small helper program called 
+`rdpgw-auth` that is used to authenticate the user. This program needs to be run as root or setuid.
+
+__NOTE__: Using PAM for passwd (i.e. LDAP is fine) within a container is not recommended. It is better to use OpenID 
+Connect or Kerberos. If you do want to use it within a container you can choose to run the helper program outside the 
+container and have the socket available within. Alternatively, you can mount all what is needed into the container but 
+PAM is quite sensitive to the environment.
+
+Ensure you have a PAM service file for the gateway, `/etc/pam.d/rdpgw`. For authentication against local accounts on the
+host located in `/etc/passwd` and `/etc/shadow` you can use the following.
+
+```plaintext
+auth required pam_unix.so
+account required pam_unix.so
+```
+
+Then set the following in the configuration file.
+
+```yaml
+Server:
+  Authentication:
+    - local
+AuthSocket: /tmp/rdpgw-auth.sock
+Caps:
+  TokenAuth: false
+```
+
+Make sure to run both the gateway and `rdpgw-auth`. The gateway will connect to the socket to authenticate the user.
+
+```bash
+# ./rdpgw-auth -n rdpgw -s /tmp/rdpgw-auth.sock
+```
+
+The client can then connect to the gateway directly by using a remote desktop client.
+
 ## Configuration
-By default the configuration is read from `rdpgw.yaml`. Below is a 
-template.
+
+By default the configuration is read from `rdpgw.yaml`. At the bottom of this README is an example configuration file.
+
+### TLS
+
+The gateway requires a valid TLS certificate. This means a certificate that is signed by a valid CA that is in the store 
+of your clients. If this is not the case particularly Windows clients will fail to connect. You can either provide a 
+certificate and key file or let the gateway obtain a certificate from letsencrypt. If you want to use letsencrypt make 
+sure that the host is reachable on port 80 from the letsencrypt servers.
+
+For letsencrypt:
+
+```yaml
+Tls: auto
+```
+
+for your own certificate:
+```yaml
+Tls: enable
+CertFile: server.pem 
+KeyFile: key.pem
+```
+
+__NOTE__: You can disable TLS on the gateway, but you will then need to make sure a proxy is run in front of it that does
+TLS termination. 
 
 ```yaml
 # web server configuration. 
@@ -189,6 +300,21 @@ Security:
   # connection is opened.
   VerifyClientIp: true
 ```
+
+## How to build & install
+
+__NOTE__: a docker image is available on docker hub, which removes the need for building and installing go.
+
+Ensure that you have `make` (comes with standard build tools, like `build-essential` on Debian), `go` (version 1.19 or above), and development files for PAM (`libpam0g-dev` on Debian) installed.
+
+Then clone the repo and issues the following.
+
+```bash
+cd rdpgw
+make
+make install
+```
+
 ## Testing locally
 A convenience docker-compose allows you to test the RDPGW locally. It uses [Keycloak](http://www.keycloak.org) 
 and [xrdp](http://www.xrdp.org) and exposes it services on port 443. You will need to allow your browser
@@ -216,9 +342,6 @@ It will return 200 OK with the decrypted token.
 In this way you can integrate, for example, it with [pam-jwt](https://github.com/bolkedebruin/pam-jwt).
 
 ## TODO
-* Integrate Open Policy Agent
-* Integrate uber-go/zap
-* Research: TLS defragmentation 
 * Improve Web Interface
 
 
