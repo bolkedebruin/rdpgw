@@ -14,36 +14,21 @@ This allows you to connect with the official Microsoft clients to remote desktop
 These desktops could be, for example, [XRDP](http://www.xrdp.org) desktops running in containers
 on Kubernetes.
 
-## AIM
+# AIM
 RDPGW aims to provide a full open source replacement for MS Remote Desktop Gateway, 
 including access policies.
 
-## Security
+# Security requirements
 
-RDPGW wants to be secure when you set it up from the start. It supports several authentication
-mechanisms such as OpenID Connect, Kerberos and PAM. 
-
-Technically, cookies are encrypted and signed on the client side relying
-on [Gorilla Sessions](https://www.gorillatoolkit.org/pkg/sessions). PAA tokens (gateway access tokens)
-are generated and signed according to the JWT spec by using [jwt-go](https://github.com/dgrijalva/jwt-go)
-signed with a 256 bit HMAC. 
-
-### Multi Factor Authentication (MFA)
-RDPGW provides multi-factor authentication out of the box with OpenID Connect integration. Thus
-you can integrate your remote desktops with Keycloak, Okta, Google, Azure, Apple or Facebook
-if you want.
-
-### Security requirements
-
-Several security requirements are stipulated by the client that is connecting to it and some are 
+Several security requirements are stipulated by the client that is connecting to it and some are
 enforced by the gateway. The client requires that the server's TLS certificate is valid and that
-it is signed by a trusted authority. In addition, the common name in the certificate needs to 
+it is signed by a trusted authority. In addition, the common name in the certificate needs to
 match the DNS hostname of the gateway. If these requirements are not met the client will refuse
 to connect.
 
 The gateway has several security phases. In the authentication phase the client's credentials are
 verified. Depending the authentication mechanism used, the client's credentials are verified against
-an OpenID Connect provider, Kerberos or a local PAM service. 
+an OpenID Connect provider, Kerberos or a local PAM service.
 
 If OpenID Connect is used the user will
 need to connect to a webpage provided by the gateway to authenticate, which in turn will redirect
@@ -58,12 +43,32 @@ the client can connect directly to the gateway.
 
 If local authentication is used the client will need to provide a username and password that is verified
 against PAM. This requires, to ensure privilege separation, that ```rdpgw-auth``` is also running and a
-valid PAM configuration is provided per typical configuration. 
+valid PAM configuration is provided per typical configuration.
 
-Finally, RDP hosts that the client wants to connect to are verified against what was provided by / allowed by 
-the server. Next to that the client's ip address needs to match the one it obtained the gateway token with if 
-using OpenID Connect. Due to proxies and NAT this is not always possible and thus can be disabled. However, this 
+Finally, RDP hosts that the client wants to connect to are verified against what was provided by / allowed by
+the server. Next to that the client's ip address needs to match the one it obtained the gateway token with if
+using OpenID Connect. Due to proxies and NAT this is not always possible and thus can be disabled. However, this
 is a security risk.
+
+# Configuration
+The configuration is done through a YAML file. The configuration file is read from `rdpgw.yaml` by default.
+At the bottom of this README is an example configuration file. In these sections you will find the most important
+settings.
+
+## Authentication
+
+RDPGW wants to be secure when you set it up from the start. It supports several authentication
+mechanisms such as OpenID Connect, Kerberos and PAM. 
+
+Technically, cookies are encrypted and signed on the client side relying
+on [Gorilla Sessions](https://www.gorillatoolkit.org/pkg/sessions). PAA tokens (gateway access tokens)
+are generated and signed according to the JWT spec by using [jwt-go](https://github.com/dgrijalva/jwt-go)
+signed with a 256 bit HMAC. 
+
+### Multi Factor Authentication (MFA)
+RDPGW provides multi-factor authentication out of the box with OpenID Connect integration. Thus
+you can integrate your remote desktops with Keycloak, Okta, Google, Azure, Apple or Facebook
+if you want.
 
 ### Mixing authentication mechanisms
 
@@ -172,11 +177,7 @@ Make sure to run both the gateway and `rdpgw-auth`. The gateway will connect to 
 
 The client can then connect to the gateway directly by using a remote desktop client.
 
-## Configuration
-
-By default the configuration is read from `rdpgw.yaml`. At the bottom of this README is an example configuration file.
-
-### TLS
+## TLS
 
 The gateway requires a valid TLS certificate. This means a certificate that is signed by a valid CA that is in the store 
 of your clients. If this is not the case particularly Windows clients will fail to connect. You can either provide a 
@@ -199,6 +200,9 @@ KeyFile: key.pem
 __NOTE__: You can disable TLS on the gateway, but you will then need to make sure a proxy is run in front of it that does
 TLS termination. 
 
+
+## Example configuration file for Open ID Connect
+
 ```yaml
 # web server configuration. 
 Server:
@@ -212,7 +216,7 @@ Server:
   - openid
  # The socket to connect to if using local auth. Ensure rdpgw auth is configured to
  # use the same socket.
- AuthSocket: /tmp/rdpgw-auth.sock
+ # AuthSocket: /tmp/rdpgw-auth.sock
  # Basic auth timeout (in seconds). Useful if you're planning on waiting for MFA
  BasicAuthTimeout: 5
  # The default option 'auto' uses a certificate file if provided and found otherwise
@@ -257,12 +261,13 @@ OpenId:
  ProviderUrl: http://keycloak/auth/realms/test
  ClientId: rdpgw
  ClientSecret: your-secret
-Kerberos:
- Keytab: /etc/keytabs/rdpgw.keytab
- Krb5conf: /etc/krb5.conf
-# enabled / disabled capabilities
+# Kerberos:
+#  Keytab: /etc/keytabs/rdpgw.keytab
+#  Krb5conf: /etc/krb5.conf
+#  enabled / disabled capabilities
 Caps:
  SmartCardAuth: false
+ # required for openid connect
  TokenAuth: true
  # connection timeout in minutes, 0 is limitless
  IdleTimeout: 10
@@ -272,15 +277,14 @@ Caps:
  EnableDrive: true
  EnableClipboard: true
 Client:
+  # template rdp file to use for clients
+  # rdp file settings and their defaults see here: 
+  # https://docs.microsoft.com/en-us/windows-server/remote/remote-desktop-services/clients/rdp-files
+  defaults: /etc/rdpgw/default.rdp
   # this is a go string templated with {{ username }} and {{ token }}
   # the example below uses the ASCII field separator to distinguish
   # between user and token 
   UsernameTemplate: "{{ username }}@bla.com\x1f{{ token }}"
-  # rdp file settings see: 
-  # https://docs.microsoft.com/en-us/windows-server/remote/remote-desktop-services/clients/rdp-files
-  NetworkAutoDetect: 0
-  BandwidthAutoDetect: 1
-  ConnectionType: 6
   # If true puts splits "user@domain.com" into the user and domain component so that
   # domain gets set in the rdp file and the domain name is stripped from the username
   SplitUserDomain: false
