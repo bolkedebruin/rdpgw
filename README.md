@@ -212,7 +212,9 @@ Server:
  # rdpgw-auth needs to be run as root or setuid in order to work. If kerberos is
  # used a keytab and krb5conf need to be supplied. local and kerberos authentication
  # can be stacked, so that the clients selects what it wants.
- Authentication: 
+ Authentication:
+  # - kerberos
+  # - local
   - openid
  # The socket to connect to if using local auth. Ensure rdpgw auth is configured to
  # use the same socket.
@@ -225,9 +227,6 @@ Server:
  # set this option to 'disable'. This is mutually exclusive with 'authentication: local'
  # Note: rdp connections over a gateway require TLS
  Tls: auto
- # TLS certificate files
- CertFile: server.pem
- KeyFile: key.pem
  # gateway address advertised in the rdp files and browser
  GatewayAddress: localhost
  # port to listen on (change to 80 or equivalent if not using TLS)
