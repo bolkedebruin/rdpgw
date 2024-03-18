@@ -55,9 +55,9 @@ services:
       RDPGW_SERVER__PORT: 9443
       RDPGW_SERVER__HOSTS: xrdp:3389
       RDPGW_SERVER__ROUND_ROBIN: "false"
-      RDPGW_OPENID__PROVIDER_URL: "http://keycloak:8080/auth/realms/rdpgw"
-      RDPGW_OPENID__CLIENT_ID: rdpgw
-      RDPGW_OPENID__CLIENT_SECRET: 01cd304c-6f43-4480-9479-618eb6fd578f
+      RDPGW_OPEN_ID__PROVIDER_URL: "http://keycloak:8080/auth/realms/rdpgw"
+      RDPGW_OPEN_ID__CLIENT_ID: rdpgw
+      RDPGW_OPEN_ID__CLIENT_SECRET: 01cd304c-6f43-4480-9479-618eb6fd578f
       RDPGW_CLIENT__USERNAME_TEMPLATE: "{{ username }}"
       RDPGW_CAPS__TOKEN_AUTH: "true"
     healthcheck:
