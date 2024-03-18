@@ -21,7 +21,7 @@ services:
     restart: on-failure
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/auth"]
-      interval: 30s
+      interval: 10s
       timeout: 3s
       retries: 10
       start_period: 5s
@@ -38,6 +38,8 @@ services:
       TZ: "Europe/Amsterdam"
   rdpgw:
     container_name: rdpgw
+    hostname: rdpgw
+    image: bolkedebruin/rdpgw:latest
     build: .
     ports:
       - 9443:9443

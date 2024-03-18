@@ -26,7 +26,7 @@ services:
         - --http-relative-path=/auth
       healthcheck:
         test: ["CMD", "curl", "-f", "http://localhost:8080/auth"]
-        interval: 30s
+        interval: 10s
         timeout: 3s
         retries: 10
         start_period: 5s
@@ -51,6 +51,6 @@ services:
          condition: service_healthy
        healthcheck:
          test: ["CMD", "curl", "-f", "http://keycloak:8080"]
-         interval: 30s
+         interval: 10s
          timeout: 10s
          retries: 10
