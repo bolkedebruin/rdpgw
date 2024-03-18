@@ -22,14 +22,14 @@ across the different instances if this is not what you want.
 ## Configuration through environment variables
 ```bash
 docker --run name rdpgw bolkedebruin/rdpgw:latest \
-  -e RDPGW_SERVER__SSL_CERT_FILE=/etc/rdpgw/cert.pem
-  -e RDPGW_SERVER__SSL_KEY_FILE=/etc/rdpgw.cert.pem
+  -e RDPGW_SERVER__CERT_FILE=/etc/rdpgw/cert.pem
+  -e RDPGW_SERVER__KEY_FILE=/etc/rdpgw.cert.pem
   -e RDPGW_SERVER__GATEWAY_ADDRESS=https://localhost:443
   -e RDPGW_SERVER__SESSION_KEY=thisisasessionkeyreplacethisjetz  # 32 characters
   -e RDPGW_SERVER__SESSION_ENCRYPTION_KEY=thisisasessionkeyreplacethisnunu # 32 characters
-  -e RDPGW_OPENID__PROVIDER_URL=http://keycloak:8080/auth/realms/rdpgw
-  -e RDPGW_OPENID__CLIENT_ID=rdpgw
-  -e RDPGW_OPENID__CLIENT_SECRET=01cd304c-6f43-4480-9479-618eb6fd578f
+  -e RDPGW_OPEN_ID__PROVIDER_URL=http://keycloak:8080/auth/realms/rdpgw
+  -e RDPGW_OPEN_ID__CLIENT_ID=rdpgw
+  -e RDPGW_OPEN_ID__CLIENT_SECRET=01cd304c-6f43-4480-9479-618eb6fd578f
   -e RDPGW_SECURITY__SECURITY_PAA_TOKEN_SIGNING_KEY=prettypleasereplacemeinproductio # 32 characters
   -v conf:/etc/rdpgw
 ```
