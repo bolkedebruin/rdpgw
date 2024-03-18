@@ -1,7 +1,8 @@
 # builder stage
-FROM golang as builder
+FROM golang:1.22-alpine as builder
 
-RUN apt-get update && apt-get install -y libpam-dev
+#RUN apt-get update && apt-get install -y libpam-dev
+RUN apk --no-cache add git gcc musl-dev linux-pam-dev openssl
 
 # add user
 RUN adduser --disabled-password --gecos "" --home /opt/rdpgw --uid 1001 rdpgw
@@ -27,18 +28,20 @@ RUN git clone https://github.com/bolkedebruin/rdpgw.git /app && \
     chmod +x /opt/rdpgw/rdpgw-auth && \
     chmod u+s /opt/rdpgw/rdpgw-auth
 
-FROM scratch 
+FROM alpine:latest
+
+RUN apk --no-cache add linux-pam musl
 
 # make tempdir in case filestore is used
 ADD tmp.tar /
 
 USER 1001
 
+COPY --chown=1001 run.sh run.sh
 COPY --chown=1001 --from=builder /opt/rdpgw /opt/rdpgw
 COPY --chown=1001 --from=builder /etc/passwd /etc/passwd
 COPY --chown=1001 --from=builder /etc/ssl/certs /etc/ssl/certs
-
 COPY --chown=1001 rdpgw.yaml /opt/rdpgw/rdpgw.yaml
 
 WORKDIR /opt/rdpgw
-ENTRYPOINT ["/opt/rdpgw/rdpgw"]
+ENTRYPOINT ["/bin/sh", "/run.sh"]
