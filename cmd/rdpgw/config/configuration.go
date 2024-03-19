@@ -165,10 +165,14 @@ func Load(configFile string) Configuration {
 		key := strings.Replace(strings.ToLower(strings.TrimPrefix(s, "RDPGW_")), "__", ".", -1)
 		key = ToCamel(key)
 
-		newVal := strings.Split(strings.Trim(v, " "), " ")
-		log.Printf("Setting %s to %v", key, newVal)
-		// handle the case where the value is a list
-		return key, newVal
+		v = strings.Trim(v, " ")
+
+		// handle lists
+		if strings.Contains(v, " ") {
+			return key, strings.Split(v, " ")
+		}
+		return key, v
+
 	}), nil); err != nil {
 		log.Fatalf("Error loading config from environment: %v", err)
 	}
