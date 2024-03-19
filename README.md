@@ -331,14 +331,21 @@ __NOTE__: The local testing environment uses a self signed certificate. This wor
 If you want to test it on Windows you will need to provide a valid certificate.
 
 ```bash
+# with open id
 cd dev/docker
-docker-compose build
-docker-compose up
-```
+docker-compose -f docker-compose.yml up
 
-You can then connect to the gateway at `https://localhost:9443/connect` which will start the authentication flow. You
-can login with 'admin/admin'. The RDP file will download and you can open it with a remote desktop client. Also
-for logging in 'admin/admin' will work.
+# or for arm64 with open id
+docker-compose -f docker-compose-arm64.yml up
+
+# or for local or pam
+docker-compose -f docker-compose-local.yml up
+```
+    
+You can then connect to the gateway at `https://localhost:9443/connect` for the OpenID connect flavors which will start 
+the authentication flow. Or you can connect directly with the gateway set and the host set to ``xrdp`` if using the ``local`` 
+flavorYou can login with 'admin/admin'. The RDP file will download and you can open it with a remote 
+desktop client. Also for logging in 'admin/admin' will work.
 
 ## Use
 Point your browser to `https://your-gateway/connect`. After authentication
