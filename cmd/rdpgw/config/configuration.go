@@ -164,7 +164,9 @@ func Load(configFile string) Configuration {
 	if err := k.Load(env.ProviderWithValue("RDPGW_", ".", func(s string, v string) (string, interface{}) {
 		key := strings.Replace(strings.ToLower(strings.TrimPrefix(s, "RDPGW_")), "__", ".", -1)
 		key = ToCamel(key)
-		return key, v
+
+		// handle the case where the value is a list
+		return key, strings.Split(strings.Trim(v, " "), " ")
 	}), nil); err != nil {
 		log.Fatalf("Error loading config from environment: %v", err)
 	}
