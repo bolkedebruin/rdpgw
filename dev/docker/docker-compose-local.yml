@@ -1,0 +1,39 @@
+version: '3.4'
+
+services:
+  xrdp:
+    container_name: xrdp
+    hostname: xrdp
+    image: bolkedebruin/docker-ubuntu-xrdp-mate-rdpgw:latest
+    ports:
+      - 3389:3389
+    restart: on-failure
+    volumes:
+      - ${PWD}/xrdp_users.txt:/root/createusers.txt
+    environment:
+      TZ: "Europe/Amsterdam"
+  rdpgw:
+    container_name: rdpgw
+    hostname: rdpgw
+    image: bolkedebruin/rdpgw:latest
+    build: .
+    ports:
+      - 9443:9443
+    restart: on-failure
+    volumes:
+      - ${PWD}/xrdp_users.txt:/root/createusers.txt
+    environment:
+      RDPGW_SERVER__SESSION_STORE: file
+      RDPGW_SERVER__CERT_FILE: /opt/rdpgw/server.pem
+      RDPGW_SERVER__KEY_FILE: /opt/rdpgw/key.pem
+      RDPGW_SERVER__GATEWAY_ADDRESS: localhost:9443
+      RDPGW_SERVER__PORT: 9443
+      RDPGW_SERVER__HOSTS: xrdp:3389
+      RDPGW_SERVER__ROUND_ROBIN: "false"
+      RDPGW_SERVER__AUTHENTICATION: local
+      RDPGW_CAPS__TOKEN_AUTH: "false"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9443/"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
