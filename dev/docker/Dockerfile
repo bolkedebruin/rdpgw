@@ -35,13 +35,15 @@ RUN apk --no-cache add linux-pam musl
 # make tempdir in case filestore is used
 ADD tmp.tar /
 
-USER 1001
+COPY --chown=0 rdpgw-pam /etc/pam.d/rdpgw
 
+USER 1001
 COPY --chown=1001 run.sh run.sh
 COPY --chown=1001 --from=builder /opt/rdpgw /opt/rdpgw
 COPY --chown=1001 --from=builder /etc/passwd /etc/passwd
 COPY --chown=1001 --from=builder /etc/ssl/certs /etc/ssl/certs
-#COPY --chown=1001 rdpgw.yaml /opt/rdpgw/rdpgw.yaml
+
+USER 0
 
 WORKDIR /opt/rdpgw
 ENTRYPOINT ["/bin/sh", "/run.sh"]
