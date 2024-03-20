@@ -145,6 +145,9 @@ but it also supports LDAP authentication or even Active Directory if you have th
 (for passwd), PAM requires that it is accessed as root. Therefore, the gateway comes with a small helper program called 
 `rdpgw-auth` that is used to authenticate the user. This program needs to be run as root or setuid.
 
+__NOTE__: The default windows client ``mstsc`` does not support basic auth. You will need to use a different client or
+switch to OpenID Connect or Kerberos.
+
 __NOTE__: Using PAM for passwd (i.e. LDAP is fine) within a container is not recommended. It is better to use OpenID 
 Connect or Kerberos. If you do want to use it within a container you can choose to run the helper program outside the 
 container and have the socket available within. Alternatively, you can mount all what is needed into the container but 
