@@ -21,7 +21,7 @@ func TestRdpBuilder(t *testing.T) {
 		t.Fatalf("%s does not contain `gatewayhostname:s:%s", s, GatewayHostName)
 	}
 	if strings.Contains(s, "autoreconnectionenabled") {
-		t.Fatalf("autoreconnectionenabled is in %s, but is default value", s)
+		t.Fatalf("autoreconnectionenabled is in %s, but it's default value", s)
 	}
 	if !strings.Contains(s, "smart sizing:i:1"+CRLF) {
 		t.Fatalf("%s does not contain smart sizing:i:1", s)

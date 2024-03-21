@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/rdp/koanf/parsers/rdp"
 	"github.com/fatih/structs"
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
 	"log"
@@ -93,6 +94,7 @@ type RdpSettings struct {
 
 type Builder struct {
 	Settings RdpSettings
+	Metadata mapstructure.Metadata
 }
 
 func NewBuilder() *Builder {
@@ -102,39 +104,47 @@ func NewBuilder() *Builder {
 
 	return &Builder{
 		Settings: c,
+		Metadata: mapstructure.Metadata{},
 	}
 }
 
 func NewBuilderFromFile(filename string) (*Builder, error) {
 	c := RdpSettings{}
 	initStruct(&c)
+	metadata := mapstructure.Metadata{}
+
+	decoderConfig := &mapstructure.DecoderConfig{
+		Result:   &c,
+		Metadata: &metadata,
+	}
 
 	var k = koanf.New(".")
 	if err := k.Load(file.Provider(filename), rdp.Parser()); err != nil {
 		return nil, err
 	}
-	t := koanf.UnmarshalConf{Tag: "rdp"}
+	t := koanf.UnmarshalConf{Tag: "rdp", DecoderConfig: decoderConfig}
 
 	if err := k.UnmarshalWithConf("", &c, t); err != nil {
 		return nil, err
 	}
 	return &Builder{
 		Settings: c,
+		Metadata: metadata,
 	}, nil
 }
 
 func (rb *Builder) String() string {
 	var sb strings.Builder
 
-	addStructToString(rb.Settings, &sb)
+	addStructToString(rb.Settings, rb.Metadata, &sb)
 
 	return sb.String()
 }
 
-func addStructToString(st interface{}, sb *strings.Builder) {
+func addStructToString(st interface{}, metadata mapstructure.Metadata, sb *strings.Builder) {
 	s := structs.New(st)
 	for _, f := range s.Fields() {
-		if isZero(f) {
+		if isZero(f) && !isSet(f, metadata) {
 			continue
 		}
 		sb.WriteString(f.Tag("rdp"))
@@ -193,6 +203,16 @@ func isZero(f *structs.Field) bool {
 	}
 
 	return f.IsZero()
+}
+
+func isSet(f *structs.Field, metadata mapstructure.Metadata) bool {
+	for _, v := range metadata.Unset {
+		if v == f.Name() {
+			log.Printf("field %s is unset", f.Name())
+			return true
+		}
+	}
+	return false
 }
 
 func initStruct(st interface{}) {
