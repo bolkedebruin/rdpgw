@@ -347,7 +347,7 @@ docker-compose -f docker-compose-local.yml up
     
 You can then connect to the gateway at `https://localhost:9443/connect` for the OpenID connect flavors which will start 
 the authentication flow. Or you can connect directly with the gateway set and the host set to ``xrdp`` if using the ``local`` 
-flavorYou can login with 'admin/admin'. The RDP file will download and you can open it with a remote 
+flavor. You can login with 'admin/admin'. The RDP file will download and you can open it with a remote 
 desktop client. Also for logging in 'admin/admin' will work.
 
 ## Use
@@ -363,6 +363,30 @@ you can just do a GET to https://yourserver/tokeninfo?access_token=<token> .
 It will return 200 OK with the decrypted token.
 
 In this way you can integrate, for example, it with [pam-jwt](https://github.com/bolkedebruin/pam-jwt).
+
+## Client Caveats
+The several clients that Microsoft provides come with their own caveats. 
+The most important one is that the default client on Windows ``mstsc`` does 
+not support basic authentication. This means you need to use either OpenID Connect
+or Kerberos.
+
+In addition to that, ``mstsc``, when configuring a gateway directly in the client requires
+you to "save the credentials" for the gateway otherwise the client will not connect at all
+(it won't send any packages to the gateway) and it will keep on asking for new credentials.
+
+Finally, ``mstsc`` requires a valid certificate on the gateway.
+
+The Microsoft Remote Desktop Client from the Microsoft Store does not have these issues,
+but it requires that the username and password used for authentication are the same for
+both the gateway and the RDP host.
+
+The Microsoft Remote Desktop Client for Mac does not have these issues and is the most flexible.
+It supports basic authentication, OpenID Connect and Kerberos and can use different credentials
+
+The official Microsoft IOS and Android clients seem also more flexible.
+
+Third party clients like [FreeRDP](https://www.freerdp.com) might also provide more
+flexibility.
 
 ## TODO
 * Improve Web Interface
