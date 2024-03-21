@@ -86,7 +86,7 @@ type RdpSettings struct {
 	RemoteAppExpandWorkingDir             bool   `rdp:"remoteapplicationexpandworkingdir" default:"true"`
 	RemoteApplicationFile                 string `rdp:"remoteapplicationfile" default:"true"`
 	RemoteApplicationIcon                 string `rdp:"remoteapplicationicon"`
-	RemoteApplicationMode                 bool   `rdp:"remoteapplicationmode" default:"true"`
+	RemoteApplicationMode                 bool   `rdp:"remoteapplicationmode" default:"false"`
 	RemoteApplicationName                 string `rdp:"remoteapplicationname"`
 	RemoteApplicationProgram              string `rdp:"remoteapplicationprogram"`
 }
@@ -114,6 +114,7 @@ func NewBuilderFromFile(filename string) (*Builder, error) {
 		return nil, err
 	}
 	t := koanf.UnmarshalConf{Tag: "rdp"}
+
 	if err := k.UnmarshalWithConf("", &c, t); err != nil {
 		return nil, err
 	}
