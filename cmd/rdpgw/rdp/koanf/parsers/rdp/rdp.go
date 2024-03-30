@@ -44,6 +44,7 @@ func (p *RDP) Unmarshal(b []byte) (map[string]interface{}, error) {
 			}
 			mp[key] = intValue
 		case "s":
+			mp[key] = val
 		case "b":
 			mp[key] = val
 		default:
