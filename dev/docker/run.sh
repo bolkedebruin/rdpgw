@@ -29,6 +29,6 @@ if [ -n "${RDPGW_SERVER__AUTHENTICATION}" ]; then
 fi
 
 # drop privileges and run the application
-su -c /opt/rdpgw/rdpgw ${USER} &
+su -c /opt/rdpgw/rdpgw "${USER}" -- "$@" &
 wait
 exit $?
