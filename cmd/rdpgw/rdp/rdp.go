@@ -28,12 +28,12 @@ const (
 )
 
 type RdpSettings struct {
-	AllowFontSmoothing                    string `rdp:"allow font smoothing" default:"0"`
-	AllowDesktopComposition               string `rdp:"allow desktop composition" default:"0"`
-	DisableFullWindowDrag                 string `rdp:"disable full window drag" default:"0"`
-	DisableMenuAnims                      string `rdp:"disable menu anims" default:"0"`
-	DisableThemes                         string `rdp:"disable themes" default:"0"`
-	DisableCursorSetting                  string `rdp:"disable cursor setting" default:"0"`
+	AllowFontSmoothing                    bool   `rdp:"allow font smoothing" default:"0"`
+	AllowDesktopComposition               bool   `rdp:"allow desktop composition" default:"0"`
+	DisableFullWindowDrag                 bool   `rdp:"disable full window drag" default:"0"`
+	DisableMenuAnims                      bool   `rdp:"disable menu anims" default:"0"`
+	DisableThemes                         bool   `rdp:"disable themes" default:"0"`
+	DisableCursorSetting                  bool   `rdp:"disable cursor setting" default:"0"`
 	GatewayHostname                       string `rdp:"gatewayhostname"`
 	FullAddress                           string `rdp:"full address"`
 	AlternateFullAddress                  string `rdp:"alternate full address"`
@@ -114,8 +114,9 @@ func NewBuilderFromFile(filename string) (*Builder, error) {
 	metadata := mapstructure.Metadata{}
 
 	decoderConfig := &mapstructure.DecoderConfig{
-		Result:   &c,
-		Metadata: &metadata,
+		Result:           &c,
+		Metadata:         &metadata,
+		WeaklyTypedInput: true,
 	}
 
 	var k = koanf.New(".")

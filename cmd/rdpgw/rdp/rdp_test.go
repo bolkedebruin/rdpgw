@@ -38,3 +38,10 @@ func TestInitStruct(t *testing.T) {
 		t.Fatalf("conn.PromptCredentialsOnce != true")
 	}
 }
+
+func TestLoadFile(t *testing.T) {
+	_, err := NewBuilderFromFile("rdp_test_file.rdp")
+	if err != nil {
+		t.Fatalf("LoadFile failed: %v", err)
+	}
+}
