@@ -25,8 +25,8 @@ func EnrichContext(next http.Handler) http.Handler {
 			}
 		}
 
-		log.Printf("Identity SessionId: %s, UserName: %s: Authenticated: %t: Path: %s",
-			id.SessionId(), id.UserName(), id.Authenticated(), r.RequestURI)
+		log.Printf("Identity SessionId: %s, UserName: %s: Authenticated: %t",
+			id.SessionId(), id.UserName(), id.Authenticated())
 
 		h := r.Header.Get("X-Forwarded-For")
 		if h != "" {
