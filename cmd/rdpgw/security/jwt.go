@@ -7,8 +7,8 @@ import (
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/identity"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/protocol"
 	"github.com/coreos/go-oidc/v3/oidc"
-	"github.com/go-jose/go-jose/v3"
-	"github.com/go-jose/go-jose/v3/jwt"
+	"github.com/go-jose/go-jose/v4"
+	"github.com/go-jose/go-jose/v4/jwt"
 	"golang.org/x/oauth2"
 	"log"
 	"time"
@@ -62,9 +62,9 @@ func CheckPAACookie(ctx context.Context, tokenString string) (bool, error) {
 		return false, errors.New("no token to parse")
 	}
 
-	token, err := jwt.ParseSigned(tokenString)
+	token, err := jwt.ParseSigned(tokenString, []jose.SignatureAlgorithm{jose.HS256})
 	if err != nil {
-		log.Printf("cannot parse token due to: %tunnel", err)
+		log.Printf("cannot parse token due to: %t", err)
 		return false, err
 	}
 
@@ -136,7 +136,7 @@ func GeneratePAAToken(ctx context.Context, username string, server string) (stri
 		AccessToken:  id.GetAttribute(identity.AttrAccessToken).(string),
 	}
 
-	if token, err := jwt.Signed(sig).Claims(standard).Claims(private).CompactSerialize(); err != nil {
+	if token, err := jwt.Signed(sig).Claims(standard).Claims(private).Serialize(); err != nil {
 		log.Printf("Cannot sign PAA token %s", err)
 		return "", err
 	} else {
@@ -157,7 +157,10 @@ func GenerateUserToken(ctx context.Context, userName string) (string, error) {
 
 	enc, err := jose.NewEncrypter(
 		jose.A128CBC_HS256,
-		jose.Recipient{Algorithm: jose.DIRECT, Key: UserEncryptionKey},
+		jose.Recipient{
+			Algorithm: jose.DIRECT,
+			Key:       UserEncryptionKey,
+		},
 		(&jose.EncrypterOptions{Compression: jose.DEFLATE}).WithContentType("JWT"),
 	)
 
@@ -167,16 +170,29 @@ func GenerateUserToken(ctx context.Context, userName string) (string, error) {
 	}
 
 	// this makes the token bigger and we deal with a limited space of 511 characters
-	// sig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.HS256, Key: SigningKey}, nil)
-	// token, err := jwt.SignedAndEncrypted(sig, enc).Claims(claims).CompactSerialize()
-	token, err := jwt.Encrypted(enc).Claims(claims).CompactSerialize()
+	if len(UserSigningKey) > 0 {
+		sig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.HS256, Key: UserSigningKey}, nil)
+		token, err := jwt.SignedAndEncrypted(sig, enc).Claims(claims).Serialize()
+		if len(token) > 511 {
+			log.Printf("WARNING: token too long: len %d > 511", len(token))
+		}
+		return token, err
+	}
+
+	// no signature
+	token, err := jwt.Encrypted(enc).Claims(claims).Serialize()
 	return token, err
 }
 
 func UserInfo(ctx context.Context, token string) (jwt.Claims, error) {
 	standard := jwt.Claims{}
 	if len(UserEncryptionKey) > 0 && len(UserSigningKey) > 0 {
-		enc, err := jwt.ParseSignedAndEncrypted(token)
+		enc, err := jwt.ParseSignedAndEncrypted(
+			token,
+			[]jose.KeyAlgorithm{jose.DIRECT},
+			[]jose.ContentEncryption{jose.A128CBC_HS256},
+			[]jose.SignatureAlgorithm{jose.HS256},
+		)
 		if err != nil {
 			log.Printf("Cannot get token %s", err)
 			return standard, errors.New("cannot get token")
@@ -186,16 +202,12 @@ func UserInfo(ctx context.Context, token string) (jwt.Claims, error) {
 			log.Printf("Cannot decrypt token %s", err)
 			return standard, errors.New("cannot decrypt token")
 		}
-		if _, err := verifyAlg(token.Headers, string(jose.HS256)); err != nil {
-			log.Printf("signature validation failure: %s", err)
-			return standard, errors.New("signature validation failure")
-		}
 		if err = token.Claims(UserSigningKey, &standard); err != nil {
 			log.Printf("cannot verify signature %s", err)
 			return standard, errors.New("cannot verify signature")
 		}
 	} else if len(UserSigningKey) == 0 {
-		token, err := jwt.ParseEncrypted(token)
+		token, err := jwt.ParseEncrypted(token, []jose.KeyAlgorithm{jose.DIRECT}, []jose.ContentEncryption{jose.A128CBC_HS256})
 		if err != nil {
 			log.Printf("Cannot get token %s", err)
 			return standard, errors.New("cannot get token")
@@ -204,21 +216,6 @@ func UserInfo(ctx context.Context, token string) (jwt.Claims, error) {
 		if err != nil {
 			log.Printf("Cannot decrypt token %s", err)
 			return standard, errors.New("cannot decrypt token")
-		}
-	} else {
-		token, err := jwt.ParseSigned(token)
-		if err != nil {
-			log.Printf("Cannot get token %s", err)
-			return standard, errors.New("cannot get token")
-		}
-		if _, err := verifyAlg(token.Headers, string(jose.HS256)); err != nil {
-			log.Printf("signature validation failure: %s", err)
-			return standard, errors.New("signature validation failure")
-		}
-		err = token.Claims(UserSigningKey, &standard)
-		if err = token.Claims(UserSigningKey, &standard); err != nil {
-			log.Printf("cannot verify signature %s", err)
-			return standard, errors.New("cannot verify signature")
 		}
 	}
 
@@ -238,14 +235,10 @@ func UserInfo(ctx context.Context, token string) (jwt.Claims, error) {
 
 func QueryInfo(ctx context.Context, tokenString string, issuer string) (string, error) {
 	standard := jwt.Claims{}
-	token, err := jwt.ParseSigned(tokenString)
+	token, err := jwt.ParseSigned(tokenString, []jose.SignatureAlgorithm{jose.HS256})
 	if err != nil {
 		log.Printf("Cannot get token %s", err)
 		return "", errors.New("cannot get token")
-	}
-	if _, err := verifyAlg(token.Headers, string(jose.HS256)); err != nil {
-		log.Printf("signature validation failure: %s", err)
-		return "", errors.New("signature validation failure")
 	}
 	err = token.Claims(QuerySigningKey, &standard)
 	if err = token.Claims(QuerySigningKey, &standard); err != nil {
@@ -287,7 +280,7 @@ func GenerateQueryToken(ctx context.Context, query string, issuer string) (strin
 		return "", err
 	}
 
-	token, err := jwt.Signed(sig).Claims(claims).CompactSerialize()
+	token, err := jwt.Signed(sig).Claims(claims).Serialize()
 	return token, err
 }
 
@@ -298,13 +291,4 @@ func getTunnel(ctx context.Context) *protocol.Tunnel {
 		return nil
 	}
 	return s
-}
-
-func verifyAlg(headers []jose.Header, alg string) (bool, error) {
-	for _, header := range headers {
-		if header.Algorithm != alg {
-			return false, fmt.Errorf("invalid signing method %s", header.Algorithm)
-		}
-	}
-	return true, nil
 }

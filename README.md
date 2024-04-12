@@ -299,6 +299,8 @@ Security:
   # PAATokenEncryptionKey: thisisasessionkeyreplacethisjetzt
   # a random string of 32 characters to secure cookies on the client
   UserTokenEncryptionKey: thisisasessionkeyreplacethisjetzt
+  # Signing makes the token bigger and we are limited to 511 characters
+  # UserTokenSigningKey: thisisasessionkeyreplacethisjetzt
   # if you want to enable token generation for the user
   # if true the username will be set to a jwt with the username embedded into it
   EnableUserToken: true
