@@ -8,6 +8,7 @@ import (
 	"github.com/bolkedebruin/gokrb5/v8/service"
 	"github.com/bolkedebruin/gokrb5/v8/spnego"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/config"
+        "github.com/bolkedebruin/rdpgw/cmd/rdpgw/database"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/kdcproxy"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/protocol"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/security"
@@ -221,7 +222,7 @@ func main() {
 		r.HandleFunc("/callback", o.HandleCallback)
 
 		// only enable un-auth endpoint for openid only config
-		if !conf.Server.KerberosEnabled() || !conf.Server.BasicAuthEnabled() {
+		if !conf.Server.KerberosEnabled() && !conf.Server.LocalEnabled() && !conf.Server.DatabaseEnabled() {
 			rdp.Name("gw").HandlerFunc(gw.HandleGatewayProtocol)
 		}
 	}
@@ -229,11 +230,30 @@ func main() {
 	// for stacking of authentication
 	auth := web.NewAuthMux()
 	rdp.MatcherFunc(web.NoAuthz).HandlerFunc(auth.SetAuthenticate)
+        
+        var db database.Database
+
+        // database
+        if conf.Server.DatabaseEnabled() {
+                log.Printf("enabling database authentication")
+                db = database.NewConfig(conf.Users)
+                ntlm := web.NewNTLMAuthHandler(db)
+                rdp.NewRoute().HeadersRegexp("Authorization", "NTLM").HandlerFunc(ntlm.NTLMAuth(gw.HandleGatewayProtocol))
+                rdp.NewRoute().HeadersRegexp("Authorization", "Negotiate").HandlerFunc(ntlm.NTLMAuth(gw.HandleGatewayProtocol))
+                auth.Register(`NTLM`)
+        }
 
 	// basic auth
-	if conf.Server.BasicAuthEnabled() {
-		log.Printf("enabling basic authentication")
-		q := web.BasicAuthHandler{SocketAddress: conf.Server.AuthSocket, Timeout: conf.Server.BasicAuthTimeout}
+	if conf.Server.LocalEnabled() || conf.Server.DatabaseEnabled() {
+		q := web.BasicAuthHandler{}
+                if conf.Server.LocalEnabled() {
+                        log.Printf("enabling local authentication")
+                        q.SocketAddress = conf.Server.AuthSocket
+                        q.Timeout = conf.Server.BasicAuthTimeout
+                }
+                if conf.Server.DatabaseEnabled() {
+                        q.Database = db
+                }
 		rdp.NewRoute().HeadersRegexp("Authorization", "Basic").HandlerFunc(q.BasicAuth(gw.HandleGatewayProtocol))
 		auth.Register(`Basic realm="restricted", charset="UTF-8"`)
 	}
