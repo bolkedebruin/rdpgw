@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/bolkedebruin/rdpgw/cmd/auth/config"
+	"github.com/bolkedebruin/rdpgw/cmd/auth/database"
+	"github.com/bolkedebruin/rdpgw/cmd/auth/ntlm"
 	"github.com/bolkedebruin/rdpgw/shared/auth"
 	"github.com/msteinert/pam/v2"
 	"github.com/thought-machine/go-flags"
@@ -21,16 +24,24 @@ const (
 var opts struct {
 	ServiceName string `short:"n" long:"name" default:"rdpgw" description:"the PAM service name to use"`
 	SocketAddr  string `short:"s" long:"socket" default:"/tmp/rdpgw-auth.sock" description:"the location of the socket"`
+	ConfigFile string `short:"c" long:"conf" default:"rdpgw-auth.yaml" description:"users config file for NTLM (yaml)"`
 }
 
 type AuthServiceImpl struct {
+	auth.UnimplementedAuthenticateServer
+
 	serviceName string
+	ntlm *ntlm.NTLMAuth
 }
 
+var conf config.Configuration
 var _ auth.AuthenticateServer = (*AuthServiceImpl)(nil)
 
-func NewAuthService(serviceName string) auth.AuthenticateServer {
-	s := &AuthServiceImpl{serviceName: serviceName}
+func NewAuthService(serviceName string, database database.Database) auth.AuthenticateServer {
+	s := &AuthServiceImpl{
+		serviceName: serviceName,
+		ntlm: ntlm.NewNTLMAuth(database),
+	}
 	return s
 }
 
@@ -77,11 +88,34 @@ func (s *AuthServiceImpl) Authenticate(ctx context.Context, message *auth.UserPa
 	return r, nil
 }
 
+func (s *AuthServiceImpl) NTLM(ctx context.Context, message *auth.NtlmRequest) (*auth.NtlmResponse, error) {
+	r, err := s.ntlm.Authenticate(message)
+
+	if err != nil {
+		log.Printf("[%s] NTLM failed: %s", message.Session, err)
+	} else if r.Authenticated {
+		log.Printf("[%s] User: %s authenticated using NTLM", message.Session, r.Username)
+	} else if r.NtlmMessage != "" {
+		log.Printf("[%s] Sending NTLM challenge", message.Session)
+	}
+
+	return r, err
+}
+
 func main() {
 	_, err := flags.Parse(&opts)
 	if err != nil {
-		panic(err)
+		var fErr *flags.Error
+		if errors.As(err, &fErr) {
+			if fErr.Type == flags.ErrHelp {
+				fmt.Printf("Acknowledgements:\n")
+				fmt.Printf(" - This product includes software developed by the Thomson Reuters Global Resources. (go-ntlm - https://github.com/m7913d/go-ntlm - BSD-4 License)\n")
+			}
+		}
+		return
 	}
+
+	conf = config.Load(opts.ConfigFile)
 
 	log.Printf("Starting auth server on %s", opts.SocketAddr)
 	cleanup := func() {
@@ -100,7 +134,8 @@ func main() {
 		log.Fatal(err)
 	}
 	server := grpc.NewServer()
-	service := NewAuthService(opts.ServiceName)
+	db := database.NewConfig(conf.Users)
+	service := NewAuthService(opts.ServiceName, db)
 	auth.RegisterAuthenticateServer(server, service)
 	server.Serve(listener)
 }

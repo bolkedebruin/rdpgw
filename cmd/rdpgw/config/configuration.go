@@ -31,7 +31,6 @@ type Configuration struct {
 	Server   ServerConfig   `koanf:"server"`
 	OpenId   OpenIDConfig   `koanf:"openid"`
 	Kerberos KerberosConfig `koanf:"kerberos"`
-        Users    []UserConfig   `koanf:"users"`
 	Caps     RDGCapsConfig  `koanf:"caps"`
 	Security SecurityConfig `koanf:"security"`
 	Client   ClientConfig   `koanf:"client"`
@@ -65,11 +64,6 @@ type OpenIDConfig struct {
 	ProviderUrl  string `koanf:"providerurl"`
 	ClientId     string `koanf:"clientid"`
 	ClientSecret string `koanf:"clientsecret"`
-}
-
-type UserConfig struct {
-	Username             string   `koanf:"username"`
-	Password             string   `koanf:"password"`
 }
 
 type RDGCapsConfig struct {
@@ -190,7 +184,6 @@ func Load(configFile string) Configuration {
 	k.UnmarshalWithConf("Security", &Conf.Security, koanfTag)
 	k.UnmarshalWithConf("Client", &Conf.Client, koanfTag)
 	k.UnmarshalWithConf("Kerberos", &Conf.Kerberos, koanfTag)
-        k.UnmarshalWithConf("Users", &Conf.Users, koanfTag)
 
 	if len(Conf.Security.PAATokenEncryptionKey) != 32 {
 		Conf.Security.PAATokenEncryptionKey, _ = security.GenerateRandomString(32)
@@ -228,12 +221,12 @@ func Load(configFile string) Configuration {
 		log.Fatalf("host selection is set to `signed` but `querytokensigningkey` is not set")
 	}
 
-	if Conf.Server.LocalEnabled() && Conf.Server.Tls == "disable" {
+	if Conf.Server.BasicAuthEnabled() && Conf.Server.Tls == "disable" {
 		log.Fatalf("basicauth=local and tls=disable are mutually exclusive")
 	}
         
-        if Conf.Server.DatabaseEnabled() && Conf.Server.KerberosEnabled() {
-                log.Fatalf("database and kerberos authentication are not stackable")
+	if Conf.Server.NtlmEnabled() && Conf.Server.KerberosEnabled() {
+		log.Fatalf("ntlm and kerberos authentication are not stackable")
         }
 
 	if !Conf.Caps.TokenAuth && Conf.Server.OpenIDEnabled() {
@@ -261,12 +254,12 @@ func (s *ServerConfig) KerberosEnabled() bool {
 	return s.matchAuth("kerberos")
 }
 
-func (s *ServerConfig) LocalEnabled() bool {
+func (s *ServerConfig) BasicAuthEnabled() bool {
 	return s.matchAuth("local") || s.matchAuth("basic")
 }
 
-func (s *ServerConfig) DatabaseEnabled() bool {
-	return s.matchAuth("database")
+func (s *ServerConfig) NtlmEnabled() bool {
+	return s.matchAuth("ntlm")
 }
 
 func (s *ServerConfig) matchAuth(needle string) bool {

@@ -2,7 +2,6 @@ package web
 
 import (
 	"context"
-        "github.com/bolkedebruin/rdpgw/cmd/rdpgw/database"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/identity"
 	"github.com/bolkedebruin/rdpgw/shared/auth"
 	"google.golang.org/grpc"
@@ -20,7 +19,6 @@ const (
 type BasicAuthHandler struct {
 	SocketAddress string
 	Timeout       int
-        Database      database.Database
 }
 
 func (h *BasicAuthHandler) BasicAuth(next http.HandlerFunc) http.HandlerFunc {
@@ -51,11 +49,6 @@ func (h *BasicAuthHandler) BasicAuth(next http.HandlerFunc) http.HandlerFunc {
 }
 
 func (h *BasicAuthHandler) authenticate(w http.ResponseWriter, r *http.Request, username string, password string) (authenticated bool) {
-        return h.authenticateDatabase(username, password) ||
-               h.authenticateSocket(w, r, username, password)
-}
-
-func (h *BasicAuthHandler) authenticateSocket(w http.ResponseWriter, r *http.Request, username string, password string) (authenticated bool) {
         if h.SocketAddress == "" {
                 return false
         }
@@ -86,13 +79,4 @@ func (h *BasicAuthHandler) authenticateSocket(w http.ResponseWriter, r *http.Req
         }
         
         return res.Authenticated
-}
-
-func (h *BasicAuthHandler) authenticateDatabase(username string, password string) (authenticated bool) {
-        if h.Database == nil {
-                return false
-        }
-        
-        expectedPassword := h.Database.GetPassword (username)
-        return expectedPassword != "" && password == expectedPassword
 }

@@ -14,6 +14,18 @@ message AuthResponse {
   string error = 2;
 }
 
+message NtlmRequest {
+  string session = 1;
+  string ntlmMessage = 2;
+}
+
+message NtlmResponse {
+  bool authenticated = 1;
+  string username = 2;
+  string ntlmMessage = 3;
+}
+
 service Authenticate {
   rpc Authenticate (UserPass) returns (AuthResponse) {}
+  rpc NTLM (NtlmRequest) returns (NtlmResponse) {}
 }

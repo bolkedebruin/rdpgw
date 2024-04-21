@@ -1,7 +1,7 @@
 package database
 
 import (
-        "github.com/bolkedebruin/rdpgw/cmd/rdpgw/config"
+	"github.com/bolkedebruin/rdpgw/cmd/auth/config"
 )
 
 type Config struct {
