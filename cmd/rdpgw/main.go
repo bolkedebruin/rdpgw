@@ -221,7 +221,7 @@ func main() {
 		r.HandleFunc("/callback", o.HandleCallback)
 
 		// only enable un-auth endpoint for openid only config
-		if !conf.Server.KerberosEnabled() || !conf.Server.BasicAuthEnabled() {
+		if !conf.Server.KerberosEnabled() && !conf.Server.BasicAuthEnabled() && !conf.Server.NtlmEnabled() {
 			rdp.Name("gw").HandlerFunc(gw.HandleGatewayProtocol)
 		}
 	}
@@ -229,6 +229,16 @@ func main() {
 	// for stacking of authentication
 	auth := web.NewAuthMux()
 	rdp.MatcherFunc(web.NoAuthz).HandlerFunc(auth.SetAuthenticate)
+        
+	// ntlm
+	if conf.Server.NtlmEnabled() {
+		log.Printf("enabling NTLM authentication")
+		ntlm := web.NTLMAuthHandler{SocketAddress: conf.Server.AuthSocket, Timeout: conf.Server.BasicAuthTimeout}
+		rdp.NewRoute().HeadersRegexp("Authorization", "NTLM").HandlerFunc(ntlm.NTLMAuth(gw.HandleGatewayProtocol))
+		rdp.NewRoute().HeadersRegexp("Authorization", "Negotiate").HandlerFunc(ntlm.NTLMAuth(gw.HandleGatewayProtocol))
+		auth.Register(`NTLM`)
+		auth.Register(`Negotiate`)
+        }
 
 	// basic auth
 	if conf.Server.BasicAuthEnabled() {

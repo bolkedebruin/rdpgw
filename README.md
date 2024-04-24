@@ -28,7 +28,7 @@ to connect.
 
 The gateway has several security phases. In the authentication phase the client's credentials are
 verified. Depending the authentication mechanism used, the client's credentials are verified against
-an OpenID Connect provider, Kerberos or a local PAM service.
+an OpenID Connect provider, Kerberos, a local PAM service or a local database.
 
 If OpenID Connect is used the user will
 need to connect to a webpage provided by the gateway to authenticate, which in turn will redirect
@@ -45,6 +45,9 @@ If local authentication is used the client will need to provide a username and p
 against PAM. This requires, to ensure privilege separation, that ```rdpgw-auth``` is also running and a
 valid PAM configuration is provided per typical configuration.
 
+If NTLM authentication is used, the allowed user credentials for the gateway should be configured in the 
+configuration file of `rdpgw-auth`.
+
 Finally, RDP hosts that the client wants to connect to are verified against what was provided by / allowed by
 the server. Next to that the client's ip address needs to match the one it obtained the gateway token with if
 using OpenID Connect. Due to proxies and NAT this is not always possible and thus can be disabled. However, this
@@ -58,7 +61,7 @@ settings.
 ## Authentication
 
 RDPGW wants to be secure when you set it up from the start. It supports several authentication
-mechanisms such as OpenID Connect, Kerberos and PAM. 
+mechanisms such as OpenID Connect, Kerberos, PAM or NTLM.
 
 Technically, cookies are encrypted and signed on the client side relying
 on [Gorilla Sessions](https://www.gorillatoolkit.org/pkg/sessions). PAA tokens (gateway access tokens)
@@ -72,7 +75,7 @@ if you want.
 
 ### Mixing authentication mechanisms
 
-It is technically possible to mix authentication mechanisms. Currently, you can mix local and Kerberos. If you enable 
+It is technically possible to mix authentication mechanisms. Currently, you can mix local with Kerberos or NTLM. If you enable 
 OpenID Connect it is not possible to mix it with local or Kerberos at the moment.
 
 ### Open ID Connect
@@ -137,7 +140,7 @@ Caps:
 The client can then connect directly to the gateway without the need for a RDP file.
 
 
-### PAM / Local / Basic Auth
+### PAM / Local (Basic Auth)
 ![PAM](docs/images/flow-pam.svg)
 
 The gateway can also support authentication against PAM. Sometimes this is referred to as local or passwd authentication,
@@ -146,7 +149,7 @@ but it also supports LDAP authentication or even Active Directory if you have th
 `rdpgw-auth` that is used to authenticate the user. This program needs to be run as root or setuid.
 
 __NOTE__: The default windows client ``mstsc`` does not support basic auth. You will need to use a different client or
-switch to OpenID Connect or Kerberos.
+switch to OpenID Connect, Kerberos or NTLM authentication.
 
 __NOTE__: Using PAM for passwd (i.e. LDAP is fine) within a container is not recommended. It is better to use OpenID 
 Connect or Kerberos. If you do want to use it within a container you can choose to run the helper program outside the 
@@ -180,6 +183,38 @@ Make sure to run both the gateway and `rdpgw-auth`. The gateway will connect to 
 
 The client can then connect to the gateway directly by using a remote desktop client.
 
+### NTLM
+
+The gateway can also support NTLM authentication. 
+Currently, only the configuration file is supported as a database for credential lookup. 
+In the future, support for real databases (e.g. sqlite) may be added.
+
+NTLM authentication has the advantage that it is easy to setup, especially in case the gateway is used for a limited number of users.
+Unlike PAM / local, NTLM authentication supports the default windows client ``mstsc``.
+
+__WARNING__: The password is currently saved in plain text. So, you should keep the config file as secure as possible and avoid 
+reusing the same password for other applications. The password is stored in plain text to support the NTLM authentication protocol.
+
+To enable NTLM authentication make sure to set the following variables in the configuration file.
+
+Configuration file for `rdpgw`: 
+```yaml
+Server:
+  Authentication:
+    - ntlm
+Caps:
+  TokenAuth: false
+```
+
+Configuration file for `rdpgw-auth`:
+````yaml
+Users:
+ - {Username: "my_username", Password: "my_secure_password"} # Modify this password!
+````
+
+The client can then connect to the gateway directly by using a remote desktop client using the gateway credentials 
+configured in the YAML configuration file.
+
 ## TLS
 
 The gateway requires a valid TLS certificate. This means a certificate that is signed by a valid CA that is in the store 
@@ -209,16 +244,17 @@ TLS termination.
 ```yaml
 # web server configuration. 
 Server:
- # can be set to openid, kerberos and local. If openid is used rdpgw expects
+ # can be set to openid, kerberos, local and ntlm. If openid is used rdpgw expects
  # a configured openid provider, make sure to set caps.tokenauth to true. If local
  # rdpgw connects to rdpgw-auth over a socket to verify users and password. Note:
  # rdpgw-auth needs to be run as root or setuid in order to work. If kerberos is
- # used a keytab and krb5conf need to be supplied. local and kerberos authentication
- # can be stacked, so that the clients selects what it wants.
+ # used a keytab and krb5conf need to be supplied. local can be stacked with 
+ # kerberos or ntlm authentication, so that the clients selects what it wants.
  Authentication:
   # - kerberos
   # - local
   - openid
+  # - ntlm
  # The socket to connect to if using local auth. Ensure rdpgw auth is configured to
  # use the same socket.
  # AuthSocket: /tmp/rdpgw-auth.sock
@@ -369,12 +405,15 @@ In this way you can integrate, for example, it with [pam-jwt](https://github.com
 ## Client Caveats
 The several clients that Microsoft provides come with their own caveats. 
 The most important one is that the default client on Windows ``mstsc`` does 
-not support basic authentication. This means you need to use either OpenID Connect
-or Kerberos.
+not support basic authentication. This means you need to use either OpenID Connect,
+Kerberos or ntlm authentication.
 
 In addition to that, ``mstsc``, when configuring a gateway directly in the client requires
-you to "save the credentials" for the gateway otherwise the client will not connect at all
-(it won't send any packages to the gateway) and it will keep on asking for new credentials.
+you to either:
+ * "save the credentials" for the gateway
+ * or specify a (random) domain name in the username field (e.g. ``.\username``) when prompted for the gateway credentials,
+ 
+otherwise the client will not connect at all (it won't send any packages to the gateway) and it will keep on asking for new credentials.
 
 Finally, ``mstsc`` requires a valid certificate on the gateway.
 
@@ -393,4 +432,5 @@ flexibility.
 ## TODO
 * Improve Web Interface
 
-
+# Acknowledgements
+* This product includes software developed by the Thomson Reuters Global Resources. ([go-ntlm](https://github.com/m7913d/go-ntlm) - BSD-4 License)

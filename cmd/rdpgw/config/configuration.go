@@ -224,6 +224,10 @@ func Load(configFile string) Configuration {
 	if Conf.Server.BasicAuthEnabled() && Conf.Server.Tls == "disable" {
 		log.Fatalf("basicauth=local and tls=disable are mutually exclusive")
 	}
+        
+	if Conf.Server.NtlmEnabled() && Conf.Server.KerberosEnabled() {
+		log.Fatalf("ntlm and kerberos authentication are not stackable")
+        }
 
 	if !Conf.Caps.TokenAuth && Conf.Server.OpenIDEnabled() {
 		log.Fatalf("openid is configured but tokenauth disabled")
@@ -252,6 +256,10 @@ func (s *ServerConfig) KerberosEnabled() bool {
 
 func (s *ServerConfig) BasicAuthEnabled() bool {
 	return s.matchAuth("local") || s.matchAuth("basic")
+}
+
+func (s *ServerConfig) NtlmEnabled() bool {
+	return s.matchAuth("ntlm")
 }
 
 func (s *ServerConfig) matchAuth(needle string) bool {
