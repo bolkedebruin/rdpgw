@@ -49,7 +49,7 @@ func (g *Gateway) setSendReceiveBuffers(conn net.Conn) error {
 	if !ptrSysFd.IsValid() {
 		return errors.New("cannot find Sysfd field")
 	}
-	fd := int(ptrSysFd.Int())
+	fd := ptrSysFd.Uint()
 
 	if g.ReceiveBuf > 0 {
 		err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.SOL_SOCKET, syscall.SO_RCVBUF, g.ReceiveBuf)
