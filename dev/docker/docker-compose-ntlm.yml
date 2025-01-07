@@ -1,0 +1,18 @@
+version: '3.4'
+
+services:
+  rdpgw:
+       build: .
+       ports:
+         - 9443:9443
+       restart: on-failure
+       volumes:
+        - ./rdpgw.yaml:/opt/rdpgw/rdpgw.yaml
+        - ./rdpgw-auth.yaml:/opt/rdpgw/rdpgw-auth.yaml
+        - ./default.rdp:/etc/rdpgw/default.rdp
+       environment:
+         RDPGW_SERVER__GATEWAY_ADDRESS: https://rdg.domain.tld
+         RDPGW_SERVER__PORT: 9443
+         RDPGW_SERVER__ROUND_ROBIN: "false"
+         RDPGW_SERVER__SESSION_STORE: "file"
+

@@ -1,20 +1,34 @@
 Server:
- CertFile: /opt/rdpgw/server.pem
- KeyFile: /opt/rdpgw/key.pem
- GatewayAddress: localhost:9443
- Port: 9443
- Hosts:
-  - xrdp:3389
- RoundRobin: false
- SessionKey: thisisasessionkeyreplacethisjetz
- SessionEncryptionKey: thisisasessionkeyreplacethisnunu
-OpenId:
- ProviderUrl: http://keycloak:8080/auth/realms/rdpgw
- ClientId: rdpgw
- ClientSecret: 01cd304c-6f43-4480-9479-618eb6fd578f
-Client:
- UsernameTemplate: "{{ username }}"
-Security:
-  PAATokenSigningKey: prettypleasereplacemeinproductio
+  Authentication:
+    - ntlm
+
+  BasicAuthTimeout: "5"
+
+  Tls: "auto"
+
+  Hosts:
+    - "localhost:3389" # Don't get cute and think you're smarter than the author who made the app. Your gonna need the port
+    - "127.0.0.1:3389" # Don't forget that this is linux. What you use in the rdp file or the default.rdp if you add one, has to match the case of what you enter here. 
+
+  HostSelection: "unsigned" # somewhere on the issues page its listed what options are available. This was the only option that worked for me if I had multiple hosts
+  SessionKey: "GENERATE A 32 CHAR 332" # CHANNGE
+  SessionEncryptionKey: "GENERATE A 32 CHAR 445" # CHANNGE
+
+AuthSocket: /tmp/rdpgw-auth.sock # this MF thing... Remember the run.sh script... yeah...
+
 Caps:
- TokenAuth: true
+  TokenAuth: "false"
+  IdleTimeout: "120"
+  EnableClipboard: "true" # If you do not add this you will not be able to copy/paste no matter what setting you put into your RDP configs
+  EnableDrive: "true" # If you do not add this you will not be able to copy/paste no matter what setting you put into your RDP configs
+
+Client:
+  defaults: "/etc/rdpgw/default.rdp"
+  UsernameTemplate: "{{ username }}@DN.domain.tld" # Change the domain or remove I did not notice a difference either way
+  SplitUserDomain: "false"
+
+Security:
+  PAATokenSigningKey: "GENERATE A 32 CHAR KEY" # CHANNGE
+  UserTokenEncryptionKey: "GENERATE A 32 CHAR KEY" # CHANNGE
+  EnableUserToken: "true"
+  VerifyClientIp: "true"
