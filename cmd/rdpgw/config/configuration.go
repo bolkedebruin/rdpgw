@@ -200,11 +200,6 @@ func Load(configFile string) Configuration {
 			Conf.Security.UserTokenEncryptionKey, _ = security.GenerateRandomString(32)
 			log.Printf("No valid `security.usertokenencryptionkey` specified (empty or not 32 characters). Setting to random")
 		}
-
-		if len(Conf.Security.UserTokenSigningKey) != 32 {
-			Conf.Security.UserTokenSigningKey, _ = security.GenerateRandomString(32)
-			log.Printf("No valid `security.usertokensigningkey` specified (empty or not 32 characters). Setting to random")
-		}
 	}
 
 	if len(Conf.Server.SessionKey) != 32 {
