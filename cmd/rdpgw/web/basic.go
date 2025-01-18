@@ -12,10 +12,6 @@ import (
 	"time"
 )
 
-const (
-	protocolGrpc = "unix"
-)
-
 type BasicAuthHandler struct {
 	SocketAddress string
 	Timeout       int
