@@ -347,7 +347,7 @@ Security:
 
 ## How to build & install
 
-__NOTE__: a docker image is available on docker hub, which removes the need for building and installing go.
+__NOTE__: a [docker image](https://hub.docker.com/r/bolkedebruin/rdpgw/) is available on docker hub, which removes the need for building and installing go.
 
 Ensure that you have `make` (comes with standard build tools, like `build-essential` on Debian), `go` (version 1.19 or above), and development files for PAM (`libpam0g-dev` on Debian) installed.
 
