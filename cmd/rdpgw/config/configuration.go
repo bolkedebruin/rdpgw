@@ -221,6 +221,10 @@ func Load(configFile string) Configuration {
 		log.Fatalf("host selection is set to `signed` but `querytokensigningkey` is not set")
 	}
 
+	if Conf.Server.BasicAuthEnabled() && Conf.Server.Tls == "disable" {
+		log.Printf("Warning: Basic Auth transfers in plain text but TLS is disabled - rdp gw connections require tls, make sure to have a terminator")
+	}
+
 	if Conf.Server.NtlmEnabled() && Conf.Server.KerberosEnabled() {
 		log.Fatalf("ntlm and kerberos authentication are not stackable")
 	}
