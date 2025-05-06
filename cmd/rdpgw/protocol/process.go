@@ -6,12 +6,13 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/identity"
 	"io"
 	"log"
 	"net"
 	"strconv"
 	"time"
+
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/identity"
 )
 
 type Processor struct {
@@ -43,139 +44,146 @@ const tunnelId = 10
 
 func (p *Processor) Process(ctx context.Context) error {
 	for {
-		pt, sz, pkt, err := p.tunnel.Read()
+		//pt, sz, pkt, err := p.tunnel.Read()
+		messages, err := p.tunnel.Read()
 		if err != nil {
 			log.Printf("Cannot read message from stream %p", err)
 			return err
 		}
 
-		switch pt {
-		case PKT_TYPE_HANDSHAKE_REQUEST:
-			log.Printf("Client handshakeRequest from %s", p.tunnel.User.GetAttribute(identity.AttrClientIp))
-			if p.state != SERVER_STATE_INITIALIZED {
-				log.Printf("Handshake attempted while in wrong state %d != %d", p.state, SERVER_STATE_INITIALIZED)
-				msg := p.handshakeResponse(0x0, 0x0, 0, E_PROXY_INTERNALERROR)
-				p.tunnel.Write(msg)
-				return fmt.Errorf("%x: wrong state", E_PROXY_INTERNALERROR)
+		for _, message := range messages {
+			if message.err != nil {
+				log.Printf("Cannot read message from stream %p", err)
+				continue
 			}
-			major, minor, _, reqAuth := p.handshakeRequest(pkt)
-			caps, err := p.matchAuth(reqAuth)
-			if err != nil {
-				log.Println(err)
-				msg := p.handshakeResponse(0x0, 0x0, 0, E_PROXY_CAPABILITYMISMATCH)
-				p.tunnel.Write(msg)
-				return err
-			}
-			msg := p.handshakeResponse(major, minor, caps, ERROR_SUCCESS)
-			p.tunnel.Write(msg)
-			p.state = SERVER_STATE_HANDSHAKE
-		case PKT_TYPE_TUNNEL_CREATE:
-			log.Printf("Tunnel create")
-			if p.state != SERVER_STATE_HANDSHAKE {
-				log.Printf("Tunnel create attempted while in wrong state %d != %d",
-					p.state, SERVER_STATE_HANDSHAKE)
-				msg := p.tunnelResponse(E_PROXY_INTERNALERROR)
-				p.tunnel.Write(msg)
-				return fmt.Errorf("%x: PAA cookie rejected, wrong state", E_PROXY_INTERNALERROR)
-			}
-			_, cookie := p.tunnelRequest(pkt)
-			if p.gw.CheckPAACookie != nil {
-				if ok, _ := p.gw.CheckPAACookie(ctx, cookie); !ok {
-					log.Printf("Invalid PAA cookie received from client %s", p.tunnel.User.GetAttribute(identity.AttrClientIp))
-					msg := p.tunnelResponse(E_PROXY_COOKIE_AUTHENTICATION_ACCESS_DENIED)
+			switch message.packetType {
+			case PKT_TYPE_HANDSHAKE_REQUEST:
+				log.Printf("Client handshakeRequest from %s", p.tunnel.User.GetAttribute(identity.AttrClientIp))
+				if p.state != SERVER_STATE_INITIALIZED {
+					log.Printf("Handshake attempted while in wrong state %d != %d", p.state, SERVER_STATE_INITIALIZED)
+					msg := p.handshakeResponse(0x0, 0x0, 0, E_PROXY_INTERNALERROR)
 					p.tunnel.Write(msg)
-					return fmt.Errorf("%x: invalid PAA cookie", E_PROXY_COOKIE_AUTHENTICATION_ACCESS_DENIED)
+					return fmt.Errorf("%x: wrong state", E_PROXY_INTERNALERROR)
 				}
-			}
-			msg := p.tunnelResponse(ERROR_SUCCESS)
-			p.tunnel.Write(msg)
-			p.state = SERVER_STATE_TUNNEL_CREATE
-		case PKT_TYPE_TUNNEL_AUTH:
-			log.Printf("Tunnel auth")
-			if p.state != SERVER_STATE_TUNNEL_CREATE {
-				log.Printf("Tunnel auth attempted while in wrong state %d != %d",
-					p.state, SERVER_STATE_TUNNEL_CREATE)
-				msg := p.tunnelAuthResponse(E_PROXY_INTERNALERROR)
-				p.tunnel.Write(msg)
-				return fmt.Errorf("%x: Tunnel auth rejected, wrong state", E_PROXY_INTERNALERROR)
-			}
-			client := p.tunnelAuthRequest(pkt)
-			if p.gw.CheckClientName != nil {
-				if ok, _ := p.gw.CheckClientName(ctx, client); !ok {
-					log.Printf("Invalid client name: %s", client)
-					msg := p.tunnelAuthResponse(ERROR_ACCESS_DENIED)
+				major, minor, _, reqAuth := p.handshakeRequest(message.msg)
+				caps, err := p.matchAuth(reqAuth)
+				if err != nil {
+					log.Println(err)
+					msg := p.handshakeResponse(0x0, 0x0, 0, E_PROXY_CAPABILITYMISMATCH)
 					p.tunnel.Write(msg)
-					return fmt.Errorf("%x: Tunnel auth rejected, invalid client name", ERROR_ACCESS_DENIED)
+					return err
 				}
-			}
-			msg := p.tunnelAuthResponse(ERROR_SUCCESS)
-			p.tunnel.Write(msg)
-			p.state = SERVER_STATE_TUNNEL_AUTHORIZE
-		case PKT_TYPE_CHANNEL_CREATE:
-			log.Printf("Channel create")
-			if p.state != SERVER_STATE_TUNNEL_AUTHORIZE {
-				log.Printf("Channel create attempted while in wrong state %d != %d",
-					p.state, SERVER_STATE_TUNNEL_AUTHORIZE)
-				msg := p.channelResponse(E_PROXY_INTERNALERROR)
+				msg := p.handshakeResponse(major, minor, caps, ERROR_SUCCESS)
 				p.tunnel.Write(msg)
-				return fmt.Errorf("%x: Channel create rejected, wrong state", E_PROXY_INTERNALERROR)
-			}
-			server, port := p.channelRequest(pkt)
-			host := net.JoinHostPort(server, strconv.Itoa(int(port)))
-			if p.gw.CheckHost != nil {
-				log.Printf("Verifying %s host connection", host)
-				if ok, _ := p.gw.CheckHost(ctx, host); !ok {
-					log.Printf("Not allowed to connect to %s by policy handler", host)
-					msg := p.channelResponse(E_PROXY_RAP_ACCESSDENIED)
+				p.state = SERVER_STATE_HANDSHAKE
+			case PKT_TYPE_TUNNEL_CREATE:
+				log.Printf("Tunnel create")
+				if p.state != SERVER_STATE_HANDSHAKE {
+					log.Printf("Tunnel create attempted while in wrong state %d != %d",
+						p.state, SERVER_STATE_HANDSHAKE)
+					msg := p.tunnelResponse(E_PROXY_INTERNALERROR)
 					p.tunnel.Write(msg)
-					return fmt.Errorf("%x: denied by security policy", E_PROXY_RAP_ACCESSDENIED)
+					return fmt.Errorf("%x: PAA cookie rejected, wrong state", E_PROXY_INTERNALERROR)
 				}
-			}
-			log.Printf("Establishing connection to RDP server: %s", host)
-			p.tunnel.rwc, err = net.DialTimeout("tcp", host, time.Second*15)
-			if err != nil {
-				log.Printf("Error connecting to %s, %s", host, err)
-				msg := p.channelResponse(E_PROXY_INTERNALERROR)
+				_, cookie := p.tunnelRequest(message.msg)
+				if p.gw.CheckPAACookie != nil {
+					if ok, _ := p.gw.CheckPAACookie(ctx, cookie); !ok {
+						log.Printf("Invalid PAA cookie received from client %s", p.tunnel.User.GetAttribute(identity.AttrClientIp))
+						msg := p.tunnelResponse(E_PROXY_COOKIE_AUTHENTICATION_ACCESS_DENIED)
+						p.tunnel.Write(msg)
+						return fmt.Errorf("%x: invalid PAA cookie", E_PROXY_COOKIE_AUTHENTICATION_ACCESS_DENIED)
+					}
+				}
+				msg := p.tunnelResponse(ERROR_SUCCESS)
 				p.tunnel.Write(msg)
-				return err
-			}
-			p.tunnel.TargetServer = host
-			log.Printf("Connection established")
-			msg := p.channelResponse(ERROR_SUCCESS)
-			p.tunnel.Write(msg)
+				p.state = SERVER_STATE_TUNNEL_CREATE
+			case PKT_TYPE_TUNNEL_AUTH:
+				log.Printf("Tunnel auth")
+				if p.state != SERVER_STATE_TUNNEL_CREATE {
+					log.Printf("Tunnel auth attempted while in wrong state %d != %d",
+						p.state, SERVER_STATE_TUNNEL_CREATE)
+					msg := p.tunnelAuthResponse(E_PROXY_INTERNALERROR)
+					p.tunnel.Write(msg)
+					return fmt.Errorf("%x: Tunnel auth rejected, wrong state", E_PROXY_INTERNALERROR)
+				}
+				client := p.tunnelAuthRequest(message.msg)
+				if p.gw.CheckClientName != nil {
+					if ok, _ := p.gw.CheckClientName(ctx, client); !ok {
+						log.Printf("Invalid client name: %s", client)
+						msg := p.tunnelAuthResponse(ERROR_ACCESS_DENIED)
+						p.tunnel.Write(msg)
+						return fmt.Errorf("%x: Tunnel auth rejected, invalid client name", ERROR_ACCESS_DENIED)
+					}
+				}
+				msg := p.tunnelAuthResponse(ERROR_SUCCESS)
+				p.tunnel.Write(msg)
+				p.state = SERVER_STATE_TUNNEL_AUTHORIZE
+			case PKT_TYPE_CHANNEL_CREATE:
+				log.Printf("Channel create")
+				if p.state != SERVER_STATE_TUNNEL_AUTHORIZE {
+					log.Printf("Channel create attempted while in wrong state %d != %d",
+						p.state, SERVER_STATE_TUNNEL_AUTHORIZE)
+					msg := p.channelResponse(E_PROXY_INTERNALERROR)
+					p.tunnel.Write(msg)
+					return fmt.Errorf("%x: Channel create rejected, wrong state", E_PROXY_INTERNALERROR)
+				}
+				server, port := p.channelRequest(message.msg)
+				host := net.JoinHostPort(server, strconv.Itoa(int(port)))
+				if p.gw.CheckHost != nil {
+					log.Printf("Verifying %s host connection", host)
+					if ok, _ := p.gw.CheckHost(ctx, host); !ok {
+						log.Printf("Not allowed to connect to %s by policy handler", host)
+						msg := p.channelResponse(E_PROXY_RAP_ACCESSDENIED)
+						p.tunnel.Write(msg)
+						return fmt.Errorf("%x: denied by security policy", E_PROXY_RAP_ACCESSDENIED)
+					}
+				}
+				log.Printf("Establishing connection to RDP server: %s", host)
+				p.tunnel.rwc, err = net.DialTimeout("tcp", host, time.Second*15)
+				if err != nil {
+					log.Printf("Error connecting to %s, %s", host, err)
+					msg := p.channelResponse(E_PROXY_INTERNALERROR)
+					p.tunnel.Write(msg)
+					return err
+				}
+				p.tunnel.TargetServer = host
+				log.Printf("Connection established")
+				msg := p.channelResponse(ERROR_SUCCESS)
+				p.tunnel.Write(msg)
 
-			// Make sure to start the flow from the RDP server first otherwise connections
-			// might hang eventually
-			go forward(p.tunnel.rwc, p.tunnel)
-			p.state = SERVER_STATE_CHANNEL_CREATE
-		case PKT_TYPE_DATA:
-			if p.state < SERVER_STATE_CHANNEL_CREATE {
-				log.Printf("Data received while in wrong state %d != %d", p.state, SERVER_STATE_CHANNEL_CREATE)
-				return errors.New("wrong state")
-			}
-			p.state = SERVER_STATE_OPENED
-			receive(pkt, p.tunnel.rwc)
-		case PKT_TYPE_KEEPALIVE:
-			// keepalives can be received while the channel is not open yet
-			if p.state < SERVER_STATE_CHANNEL_CREATE {
-				log.Printf("Keepalive received while in wrong state %d != %d", p.state, SERVER_STATE_CHANNEL_CREATE)
-				return errors.New("wrong state")
-			}
+				// Make sure to start the flow from the RDP server first otherwise connections
+				// might hang eventually
+				go forward(p.tunnel.rwc, p.tunnel)
+				p.state = SERVER_STATE_CHANNEL_CREATE
+			case PKT_TYPE_DATA:
+				if p.state < SERVER_STATE_CHANNEL_CREATE {
+					log.Printf("Data received while in wrong state %d != %d", p.state, SERVER_STATE_CHANNEL_CREATE)
+					return errors.New("wrong state")
+				}
+				p.state = SERVER_STATE_OPENED
+				receive(message.msg, p.tunnel.rwc)
+			case PKT_TYPE_KEEPALIVE:
+				// keepalives can be received while the channel is not open yet
+				if p.state < SERVER_STATE_CHANNEL_CREATE {
+					log.Printf("Keepalive received while in wrong state %d != %d", p.state, SERVER_STATE_CHANNEL_CREATE)
+					return errors.New("wrong state")
+				}
 
-			// avoid concurrency issues
-			// p.transportIn.Write(createPacket(PKT_TYPE_KEEPALIVE, []byte{}))
-		case PKT_TYPE_CLOSE_CHANNEL:
-			log.Printf("Close channel")
-			if p.state != SERVER_STATE_OPENED {
-				log.Printf("Channel closed while in wrong state %d != %d", p.state, SERVER_STATE_OPENED)
-				return errors.New("wrong state")
+				// avoid concurrency issues
+				// p.transportIn.Write(createPacket(PKT_TYPE_KEEPALIVE, []byte{}))
+			case PKT_TYPE_CLOSE_CHANNEL:
+				log.Printf("Close channel")
+				if p.state != SERVER_STATE_OPENED {
+					log.Printf("Channel closed while in wrong state %d != %d", p.state, SERVER_STATE_OPENED)
+					return errors.New("wrong state")
+				}
+				msg := p.channelCloseResponse(ERROR_SUCCESS)
+				p.tunnel.Write(msg)
+				p.state = SERVER_STATE_CLOSED
+				return nil
+			default:
+				log.Printf("Unknown packet (size %d): %x", message.length, message.msg)
 			}
-			msg := p.channelCloseResponse(ERROR_SUCCESS)
-			p.tunnel.Write(msg)
-			p.state = SERVER_STATE_CLOSED
-			return nil
-		default:
-			log.Printf("Unknown packet (size %d): %x", sz, pkt)
 		}
 	}
 }

@@ -4,12 +4,18 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
-	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/transport"
+	"fmt"
 	"io"
 	"log"
 	"net"
 	"os"
 	"syscall"
+
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/transport"
+)
+
+const (
+	maxFragmentSize = 65536
 )
 
 type RedirectFlags struct {
@@ -22,44 +28,55 @@ type RedirectFlags struct {
 	EnableAll  bool
 }
 
-// readMessage parses and defragments a packet from a Transport. It returns
-// at most the bytes that have been reported by the packet
-func readMessage(in transport.Transport) (pt int, n int, msg []byte, err error) {
-	fragment := false
+func handleMsgFrame(packet *packetReader) *message {
+	pt, sz, msg, err := readHeader(packet.getPtr())
+	if err == nil {
+		packet.incrementPtr(int(sz))
+		return &message{packetType: int(pt), length: int(sz), msg: msg, err: nil}
+	}
+
+	buf := make([]byte, maxFragmentSize)
 	index := 0
-	buf := make([]byte, 4096)
-
 	for {
-		size, pkt, err := in.ReadPacket()
+		// keep parsing thfragment
+		if len(packet.getPtr()) > len(buf[index:]) {
+			return &message{packetType: int(pt), length: int(sz), msg: msg, err: fmt.Errorf("fragment exceeded max fragment size")}
+		}
+		index += copy(buf[index:], packet.getPtr())
+		// Get a new frame
+		err := packet.read()
 		if err != nil {
-			return 0, 0, []byte{0, 0}, err
+			// Failed to make a msg
+			return &message{packetType: int(pt), length: int(sz), msg: msg, err: err}
 		}
-
-		// check for fragments
-		var pt uint16
-		var sz uint32
-		var msg []byte
-
-		if !fragment {
-			pt, sz, msg, err = readHeader(pkt[:size])
-			if err != nil {
-				fragment = true
-				index = copy(buf, pkt[:size])
-				continue
-			}
-			index = 0
-		} else {
-			fragment = false
-			pt, sz, msg, err = readHeader(append(buf[:index], pkt[:size]...))
-			// header is corrupted even after defragmenting
-			if err != nil {
-				return 0, 0, []byte{0, 0}, err
-			}
-		}
-		if !fragment {
-			return int(pt), int(sz), msg, nil
+		pt, sz, msg, err = readHeader(append(buf[:index], packet.getPtr()...))
+		if err == nil {
+			// the increment is based upon how much of the data we have used
+			// in this packet. The index tells us how much is in the previous frame(s),
+			// So we remove that from the size of the message.
+			packet.incrementPtr(int(sz) - index)
+			return &message{packetType: int(pt), length: int(sz), msg: msg, err: nil}
 		}
 	}
+}
+
+// readMessage parses and defragments a packet from a Transport. It returns
+// at most the bytes that have been reported by the packet.
+func readMessage(in transport.Transport) ([]*message, error) {
+	messages := make([]*message, 0)
+
+	packet := newTransportPacket(in)
+	err := packet.read()
+	if err != nil {
+		return messages, err
+	}
+
+	var message *message
+	for packet.hasMoreData() {
+		message = handleMsgFrame(packet)
+		messages = append(messages, message)
+	}
+	return messages, nil
 }
 
 // createPacket wraps the data into the protocol packet

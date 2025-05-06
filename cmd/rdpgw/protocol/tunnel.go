@@ -1,10 +1,11 @@
 package protocol
 
 import (
-	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/identity"
-	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/transport"
 	"net"
 	"time"
+
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/identity"
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/transport"
 )
 
 const (
@@ -46,6 +47,13 @@ type Tunnel struct {
 	LastSeen time.Time
 }
 
+type message struct {
+	packetType int
+	length     int
+	msg        []byte
+	err        error
+}
+
 // Write puts the packet on the transport and updates the statistics for bytes sent
 func (t *Tunnel) Write(pkt []byte) {
 	n, _ := t.transportOut.WritePacket(pkt)
@@ -55,10 +63,14 @@ func (t *Tunnel) Write(pkt []byte) {
 // Read picks up a packet from the transport and returns the packet type
 // packet, with the header removed, and the packet size. It updates the
 // statistics for bytes received
-func (t *Tunnel) Read() (pt int, size int, pkt []byte, err error) {
-	pt, size, pkt, err = readMessage(t.transportIn)
-	t.BytesReceived += int64(size)
-	t.LastSeen = time.Now()
-
-	return pt, size, pkt, err
+func (t *Tunnel) Read() ([]*message, error) {
+	messages, err := readMessage(t.transportIn)
+	if err != nil {
+		return nil, err
+	}
+	for _, message := range messages {
+		t.BytesReceived += int64(message.length)
+		t.LastSeen = time.Now()
+	}
+	return messages, err
 }

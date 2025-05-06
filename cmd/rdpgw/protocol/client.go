@@ -30,52 +30,58 @@ func (c *ClientConfig) ConnectAndForward() error {
 	c.Session.transportOut.WritePacket(c.handshakeRequest())
 
 	for {
-		pt, sz, pkt, err := readMessage(c.Session.transportIn)
+		messages, err := readMessage(c.Session.transportIn)
 		if err != nil {
 			log.Printf("Cannot read message from stream %s", err)
 			return err
 		}
 
-		switch pt {
-		case PKT_TYPE_HANDSHAKE_RESPONSE:
-			caps, err := c.handshakeResponse(pkt)
-			if err != nil {
-				log.Printf("Cannot connect to %s due to %s", c.Server, err)
-				return err
+		for _, message := range messages {
+			if message.err != nil {
+				log.Printf("Cannot read message from stream %p", err)
+				continue
 			}
-			log.Printf("Handshake response received. Caps: %d", caps)
-			c.Session.transportOut.WritePacket(c.tunnelRequest())
-		case PKT_TYPE_TUNNEL_RESPONSE:
-			tid, caps, err := c.tunnelResponse(pkt)
-			if err != nil {
-				log.Printf("Cannot setup tunnel due to %s", err)
-				return err
+			switch message.packetType {
+			case PKT_TYPE_HANDSHAKE_RESPONSE:
+				caps, err := c.handshakeResponse(message.msg)
+				if err != nil {
+					log.Printf("Cannot connect to %s due to %s", c.Server, err)
+					return err
+				}
+				log.Printf("Handshake response received. Caps: %d", caps)
+				c.Session.transportOut.WritePacket(c.tunnelRequest())
+			case PKT_TYPE_TUNNEL_RESPONSE:
+				tid, caps, err := c.tunnelResponse(message.msg)
+				if err != nil {
+					log.Printf("Cannot setup tunnel due to %s", err)
+					return err
+				}
+				log.Printf("Tunnel creation succesful. Tunnel id: %d and caps %d", tid, caps)
+				c.Session.transportOut.WritePacket(c.tunnelAuthRequest())
+			case PKT_TYPE_TUNNEL_AUTH_RESPONSE:
+				flags, timeout, err := c.tunnelAuthResponse(message.msg)
+				if err != nil {
+					log.Printf("Cannot do tunnel auth due to %s", err)
+					return err
+				}
+				log.Printf("Tunnel auth succesful. Flags: %d and timeout %d", flags, timeout)
+				c.Session.transportOut.WritePacket(c.channelRequest())
+			case PKT_TYPE_CHANNEL_RESPONSE:
+				cid, err := c.channelResponse(message.msg)
+				if err != nil {
+					log.Printf("Cannot do tunnel auth due to %s", err)
+					return err
+				}
+				if cid < 1 {
+					log.Printf("Channel id (%d) is smaller than 1. This doesnt work for Windows clients", cid)
+				}
+				log.Printf("Channel creation succesful. Channel id: %d", cid)
+				//go forward(c.LocalConn, c.Session.transportOut)
+			case PKT_TYPE_DATA:
+				receive(message.msg, c.LocalConn)
+			default:
+				log.Printf("Unknown packet type received: %d size %d", message.packetType, message.length)
 			}
-			log.Printf("Tunnel creation succesful. Tunnel id: %d and caps %d", tid, caps)
-			c.Session.transportOut.WritePacket(c.tunnelAuthRequest())
-		case PKT_TYPE_TUNNEL_AUTH_RESPONSE:
-			flags, timeout, err := c.tunnelAuthResponse(pkt)
-			if err != nil {
-				log.Printf("Cannot do tunnel auth due to %s", err)
-				return err
-			}
-			log.Printf("Tunnel auth succesful. Flags: %d and timeout %d", flags, timeout)
-			c.Session.transportOut.WritePacket(c.channelRequest())
-		case PKT_TYPE_CHANNEL_RESPONSE:
-			cid, err := c.channelResponse(pkt)
-			if err != nil {
-				log.Printf("Cannot do tunnel auth due to %s", err)
-				return err
-			}
-			if cid < 1 {
-				log.Printf("Channel id (%d) is smaller than 1. This doesnt work for Windows clients", cid)
-			}
-			log.Printf("Channel creation succesful. Channel id: %d", cid)
-			//go forward(c.LocalConn, c.Session.transportOut)
-		case PKT_TYPE_DATA:
-			receive(pkt, c.LocalConn)
-		default:
-			log.Printf("Unknown packet type received: %d size %d", pt, sz)
 		}
 	}
 }
