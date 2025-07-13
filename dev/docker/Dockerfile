@@ -30,7 +30,7 @@ RUN git clone https://github.com/bolkedebruin/rdpgw.git /app && \
 
 FROM alpine:latest
 
-RUN apk --no-cache add linux-pam musl
+RUN apk --no-cache add linux-pam musl tzdata
 
 # make tempdir in case filestore is used
 ADD tmp.tar /
