@@ -1,10 +1,9 @@
 module github.com/bolkedebruin/rdpgw
 
-go 1.23.0
-
-toolchain go1.24.1
+go 1.24.2
 
 require (
+	github.com/andrewheberle/rdpsign v1.0.0
 	github.com/bolkedebruin/gokrb5/v8 v8.5.0
 	github.com/coreos/go-oidc/v3 v3.9.0
 	github.com/fatih/structs v1.1.0

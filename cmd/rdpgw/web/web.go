@@ -1,13 +1,12 @@
 package web
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/identity"
-	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/rdp"
 	"hash/maphash"
 	"log"
 	rnd "math/rand"
@@ -15,6 +14,10 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/andrewheberle/rdpsign"
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/identity"
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/rdp"
 )
 
 type TokenGeneratorFunc func(context.Context, string, string) (string, error)
@@ -32,6 +35,8 @@ type Config struct {
 	GatewayAddress     *url.URL
 	RdpOpts            RdpOpts
 	TemplateFile       string
+	RdpSigningCert     string
+	RdpSigningKey      string
 }
 
 type RdpOpts struct {
@@ -51,6 +56,7 @@ type Handler struct {
 	hostSelection      string
 	rdpOpts            RdpOpts
 	rdpDefaults        string
+	rdpSigner          *rdpsign.Signer
 }
 
 func (c *Config) NewHandler() *Handler {
@@ -58,7 +64,7 @@ func (c *Config) NewHandler() *Handler {
 		log.Fatal("Not enough hosts to connect to specified")
 	}
 
-	return &Handler{
+	handler := &Handler{
 		paaTokenGenerator:  c.PAATokenGenerator,
 		enableUserToken:    c.EnableUserToken,
 		userTokenGenerator: c.UserTokenGenerator,
@@ -70,6 +76,18 @@ func (c *Config) NewHandler() *Handler {
 		rdpOpts:            c.RdpOpts,
 		rdpDefaults:        c.TemplateFile,
 	}
+
+	// set up RDP signer if config values are set
+	if c.RdpSigningCert != "" && c.RdpSigningKey != "" {
+		signer, err := rdpsign.NewSigner(c.RdpSigningCert, c.RdpSigningKey)
+		if err != nil {
+			log.Fatal("Could not set up RDP signer", err)
+		}
+
+		handler.rdpSigner = signer
+	}
+
+	return handler
 }
 
 func (h *Handler) selectRandomHost() string {
@@ -223,6 +241,22 @@ func (h *Handler) HandleDownload(w http.ResponseWriter, r *http.Request) {
 	d.Settings.GatewayAccessToken = token
 	d.Settings.GatewayCredentialMethod = 1
 	d.Settings.GatewayUsageMethod = 1
+
+	if h.rdpSigner != nil {
+		// get rdp content
+		rdpContent := d.String()
+
+		signedContent, err := h.rdpSigner.SignRdp(rdpContent)
+		if err != nil {
+			log.Printf("Could not sign RDP file due to %s", err)
+			http.Error(w, errors.New("could not sign RDP file").Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// return signd rdp file
+		http.ServeContent(w, r, fn, time.Now(), bytes.NewReader(signedContent))
+		return
+	}
 
 	http.ServeContent(w, r, fn, time.Now(), strings.NewReader(d.String()))
 }
