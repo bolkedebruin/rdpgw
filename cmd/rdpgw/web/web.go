@@ -242,21 +242,23 @@ func (h *Handler) HandleDownload(w http.ResponseWriter, r *http.Request) {
 	d.Settings.GatewayCredentialMethod = 1
 	d.Settings.GatewayUsageMethod = 1
 
-	if h.rdpSigner != nil {
-		// get rdp content
-		rdpContent := d.String()
-
-		signedContent, err := h.rdpSigner.SignRdp(rdpContent)
-		if err != nil {
-			log.Printf("Could not sign RDP file due to %s", err)
-			http.Error(w, errors.New("could not sign RDP file").Error(), http.StatusInternalServerError)
-			return
-		}
-
-		// return signd rdp file
-		http.ServeContent(w, r, fn, time.Now(), bytes.NewReader(signedContent))
+	// no rdp siging so return as-is
+	if h.rdpSigner == nil {
+		http.ServeContent(w, r, fn, time.Now(), strings.NewReader(d.String()))
 		return
 	}
 
-	http.ServeContent(w, r, fn, time.Now(), strings.NewReader(d.String()))
+	// get rdp content
+	rdpContent := d.String()
+
+	// sign rdp content
+	signedContent, err := h.rdpSigner.SignRdp(rdpContent)
+	if err != nil {
+		log.Printf("Could not sign RDP file due to %s", err)
+		http.Error(w, errors.New("could not sign RDP file").Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// return signd rdp file
+	http.ServeContent(w, r, fn, time.Now(), bytes.NewReader(signedContent))
 }
