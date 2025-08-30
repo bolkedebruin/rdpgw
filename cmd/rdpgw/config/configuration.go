@@ -17,9 +17,6 @@ const (
 	TlsDisable = "disable"
 	TlsAuto    = "auto"
 
-	HostSelectionSigned     = "signed"
-	HostSelectionRoundRobin = "roundrobin"
-
 	SessionStoreCookie = "cookie"
 	SessionStoreFile   = "file"
 
