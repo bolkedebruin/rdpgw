@@ -1,3 +1,5 @@
+//go:build !windows
+
 package protocol
 
 // the fd arg to syscall.SetsockoptInt on Linix is of type int
