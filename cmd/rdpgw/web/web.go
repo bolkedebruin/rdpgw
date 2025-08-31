@@ -79,7 +79,7 @@ func (c *Config) NewHandler() *Handler {
 
 	// set up RDP signer if config values are set
 	if c.RdpSigningCert != "" && c.RdpSigningKey != "" {
-		signer, err := rdpsign.NewSigner(c.RdpSigningCert, c.RdpSigningKey)
+		signer, err := rdpsign.New(c.RdpSigningCert, c.RdpSigningKey)
 		if err != nil {
 			log.Fatal("Could not set up RDP signer", err)
 		}
@@ -178,7 +178,7 @@ func (h *Handler) HandleDownload(w http.ResponseWriter, r *http.Request) {
 
 	render := user
 	if opts.UsernameTemplate != "" {
-		render = fmt.Sprintf(h.rdpOpts.UsernameTemplate)
+		render = fmt.Sprint(h.rdpOpts.UsernameTemplate)
 		render = strings.Replace(render, "{{ username }}", user, 1)
 		if h.rdpOpts.UsernameTemplate == render {
 			log.Printf("Invalid username template. %s == %s", h.rdpOpts.UsernameTemplate, user)
@@ -252,7 +252,7 @@ func (h *Handler) HandleDownload(w http.ResponseWriter, r *http.Request) {
 	rdpContent := d.String()
 
 	// sign rdp content
-	signedContent, err := h.rdpSigner.SignRdp(rdpContent)
+	signedContent, err := h.rdpSigner.Sign(rdpContent)
 	if err != nil {
 		log.Printf("Could not sign RDP file due to %s", err)
 		http.Error(w, errors.New("could not sign RDP file").Error(), http.StatusInternalServerError)

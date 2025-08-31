@@ -2,15 +2,25 @@ package web
 
 import (
 	"context"
-	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/identity"
-	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/rdp"
-	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/security"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/andrewheberle/rdpsign"
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/identity"
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/rdp"
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/security"
+	"github.com/spf13/afero"
 )
 
 const (
@@ -172,6 +182,89 @@ func TestHandler_HandleDownload(t *testing.T) {
 
 }
 
+func TestHandler_HandleSignedDownload(t *testing.T) {
+	req, err := http.NewRequest("GET", "/connect", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rr := httptest.NewRecorder()
+	id := identity.NewUser()
+
+	id.SetUserName(testuser)
+	id.SetAuthenticated(true)
+
+	req = identity.AddToRequestCtx(id, req)
+	ctx := req.Context()
+
+	u, _ := url.Parse(gateway)
+	c := Config{
+		HostSelection:     "roundrobin",
+		Hosts:             hosts,
+		PAATokenGenerator: paaTokenMock,
+		GatewayAddress:    u,
+		RdpOpts:           RdpOpts{SplitUserDomain: true},
+	}
+	h := c.NewHandler()
+
+	// set up rdp signer
+	fs := afero.NewMemMapFs()
+	if err := genKeypair(fs); err != nil {
+		t.Errorf("could not generate key pair for testing: %s", err)
+	}
+	signer, err := rdpsign.New("test.crt", "test.key", rdpsign.WithFs(fs))
+	if err != nil {
+		t.Errorf("could not create *rdpsign.Signer for testing: %s", err)
+	}
+	h.rdpSigner = signer
+
+	hh := http.HandlerFunc(h.HandleDownload)
+	hh.ServeHTTP(rr, req)
+
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("handler returned wrong status code: got %v want %v",
+			status, http.StatusOK)
+	}
+
+	if ctype := rr.Header().Get("Content-Type"); ctype != "application/x-rdp" {
+		t.Errorf("content type header does not match: got %v want %v",
+			ctype, "application/json")
+	}
+
+	if cdisp := rr.Header().Get("Content-Disposition"); cdisp == "" {
+		t.Errorf("content disposition is nil")
+	}
+
+	data := rdpToMap(strings.Split(rr.Body.String(), rdp.CRLF))
+	if data["username"] != testuser {
+		t.Errorf("username key in rdp does not match: got %v want %v", data["username"], testuser)
+	}
+
+	if data["gatewayhostname"] != u.Host {
+		t.Errorf("gatewayhostname key in rdp does not match: got %v want %v", data["gatewayhostname"], u.Host)
+	}
+
+	if token, _ := paaTokenMock(ctx, testuser, data["full address"]); token != data["gatewayaccesstoken"] {
+		t.Errorf("gatewayaccesstoken key in rdp does not match username_full address: got %v want %v",
+			data["gatewayaccesstoken"], token)
+	}
+
+	if !contains(data["full address"], hosts) {
+		t.Errorf("full address key in rdp is not in allowed hosts list: go %v want in %v",
+			data["full address"], hosts)
+	}
+
+	signscopeWant := "GatewayHostname,Full Address,GatewayCredentialsSource,GatewayProfileUsageMethod,GatewayUsageMethod,Alternate Full Address"
+	if data["signscope"] != signscopeWant {
+		t.Errorf("signscope key in rdp does not match: got %v want %v", data["signscope"], signscopeWant)
+	}
+
+	if _, found := data["signature"]; !found {
+		t.Errorf("no signature found in rdp")
+	}
+
+}
+
 func TestHandler_HandleDownloadWithRdpTemplate(t *testing.T) {
 	f, err := os.CreateTemp("", "rdp")
 	if err != nil {
@@ -232,4 +325,69 @@ func rdpToMap(rdp []string) map[string]string {
 	}
 
 	return ret
+}
+
+func genKeypair(fs afero.Fs) error {
+	// generate private key
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return err
+	}
+
+	// convert to DER
+	der, err := x509.MarshalPKCS8PrivateKey(privateKey)
+	if err != nil {
+		return err
+	}
+
+	// encode DER private key as PEM
+	if err := func() error {
+		f, err := fs.Create("test.key")
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+
+		return pem.Encode(f, &pem.Block{
+			Type:  "PRIVATE KEY",
+			Bytes: der,
+		})
+	}(); err != nil {
+		return err
+	}
+
+	template := x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject: pkix.Name{
+			Organization: []string{"Example Organization"},
+		},
+		NotBefore:             time.Now(),
+		NotAfter:              time.Now().Add(time.Minute * 10),
+		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+	}
+
+	certBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &privateKey.PublicKey, privateKey)
+	if err != nil {
+		return err
+	}
+
+	// encode cert as PEM
+	if err := func() error {
+		f, err := fs.Create("test.crt")
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+
+		return pem.Encode(f, &pem.Block{
+			Type:  "CERTIFICATE",
+			Bytes: certBytes,
+		})
+	}(); err != nil {
+		return err
+	}
+
+	return nil
 }

@@ -4,12 +4,13 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"net/http"
+	"time"
+
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/identity"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/patrickmn/go-cache"
 	"golang.org/x/oauth2"
-	"net/http"
-	"time"
 )
 
 const (
@@ -91,7 +92,7 @@ func (h *OIDC) HandleCallback(w http.ResponseWriter, r *http.Request) {
 	id.SetAuthTime(time.Now())
 	id.SetAttribute(identity.AttrAccessToken, oauth2Token.AccessToken)
 
-	if err = SaveSessionIdentity(r, w, id); err != nil {
+	if err := SaveSessionIdentity(r, w, id); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 

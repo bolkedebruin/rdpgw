@@ -3,17 +3,18 @@ package protocol
 import (
 	"context"
 	"errors"
-	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/identity"
-	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/transport"
-	"github.com/google/uuid"
-	"github.com/gorilla/websocket"
-	"github.com/patrickmn/go-cache"
 	"log"
 	"net"
 	"net/http"
 	"reflect"
 	"syscall"
 	"time"
+
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/identity"
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/transport"
+	"github.com/google/uuid"
+	"github.com/gorilla/websocket"
+	"github.com/patrickmn/go-cache"
 )
 
 const (
@@ -140,7 +141,7 @@ func (g *Gateway) setSendReceiveBuffers(conn net.Conn) error {
 	if !ptrSysFd.IsValid() {
 		return errors.New("cannot find Sysfd field")
 	}
-	fd := int(ptrSysFd.Int())
+	fd := int64ToFd(ptrSysFd.Int())
 
 	if g.ReceiveBuf > 0 {
 		err := syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_RCVBUF, g.ReceiveBuf)
