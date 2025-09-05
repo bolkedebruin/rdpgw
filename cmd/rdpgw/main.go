@@ -4,6 +4,12 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"log"
+	"net/http"
+	"net/url"
+	"os"
+	"strconv"
+
 	"github.com/bolkedebruin/gokrb5/v8/keytab"
 	"github.com/bolkedebruin/gokrb5/v8/service"
 	"github.com/bolkedebruin/gokrb5/v8/spnego"
@@ -18,11 +24,6 @@ import (
 	"github.com/thought-machine/go-flags"
 	"golang.org/x/crypto/acme/autocert"
 	"golang.org/x/oauth2"
-	"log"
-	"net/http"
-	"net/url"
-	"os"
-	"strconv"
 )
 
 const (
@@ -110,10 +111,12 @@ func main() {
 		RdpOpts: web.RdpOpts{
 			UsernameTemplate: conf.Client.UsernameTemplate,
 			SplitUserDomain:  conf.Client.SplitUserDomain,
-			NoUsername: conf.Client.NoUsername,
+			NoUsername:       conf.Client.NoUsername,
 		},
 		GatewayAddress: url,
 		TemplateFile:   conf.Client.Defaults,
+		RdpSigningCert: conf.Client.SigningCert,
+		RdpSigningKey:  conf.Client.SigningKey,
 	}
 
 	if conf.Caps.TokenAuth {
@@ -229,7 +232,7 @@ func main() {
 	// for stacking of authentication
 	auth := web.NewAuthMux()
 	rdp.MatcherFunc(web.NoAuthz).HandlerFunc(auth.SetAuthenticate)
-        
+
 	// ntlm
 	if conf.Server.NtlmEnabled() {
 		log.Printf("enabling NTLM authentication")
@@ -238,7 +241,7 @@ func main() {
 		rdp.NewRoute().HeadersRegexp("Authorization", "Negotiate").HandlerFunc(ntlm.NTLMAuth(gw.HandleGatewayProtocol))
 		auth.Register(`NTLM`)
 		auth.Register(`Negotiate`)
-        }
+	}
 
 	// basic auth
 	if conf.Server.BasicAuthEnabled() {

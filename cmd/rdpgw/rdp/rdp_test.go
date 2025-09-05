@@ -25,9 +25,8 @@ func TestRdpBuilder(t *testing.T) {
 	}
 	if !strings.Contains(s, "smart sizing:i:1"+CRLF) {
 		t.Fatalf("%s does not contain smart sizing:i:1", s)
-
 	}
-	log.Print(builder.String())
+	log.Printf("%s", builder.String())
 }
 
 func TestInitStruct(t *testing.T) {

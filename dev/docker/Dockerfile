@@ -1,5 +1,5 @@
 # builder stage
-FROM golang:1.22-alpine as builder
+FROM golang:1.24-alpine as builder
 
 #RUN apt-get update && apt-get install -y libpam-dev
 RUN apk --no-cache add git gcc musl-dev linux-pam-dev openssl
