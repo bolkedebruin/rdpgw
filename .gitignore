@@ -1,3 +1,86 @@
+# Go build artifacts
 go.sum
-bin
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.html
+
+# Go workspace file
+go.work
+
+# Editor files
 *.swp
+*.swo
+*~
+.vscode/
+*.code-workspace
+
+# IDE files - IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# IDE files - Eclipse
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+.metadata
+
+# IDE files - NetBeans
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# Log files
+*.log
+logs/
+
+# Configuration files (may contain secrets)
+config.yaml
+config.yml
+*.env
+.env
+.env.local
+.env.*.local
+
+# SSL/TLS certificates and keys
+*.pem
+*.key
+*.crt
+*.csr
+*.p12
+*.pfx
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Backup files
+*.bak
+*.backup
