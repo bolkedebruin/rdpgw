@@ -239,8 +239,9 @@ func main() {
 		ntlm := web.NTLMAuthHandler{SocketAddress: conf.Server.AuthSocket, Timeout: conf.Server.BasicAuthTimeout}
 		rdp.NewRoute().HeadersRegexp("Authorization", "NTLM").HandlerFunc(ntlm.NTLMAuth(gw.HandleGatewayProtocol))
 		rdp.NewRoute().HeadersRegexp("Authorization", "Negotiate").HandlerFunc(ntlm.NTLMAuth(gw.HandleGatewayProtocol))
-		auth.Register(`NTLM`)
-		auth.Register(`Negotiate`)
+		auth.Register([]string{`NTLM`, `Negotiate`}, func(r *http.Request) bool {
+			return r.Header.Get("Sec-WebSocket-Protocol") != "binary" // rdp client for ios is incompatible with this NTLM method.
+		})
 	}
 
 	// basic auth
@@ -248,7 +249,7 @@ func main() {
 		log.Printf("enabling basic authentication")
 		q := web.BasicAuthHandler{SocketAddress: conf.Server.AuthSocket, Timeout: conf.Server.BasicAuthTimeout}
 		rdp.NewRoute().HeadersRegexp("Authorization", "Basic").HandlerFunc(q.BasicAuth(gw.HandleGatewayProtocol))
-		auth.Register(`Basic realm="restricted", charset="UTF-8"`)
+		auth.Register([]string{`Basic realm="restricted", charset="UTF-8"`}, nil)
 	}
 
 	// spnego / kerberos
@@ -266,7 +267,7 @@ func main() {
 		// kdcproxy
 		k := kdcproxy.InitKdcProxy(conf.Kerberos.Krb5Conf)
 		r.HandleFunc(kdcProxyEndPoint, k.Handler).Methods("POST")
-		auth.Register("Negotiate")
+		auth.Register([]string{"Negotiate"}, nil)
 	}
 
 	// setup server
