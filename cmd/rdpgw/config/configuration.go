@@ -1,15 +1,16 @@
 package config
 
 import (
+	"log"
+	"os"
+	"strings"
+
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/security"
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/confmap"
 	"github.com/knadh/koanf/providers/env"
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
-	"log"
-	"os"
-	"strings"
 )
 
 const (
@@ -96,6 +97,8 @@ type ClientConfig struct {
 	UsernameTemplate string `koanf:"usernametemplate"`
 	SplitUserDomain  bool   `koanf:"splituserdomain"`
 	NoUsername       bool   `koanf:"nousername"`
+	SigningCert      string `koanf:"signingcert"`
+	SigningKey       string `koanf:"signingkey"`
 }
 
 func ToCamel(s string) string {
@@ -219,10 +222,10 @@ func Load(configFile string) Configuration {
 	if Conf.Server.BasicAuthEnabled() && Conf.Server.Tls == "disable" {
 		log.Fatalf("basicauth=local and tls=disable are mutually exclusive")
 	}
-        
+
 	if Conf.Server.NtlmEnabled() && Conf.Server.KerberosEnabled() {
 		log.Fatalf("ntlm and kerberos authentication are not stackable")
-        }
+	}
 
 	if !Conf.Caps.TokenAuth && Conf.Server.OpenIDEnabled() {
 		log.Fatalf("openid is configured but tokenauth disabled")
@@ -238,7 +241,6 @@ func Load(configFile string) Configuration {
 	}
 
 	return Conf
-
 }
 
 func (s *ServerConfig) OpenIDEnabled() bool {

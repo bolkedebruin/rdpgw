@@ -1,10 +1,9 @@
 module github.com/bolkedebruin/rdpgw
 
-go 1.23.0
-
-toolchain go1.24.1
+go 1.24.2
 
 require (
+	github.com/andrewheberle/rdpsign v1.1.0
 	github.com/bolkedebruin/gokrb5/v8 v8.5.0
 	github.com/coreos/go-oidc/v3 v3.9.0
 	github.com/fatih/structs v1.1.0
@@ -25,6 +24,7 @@ require (
 	github.com/msteinert/pam/v2 v2.0.0
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/prometheus/client_golang v1.19.0
+	github.com/spf13/afero v1.14.0
 	github.com/stretchr/testify v1.10.0
 	github.com/thought-machine/go-flags v1.6.3
 	golang.org/x/crypto v0.36.0

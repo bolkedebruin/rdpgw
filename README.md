@@ -328,6 +328,12 @@ Client:
   SplitUserDomain: false
   # If true, removes "username" (and "domain" if SplitUserDomain is true) from RDP file.
   # NoUsername: true
+  # If both SigningCert and SigningKey are set the downloaded RDP file will be signed
+  # so the client can authenticate the validity of the RDP file and reduce warnings from
+  # the client if the CA that issued the certificate is trusted. Both should be PEM encoded
+  # and the key must be an unencrypted RSA private key.
+  # SigningCert: /path/to/signing.crt
+  # SigningKey: /path/to/signing.key
 Security:
   # a random string of 32 characters to secure cookies on the client
   # make sure to share this amongst different pods
