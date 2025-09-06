@@ -6,9 +6,9 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"time"
 	"reflect"
 	"syscall"
-	"time"
 
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/identity"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/transport"
