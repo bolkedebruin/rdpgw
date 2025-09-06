@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/andrewheberle/rdpsign"
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/hostselection"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/identity"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/rdp"
 )
@@ -79,7 +80,7 @@ func (c *Config) NewHandler() *Handler {
 
 	// set up RDP signer if config values are set
 	if c.RdpSigningCert != "" && c.RdpSigningKey != "" {
-		signer, err := rdpsign.NewSigner(c.RdpSigningCert, c.RdpSigningKey)
+		signer, err := rdpsign.New(c.RdpSigningCert, c.RdpSigningKey)
 		if err != nil {
 			log.Fatal("Could not set up RDP signer", err)
 		}
