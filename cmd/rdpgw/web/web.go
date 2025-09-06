@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/andrewheberle/rdpsign"
-	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/hostselection"
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/config/hostselection"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/identity"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/rdp"
 )

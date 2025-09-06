@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/config/hostselection"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/security"
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/confmap"
@@ -143,7 +144,7 @@ func Load(configFile string) Configuration {
 		"Server.Tls":                 "auto",
 		"Server.Port":                443,
 		"Server.SessionStore":        "cookie",
-		"Server.HostSelection":       "roundrobin",
+		"Server.HostSelection":       hostselection.RoundRobin,
 		"Server.Authentication":      "openid",
 		"Server.AuthSocket":          "/tmp/rdpgw-auth.sock",
 		"Server.BasicAuthTimeout":    5,
@@ -212,7 +213,7 @@ func Load(configFile string) Configuration {
 		log.Printf("No valid `server.sessionencryptionkey` specified (empty or not 32 characters). Setting to random")
 	}
 
-	if Conf.Server.HostSelection == "signed" && len(Conf.Security.QueryTokenSigningKey) == 0 {
+	if (Conf.Server.HostSelection == hostselection.Signed || Conf.Server.HostSelection == hostselection.AnySigned) && len(Conf.Security.QueryTokenSigningKey) == 0 {
 		log.Fatalf("host selection is set to `signed` but `querytokensigningkey` is not set")
 	}
 

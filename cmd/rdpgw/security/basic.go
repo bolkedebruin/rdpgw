@@ -7,7 +7,7 @@ import (
 	"log"
 	"strings"
 
-	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/hostselection"
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/config/hostselection"
 )
 
 var (
