@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/andrewheberle/rdpsign"
-	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/hostselection"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/identity"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/rdp"
 )
@@ -187,7 +186,7 @@ func (h *Handler) HandleDownload(w http.ResponseWriter, r *http.Request) {
 
 	render := user
 	if opts.UsernameTemplate != "" {
-		render = fmt.Sprintf(h.rdpOpts.UsernameTemplate)
+		render = fmt.Sprint(h.rdpOpts.UsernameTemplate)
 		render = strings.Replace(render, "{{ username }}", user, 1)
 		if h.rdpOpts.UsernameTemplate == render {
 			log.Printf("Invalid username template. %s == %s", h.rdpOpts.UsernameTemplate, user)
@@ -251,7 +250,7 @@ func (h *Handler) HandleDownload(w http.ResponseWriter, r *http.Request) {
 	d.Settings.GatewayCredentialMethod = 1
 	d.Settings.GatewayUsageMethod = 1
 
-	// no rdp siging
+	// no rdp siging so return as-is
 	if h.rdpSigner == nil {
 		http.ServeContent(w, r, fn, time.Now(), strings.NewReader(d.String()))
 		return
@@ -260,7 +259,8 @@ func (h *Handler) HandleDownload(w http.ResponseWriter, r *http.Request) {
 	// get rdp content
 	rdpContent := d.String()
 
-	signedContent, err := h.rdpSigner.SignRdp(rdpContent)
+	// sign rdp content
+	signedContent, err := h.rdpSigner.Sign(rdpContent)
 	if err != nil {
 		log.Printf("Could not sign RDP file due to %s", err)
 		http.Error(w, errors.New("could not sign RDP file").Error(), http.StatusInternalServerError)

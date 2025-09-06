@@ -49,7 +49,7 @@ type RdpSettings struct {
 	EnableRdsAasAuth                      bool   `rdp:"enablerdsaadauth" default:"false"`
 	DisableConnectionSharing              bool   `rdp:"disableconnectionsharing" default:"false"`
 	AlternateShell                        string `rdp:"alternate shell"`
-	AutoReconnectionEnabled               bool   `rdp:"autoreconnectionenabled" default:"true"`
+	AutoReconnectionEnabled               bool   `rdp:"autoreconnection enabled" default:"true"`
 	BandwidthAutodetect                   bool   `rdp:"bandwidthautodetect" default:"true"`
 	NetworkAutodetect                     bool   `rdp:"networkautodetect" default:"true"`
 	Compression                           bool   `rdp:"compression" default:"true"`

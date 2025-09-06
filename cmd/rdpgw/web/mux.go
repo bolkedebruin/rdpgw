@@ -5,21 +5,35 @@ import (
 	"net/http"
 )
 
+type AuthHeader struct {
+	header    string
+	condition func(*http.Request) bool
+}
+
 type AuthMux struct {
-	headers []string
+	headers []AuthHeader
 }
 
 func NewAuthMux() *AuthMux {
 	return &AuthMux{}
 }
 
-func (a *AuthMux) Register(s string) {
-	a.headers = append(a.headers, s)
+// Register adds authentication methods with optional condition function
+func (a *AuthMux) Register(headers []string, condition func(*http.Request) bool) {
+	for _, header := range headers {
+		a.headers = append(a.headers, AuthHeader{
+			header:    header,
+			condition: condition,
+		})
+	}
 }
 
 func (a *AuthMux) SetAuthenticate(w http.ResponseWriter, r *http.Request) {
-	for _, s := range a.headers {
-		w.Header().Add("WWW-Authenticate", s)
+	for _, authHeader := range a.headers {
+		// If condition is nil or condition returns true, add the header
+		if authHeader.condition == nil || authHeader.condition(r) {
+			w.Header().Add("WWW-Authenticate", authHeader.header)
+		}
 	}
 	http.Error(w, "Unauthorized", http.StatusUnauthorized)
 }
