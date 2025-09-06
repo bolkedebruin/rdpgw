@@ -118,6 +118,23 @@ func TestGetHost(t *testing.T) {
 	if host != hosts[0] {
 		t.Fatalf("%s does not equal %s", host, hosts[0])
 	}
+
+	// check anysigned (uses same issuer and querytoken as previous test)
+	c.HostSelection = hostselection.AnySigned
+	// should work with no hosts
+	c.Hosts = make([]string, 0)
+	c.QueryInfo = security.QueryInfo
+	security.QuerySigningKey = key
+	vals.Set("host", queryToken)
+	u.RawQuery = vals.Encode()
+	h = c.NewHandler()
+	host, err = h.getHost(ctx, u)
+	if err != nil {
+		t.Fatalf("Not accepted host %s is in hosts list (err: %s)", hosts[0], err)
+	}
+	if host != hosts[0] {
+		t.Fatalf("%s does not equal %s", host, hosts[0])
+	}
 }
 
 func TestHandler_HandleDownload(t *testing.T) {
