@@ -224,7 +224,25 @@ func main() {
 		r.HandleFunc("/callback", o.HandleCallback)
 
 		// only enable un-auth endpoint for openid only config
-		if !conf.Server.KerberosEnabled() && !conf.Server.BasicAuthEnabled() && !conf.Server.NtlmEnabled() {
+		if !conf.Server.KerberosEnabled() && !conf.Server.BasicAuthEnabled() && !conf.Server.NtlmEnabled() && !conf.Server.HeaderEnabled() {
+			rdp.Name("gw").HandlerFunc(gw.HandleGatewayProtocol)
+		}
+	}
+
+	// header auth (configurable proxy)
+	if conf.Server.HeaderEnabled() {
+		log.Printf("enabling header authentication with user header: %s", conf.Header.UserHeader)
+		headerConfig := &web.HeaderConfig{
+			UserHeader:        conf.Header.UserHeader,
+			UserIdHeader:      conf.Header.UserIdHeader,
+			EmailHeader:       conf.Header.EmailHeader,
+			DisplayNameHeader: conf.Header.DisplayNameHeader,
+		}
+		headerAuth := headerConfig.New()
+		r.Handle("/connect", headerAuth.Authenticated(http.HandlerFunc(h.HandleDownload)))
+
+		// only enable un-auth endpoint for header only config
+		if !conf.Server.KerberosEnabled() && !conf.Server.BasicAuthEnabled() && !conf.Server.NtlmEnabled() && !conf.Server.OpenIDEnabled() {
 			rdp.Name("gw").HandlerFunc(gw.HandleGatewayProtocol)
 		}
 	}

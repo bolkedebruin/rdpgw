@@ -28,7 +28,8 @@ to connect.
 
 The gateway has several security phases. In the authentication phase the client's credentials are
 verified. Depending the authentication mechanism used, the client's credentials are verified against
-an OpenID Connect provider, Kerberos, a local PAM service or a local database.
+an OpenID Connect provider, Kerberos, a local PAM service, a local database, or extracted from HTTP headers
+provided by upstream proxy services.
 
 If OpenID Connect is used the user will
 need to connect to a webpage provided by the gateway to authenticate, which in turn will redirect
@@ -61,7 +62,7 @@ settings.
 ## Authentication
 
 RDPGW wants to be secure when you set it up from the start. It supports several authentication
-mechanisms such as OpenID Connect, Kerberos, PAM or NTLM.
+mechanisms such as OpenID Connect, Kerberos, PAM, NTLM, and header-based authentication for proxy integration.
 
 Technically, cookies are encrypted and signed on the client side relying
 on [Gorilla Sessions](https://www.gorillatoolkit.org/pkg/sessions). PAA tokens (gateway access tokens)
@@ -78,142 +79,28 @@ if you want.
 It is technically possible to mix authentication mechanisms. Currently, you can mix local with Kerberos or NTLM. If you enable 
 OpenID Connect it is not possible to mix it with local or Kerberos at the moment.
 
-### Open ID Connect
-![OpenID Connect](docs/images/flow-openid.svg)
+### OpenID Connect
 
-To use OpenID Connect make sure you have properly configured your OpenID Connect provider, and you have a client id
-and secret. The client id and secret are used to authenticate the gateway to the OpenID Connect provider. The provider
-will then authenticate the user and provide the gateway with a token. The gateway will then use this token to generate
-a PAA token that is used to connect to the RDP host.
-
-To enable OpenID Connect make sure to set the following variables in the configuration file.
-
-```yaml
-Server:
-  Authentication: 
-    - openid
-OpenId:
-    ProviderUrl: http://<provider_url>
-    ClientId: <your client id>
-    ClientSecret: <your-secret>
-Caps:
-  TokenAuth: true
-```
-
-As you can see in the flow diagram when using OpenID Connect the user will use a browser to connect to the gateway first at
-https://your-gateway/connect. If authentication is successful the browser will download a RDP file with temporary credentials
-that allow the user to connect to the gateway by using a remote desktop client.
+For detailed OpenID Connect setup with providers like Keycloak, Azure AD, Google, and others, see the [OpenID Connect Authentication Documentation](docs/openid-authentication.md).
 
 ### Kerberos
-![Kerberos](docs/images/flow-kerberos.svg)
 
-__NOTE__: Kerberos is heavily reliant on DNS (forward and reverse). Make sure that your DNS is properly configured. 
-Next to that, its errors  are not always very descriptive. It is beyond the scope of this project to provide a full 
-Kerberos tutorial.
-
-To use Kerberos make sure you have a keytab and krb5.conf file. The keytab is used to authenticate the gateway to the KDC
-and the krb5.conf file is used to configure the KDC. The keytab needs to contain a valid principal for the gateway. 
-
-Use `ktutil` or a similar tool provided by your Kerberos server to create a keytab file for the newly created service principal.
-Place this keytab file in a secure location on the server and make sure that the file is only readable by the user that runs
-the gateway.
-
-```plaintext
-ktutil
-addent -password -p HTTP/rdpgw.example.com@YOUR.REALM -k 1 -e aes256-cts-hmac-sha1-96
-wkt rdpgw.keytab
-```
-
-Then set the following in the configuration file.
-
-```yaml
-Server:
-  Authentication:
-    - kerberos
-Kerberos:
-    Keytab: /etc/keytabs/rdpgw.keytab
-    Krb5conf: /etc/krb5.conf
-Caps:
-  TokenAuth: false
-```
-
-The client can then connect directly to the gateway without the need for a RDP file.
+For detailed Kerberos setup including keytab generation, DNS requirements, and KDC proxy configuration, see the [Kerberos Authentication Documentation](docs/kerberos-authentication.md).
 
 
-### PAM / Local (Basic Auth)
-![PAM](docs/images/flow-pam.svg)
+### PAM/Local Authentication
 
-The gateway can also support authentication against PAM. Sometimes this is referred to as local or passwd authentication,
-but it also supports LDAP authentication or even Active Directory if you have the correct modules installed. Typically 
-(for passwd), PAM requires that it is accessed as root. Therefore, the gateway comes with a small helper program called 
-`rdpgw-auth` that is used to authenticate the user. This program needs to be run as root or setuid.
+For detailed PAM setup including LDAP integration, container deployment, and compatible clients, see the [PAM Authentication Documentation](docs/pam-authentication.md).
 
-__NOTE__: The default windows client ``mstsc`` does not support basic auth. You will need to use a different client or
-switch to OpenID Connect, Kerberos or NTLM authentication.
+### NTLM Authentication
 
-__NOTE__: Using PAM for passwd (i.e. LDAP is fine) within a container is not recommended. It is better to use OpenID 
-Connect or Kerberos. If you do want to use it within a container you can choose to run the helper program outside the 
-container and have the socket available within. Alternatively, you can mount all what is needed into the container but 
-PAM is quite sensitive to the environment.
+For detailed NTLM setup including user management, security considerations, and deployment options, see the [NTLM Authentication Documentation](docs/ntlm-authentication.md).
 
-Ensure you have a PAM service file for the gateway, `/etc/pam.d/rdpgw`. For authentication against local accounts on the
-host located in `/etc/passwd` and `/etc/shadow` you can use the following.
+### Header Authentication (Proxy Integration)
 
-```plaintext
-auth required pam_unix.so
-account required pam_unix.so
-```
+RDPGW supports header-based authentication for integration with reverse proxy services (Azure App Proxy, Google IAP, AWS ALB, etc.) that handle authentication upstream and pass user identity via HTTP headers.
 
-Then set the following in the configuration file.
-
-```yaml
-Server:
-  Authentication:
-    - local
-AuthSocket: /tmp/rdpgw-auth.sock
-Caps:
-  TokenAuth: false
-```
-
-Make sure to run both the gateway and `rdpgw-auth`. The gateway will connect to the socket to authenticate the user.
-
-```bash
-# ./rdpgw-auth -n rdpgw -s /tmp/rdpgw-auth.sock
-```
-
-The client can then connect to the gateway directly by using a remote desktop client.
-
-### NTLM
-
-The gateway can also support NTLM authentication. 
-Currently, only the configuration file is supported as a database for credential lookup. 
-In the future, support for real databases (e.g. sqlite) may be added.
-
-NTLM authentication has the advantage that it is easy to setup, especially in case the gateway is used for a limited number of users.
-Unlike PAM / local, NTLM authentication supports the default windows client ``mstsc``.
-
-__WARNING__: The password is currently saved in plain text. So, you should keep the config file as secure as possible and avoid 
-reusing the same password for other applications. The password is stored in plain text to support the NTLM authentication protocol.
-
-To enable NTLM authentication make sure to set the following variables in the configuration file.
-
-Configuration file for `rdpgw`: 
-```yaml
-Server:
-  Authentication:
-    - ntlm
-Caps:
-  TokenAuth: false
-```
-
-Configuration file for `rdpgw-auth`:
-````yaml
-Users:
- - {Username: "my_username", Password: "my_secure_password"} # Modify this password!
-````
-
-The client can then connect to the gateway directly by using a remote desktop client using the gateway credentials 
-configured in the YAML configuration file.
+For detailed configuration and examples, see the [Header Authentication Documentation](docs/header-authentication.md).
 
 ## TLS
 
