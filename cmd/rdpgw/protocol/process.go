@@ -12,8 +12,16 @@ import (
 	"strconv"
 	"time"
 
+	"golang.org/x/net/proxy"
+	"github.com/wrouesnel/go.connect-proxy-scheme"
+
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/identity"
 )
+
+func init() {
+	proxy.RegisterDialerType("http", connect_proxy_scheme.ConnectProxy)
+	proxy.RegisterDialerType("https", connect_proxy_scheme.ConnectProxy)
+}
 
 type Processor struct {
 	// gw is the gateway instance on which the connection arrived
@@ -139,7 +147,9 @@ func (p *Processor) Process(ctx context.Context) error {
 					}
 				}
 				log.Printf("Establishing connection to RDP server: %s", host)
-				p.tunnel.rwc, err = net.DialTimeout("tcp", host, time.Second*15)
+				ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
+				defer cancel()
+				p.tunnel.rwc, err = proxy.Dial(ctx, "tcp", host)
 				if err != nil {
 					log.Printf("Error connecting to %s, %s", host, err)
 					msg := p.channelResponse(E_PROXY_INTERNALERROR)
