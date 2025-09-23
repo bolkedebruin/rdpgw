@@ -1,13 +1,12 @@
 # builder stage
 FROM golang:1.24-alpine as builder
-
-#RUN apt-get update && apt-get install -y libpam-dev
-RUN apk --no-cache add git gcc musl-dev linux-pam-dev openssl
+# Install CA certificates explicitly in builder
+RUN apk --no-cache add git gcc musl-dev linux-pam-dev openssl ca-certificates
 
 # add user
 RUN adduser --disabled-password --gecos "" --home /opt/rdpgw --uid 1001 rdpgw
 
-# certificate
+# certificate generation (your existing code)
 RUN mkdir -p /opt/rdpgw && cd /opt/rdpgw && \
     random=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1) && \
     openssl genrsa -des3 -passout pass:$random -out server.pass.key 2048 && \
@@ -17,7 +16,7 @@ RUN mkdir -p /opt/rdpgw && cd /opt/rdpgw && \
     -subj "/C=US/ST=VA/L=SomeCity/O=MyCompany/OU=MyDivision/CN=rdpgw" && \
     openssl x509 -req -days 365 -in server.csr -signkey key.pem -out server.pem
 
-# build rdpgw and set rights
+# build rdpgw and set rights (your existing code)
 ARG CACHEBUST
 RUN git clone https://github.com/bolkedebruin/rdpgw.git /app && \
     cd /app && \
@@ -29,21 +28,18 @@ RUN git clone https://github.com/bolkedebruin/rdpgw.git /app && \
     chmod u+s /opt/rdpgw/rdpgw-auth
 
 FROM alpine:latest
-
-RUN apk --no-cache add linux-pam musl tzdata
+# Install CA certificates in final stage
+RUN apk --no-cache add linux-pam musl tzdata ca-certificates
 
 # make tempdir in case filestore is used
 ADD tmp.tar /
-
 COPY --chown=0 rdpgw-pam /etc/pam.d/rdpgw
 
 USER 1001
 COPY --chown=1001 run.sh run.sh
 COPY --chown=1001 --from=builder /opt/rdpgw /opt/rdpgw
 COPY --chown=1001 --from=builder /etc/passwd /etc/passwd
-COPY --chown=1001 --from=builder /etc/ssl/certs /etc/ssl/certs
 
 USER 0
-
 WORKDIR /opt/rdpgw
 ENTRYPOINT ["/bin/sh", "/run.sh"]
