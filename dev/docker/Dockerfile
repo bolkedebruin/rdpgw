@@ -41,6 +41,9 @@ COPY --chown=1001 run.sh run.sh
 COPY --chown=1001 --from=builder /opt/rdpgw /opt/rdpgw
 COPY --chown=1001 --from=builder /etc/passwd /etc/passwd
 
+# Copy templates directory
+COPY --from=builder /app/cmd/rdpgw/templates ./templates
+
 # Copy assets directory from the app source
 COPY --chown=1001 --from=builder /app/assets /opt/rdpgw/assets
 
