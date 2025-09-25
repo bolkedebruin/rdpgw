@@ -1,0 +1,22 @@
+{
+  "branding": {
+    "title": "RDP Gateway",
+    "logo": "RDP Gateway",
+    "page_title": "Select a Server to Connect"
+  },
+  "messages": {
+    "select_server": "Select a server to connect",
+    "preparing": "Preparing your connection..."
+  },
+  "ui": {
+    "progress_animation_duration_ms": 2000,
+    "auto_select_default": true,
+    "show_user_avatar": true
+  },
+  "theme": {
+    "primary_color": "#667eea",
+    "secondary_color": "#764ba2",
+    "success_color": "#38b2ac",
+    "error_color": "#c53030"
+  }
+}
