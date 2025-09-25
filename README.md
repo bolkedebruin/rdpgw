@@ -310,6 +310,15 @@ otherwise the client will not connect at all (it won't send any packages to the 
 
 Finally, ``mstsc`` requires a valid certificate on the gateway.
 
+Additionally, ``mstsc`` is more restrictive about SSL cipher suites compared to other RDP clients. When using a reverse proxy like nginx for TLS termination, you may need to configure specific cipher suites that ``mstsc`` supports. A working configuration for nginx ``ssl_ciphers`` is:
+```
+ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256
+```
+
+``mstsc`` also requires server names rather than IP addresses for connections, despite Microsoft's documentation suggesting otherwise. When configuring hosts in the rdpgw configuration, ensure you use hostnames.
+
+Furthermore, the ``mstsc`` client sends the hostname including the port number when establishing connections. To ensure proper host verification, configure your hosts in the rdpgw configuration file with the port numbers included (e.g., ``myserver:3389`` even for the default RDP port 3389).
+
 The Microsoft Remote Desktop Client from the Microsoft Store does not have these issues,
 but it requires that the username and password used for authentication are the same for
 both the gateway and the RDP host.
