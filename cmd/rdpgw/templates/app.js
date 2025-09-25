@@ -19,6 +19,16 @@ function getUserInitials(name) {
     return name.split(' ').map(word => word.charAt(0)).slice(0, 2).join('').toUpperCase() || 'U';
 }
 
+// Check if response indicates authentication failure and redirect to login if needed
+function handleAuthenticationError(response) {
+    if (response.status === 401 || response.status === 403) {
+        // Authentication failed - redirect to main page to trigger login
+        window.location.href = '/';
+        return true;
+    }
+    return false;
+}
+
 // Load user information
 async function loadUserInfo() {
     try {
@@ -27,6 +37,9 @@ async function loadUserInfo() {
             userInfo = await response.json();
             document.getElementById('username').textContent = userInfo.username;
             document.getElementById('userAvatar').textContent = getUserInitials(userInfo.username);
+        } else if (handleAuthenticationError(response)) {
+            // Authentication error handled, no need to show error message
+            return;
         } else {
             throw new Error('Failed to load user info');
         }
@@ -42,6 +55,9 @@ async function loadServers() {
         if (response.ok) {
             const servers = await response.json();
             renderServers(servers);
+        } else if (handleAuthenticationError(response)) {
+            // Authentication error handled, no need to show error message
+            return;
         } else {
             throw new Error('Failed to load servers');
         }
@@ -142,6 +158,21 @@ function generateFilename() {
 
 // Download RDP file
 async function downloadRDPFile(url) {
+    // First check if the download URL is accessible to detect authentication errors
+    try {
+        const checkResponse = await fetch(url, { method: 'HEAD' });
+        if (handleAuthenticationError(checkResponse)) {
+            return; // Will redirect to login
+        }
+        if (!checkResponse.ok) {
+            throw new Error(`Download failed: ${checkResponse.status}`);
+        }
+    } catch (error) {
+        // If HEAD request fails, still try the download - might be a CORS issue
+        console.warn('HEAD request failed, proceeding with download:', error);
+    }
+
+    // Proceed with download
     const link = document.createElement('a');
     link.href = url;
     link.download = generateFilename();
