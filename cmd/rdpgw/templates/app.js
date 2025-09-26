@@ -20,12 +20,21 @@ function getUserInitials(name) {
 }
 
 // Check if response indicates authentication failure and redirect to login if needed
-function handleAuthenticationError(response) {
-    if (response.status === 401 || response.status === 403) {
-        // Authentication failed - redirect to main page to trigger login
+async function handleAuthenticationError(response) {
+    // Check if we got HTML instead of JSON (indicates OIDC redirect to login)
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('text/html')) {
+        // Session expired - redirect to root to trigger OIDC authentication flow
         window.location.href = '/';
         return true;
     }
+
+    // Also check for explicit auth errors
+    if (response.status === 401 || response.status === 403) {
+        window.location.href = '/';
+        return true;
+    }
+
     return false;
 }
 
@@ -37,7 +46,7 @@ async function loadUserInfo() {
             userInfo = await response.json();
             document.getElementById('username').textContent = userInfo.username;
             document.getElementById('userAvatar').textContent = getUserInitials(userInfo.username);
-        } else if (handleAuthenticationError(response)) {
+        } else if (await handleAuthenticationError(response)) {
             // Authentication error handled, no need to show error message
             return;
         } else {
@@ -55,7 +64,7 @@ async function loadServers() {
         if (response.ok) {
             const servers = await response.json();
             renderServers(servers);
-        } else if (handleAuthenticationError(response)) {
+        } else if (await handleAuthenticationError(response)) {
             // Authentication error handled, no need to show error message
             return;
         } else {
@@ -161,7 +170,7 @@ async function downloadRDPFile(url) {
     // First check if the download URL is accessible to detect authentication errors
     try {
         const checkResponse = await fetch(url, { method: 'HEAD' });
-        if (handleAuthenticationError(checkResponse)) {
+        if (await handleAuthenticationError(checkResponse)) {
             return; // Will redirect to login
         }
         if (!checkResponse.ok) {
