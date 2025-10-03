@@ -213,6 +213,9 @@ func main() {
 	// for sso callbacks
 	r.HandleFunc("/tokeninfo", web.TokenInfo)
 
+	// API routes
+	api := r.PathPrefix("/api/v1").Subrouter()
+
 	// gateway endpoint
 	rdp := r.PathPrefix(gatewayEndPoint).Subrouter()
 
@@ -223,8 +226,50 @@ func main() {
 		r.Handle("/connect", o.Authenticated(http.HandlerFunc(h.HandleDownload)))
 		r.HandleFunc("/callback", o.HandleCallback)
 
+		// Web interface and API routes (authenticated)
+		r.Handle("/", o.Authenticated(http.HandlerFunc(h.HandleWebInterface)))
+		api.Handle("/hosts", o.Authenticated(http.HandlerFunc(h.HandleHostList)))
+		api.Handle("/user", o.Authenticated(http.HandlerFunc(h.HandleUserInfo)))
+
+		// Static files (no authentication required)
+		r.HandleFunc("/static/style.css", h.ServeStaticFile("style.css"))
+		r.HandleFunc("/static/app.js", h.ServeStaticFile("app.js"))
+		// Asset files (no authentication required)
+		r.HandleFunc("/assets/connect.svg", h.ServeAssetFile("connect.svg"))
+		r.HandleFunc("/assets/icon.svg", h.ServeAssetFile("icon.svg"))
+
 		// only enable un-auth endpoint for openid only config
-		if !conf.Server.KerberosEnabled() && !conf.Server.BasicAuthEnabled() && !conf.Server.NtlmEnabled() {
+		if !conf.Server.KerberosEnabled() && !conf.Server.BasicAuthEnabled() && !conf.Server.NtlmEnabled() && !conf.Server.HeaderEnabled() {
+			rdp.Name("gw").HandlerFunc(gw.HandleGatewayProtocol)
+		}
+	}
+
+	// header auth (configurable proxy)
+	if conf.Server.HeaderEnabled() {
+		log.Printf("enabling header authentication with user header: %s", conf.Header.UserHeader)
+		headerConfig := &web.HeaderConfig{
+			UserHeader:        conf.Header.UserHeader,
+			UserIdHeader:      conf.Header.UserIdHeader,
+			EmailHeader:       conf.Header.EmailHeader,
+			DisplayNameHeader: conf.Header.DisplayNameHeader,
+		}
+		headerAuth := headerConfig.New()
+		r.Handle("/connect", headerAuth.Authenticated(http.HandlerFunc(h.HandleDownload)))
+
+		// Web interface and API routes (authenticated)
+		r.Handle("/", headerAuth.Authenticated(http.HandlerFunc(h.HandleWebInterface)))
+		api.Handle("/hosts", headerAuth.Authenticated(http.HandlerFunc(h.HandleHostList)))
+		api.Handle("/user", headerAuth.Authenticated(http.HandlerFunc(h.HandleUserInfo)))
+
+		// Static files (no authentication required)
+		r.HandleFunc("/static/style.css", h.ServeStaticFile("style.css"))
+		r.HandleFunc("/static/app.js", h.ServeStaticFile("app.js"))
+		// Asset files (no authentication required)
+		r.HandleFunc("/assets/connect.svg", h.ServeAssetFile("connect.svg"))
+		r.HandleFunc("/assets/icon.svg", h.ServeAssetFile("icon.svg"))
+
+		// only enable un-auth endpoint for header only config
+		if !conf.Server.KerberosEnabled() && !conf.Server.BasicAuthEnabled() && !conf.Server.NtlmEnabled() && !conf.Server.OpenIDEnabled() {
 			rdp.Name("gw").HandlerFunc(gw.HandleGatewayProtocol)
 		}
 	}
