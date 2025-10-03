@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/andrewheberle/rdpsign"
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/config/hostselection"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/identity"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/rdp"
 )
@@ -92,8 +93,8 @@ type Handler struct {
 }
 
 func (c *Config) NewHandler() *Handler {
-	if len(c.Hosts) < 1 {
-		log.Fatal("Not enough hosts to connect to specified")
+	if len(c.Hosts) < 1 && (c.HostSelection != hostselection.Any && c.HostSelection != hostselection.AnySigned) {
+		log.Fatalf("Not enough hosts to connect to specified for %s host selection algorithm", c.HostSelection)
 	}
 
 	handler := &Handler{
@@ -353,9 +354,16 @@ func (h *Handler) selectRandomHost() string {
 
 func (h *Handler) getHost(ctx context.Context, u *url.URL) (string, error) {
 	switch h.hostSelection {
-	case "roundrobin":
+	case hostselection.RoundRobin:
 		return h.selectRandomHost(), nil
-	case "signed":
+	case hostselection.AnySigned:
+		hosts, ok := u.Query()["host"]
+		if !ok {
+			return "", errors.New("invalid query parameter")
+		}
+
+		return h.queryInfo(ctx, hosts[0], h.queryTokenIssuer)
+	case hostselection.Signed:
 		hosts, ok := u.Query()["host"]
 		if !ok {
 			return "", errors.New("invalid query parameter")
@@ -364,6 +372,7 @@ func (h *Handler) getHost(ctx context.Context, u *url.URL) (string, error) {
 		if err != nil {
 			return "", err
 		}
+
 		found := false
 		for _, check := range h.hosts {
 			if check == host {
@@ -376,7 +385,7 @@ func (h *Handler) getHost(ctx context.Context, u *url.URL) (string, error) {
 			return "", errors.New("invalid host specified in query token")
 		}
 		return host, nil
-	case "unsigned":
+	case hostselection.Unsigned:
 		hosts, ok := u.Query()["host"]
 		if !ok {
 			return "", errors.New("invalid query parameter")
@@ -389,7 +398,7 @@ func (h *Handler) getHost(ctx context.Context, u *url.URL) (string, error) {
 		// not found
 		log.Printf("Invalid host %s specified in client request", hosts[0])
 		return "", errors.New("invalid host specified in query parameter")
-	case "any":
+	case hostselection.Any:
 		hosts, ok := u.Query()["host"]
 		if !ok {
 			return "", errors.New("invalid query parameter")

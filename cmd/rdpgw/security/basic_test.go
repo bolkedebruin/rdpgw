@@ -2,9 +2,11 @@ package security
 
 import (
 	"context"
+	"testing"
+
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/config/hostselection"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/identity"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/protocol"
-	"testing"
 )
 
 var (
@@ -26,18 +28,18 @@ func TestCheckHost(t *testing.T) {
 	Hosts = hosts
 
 	// check any
-	HostSelection = "any"
+	HostSelection = hostselection.Any
 	host := "try.my.server:3389"
 	if ok, err := CheckHost(ctx, host); !ok || err != nil {
 		t.Fatalf("%s should be allowed with host selection %s (err: %s)", host, HostSelection, err)
 	}
 
-	HostSelection = "signed"
+	HostSelection = hostselection.Signed
 	if ok, err := CheckHost(ctx, host); ok || err == nil {
 		t.Fatalf("signed host selection isnt supported at the moment")
 	}
 
-	HostSelection = "roundrobin"
+	HostSelection = hostselection.RoundRobin
 	if ok, err := CheckHost(ctx, host); ok {
 		t.Fatalf("%s should NOT be allowed with host selection %s (err: %s)", host, HostSelection, err)
 	}

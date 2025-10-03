@@ -167,6 +167,7 @@ Server:
  #  - signed, a listed host specified in the signed query parameter
  #  - unsigned, a listed host specified in the query parameter
  #  - any, insecurely allow any host specified in the query parameter
+ #  - anysigned, allow any host specified in the signed query parameter
  HostSelection: roundrobin 
  # a random strings of at least 32 characters to secure cookies on the client
  # make sure to share this across the different pods

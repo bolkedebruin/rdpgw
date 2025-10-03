@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/andrewheberle/rdpsign"
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/config/hostselection"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/identity"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/rdp"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/security"
@@ -45,7 +46,7 @@ func contains(needle string, haystack []string) bool {
 func TestGetHost(t *testing.T) {
 	ctx := context.Background()
 	c := Config{
-		HostSelection: "roundrobin",
+		HostSelection: hostselection.RoundRobin,
 		Hosts:         hosts,
 	}
 	h := c.NewHandler()
@@ -64,7 +65,7 @@ func TestGetHost(t *testing.T) {
 	}
 
 	// check unsigned
-	c.HostSelection = "unsigned"
+	c.HostSelection = hostselection.Unsigned
 	vals.Set("host", "in.valid.host")
 	u.RawQuery = vals.Encode()
 	h = c.NewHandler()
@@ -85,7 +86,7 @@ func TestGetHost(t *testing.T) {
 	}
 
 	// check any
-	c.HostSelection = "any"
+	c.HostSelection = hostselection.Any
 	test := "bla.bla.com"
 	vals.Set("host", test)
 	u.RawQuery = vals.Encode()
@@ -99,7 +100,7 @@ func TestGetHost(t *testing.T) {
 	}
 
 	// check signed
-	c.HostSelection = "signed"
+	c.HostSelection = hostselection.Signed
 	c.QueryInfo = security.QueryInfo
 	issuer := "rdpgwtest"
 	security.QuerySigningKey = key
@@ -107,6 +108,23 @@ func TestGetHost(t *testing.T) {
 	if err != nil {
 		t.Fatalf("cannot generate token")
 	}
+	vals.Set("host", queryToken)
+	u.RawQuery = vals.Encode()
+	h = c.NewHandler()
+	host, err = h.getHost(ctx, u)
+	if err != nil {
+		t.Fatalf("Not accepted host %s is in hosts list (err: %s)", hosts[0], err)
+	}
+	if host != hosts[0] {
+		t.Fatalf("%s does not equal %s", host, hosts[0])
+	}
+
+	// check anysigned (uses same issuer and querytoken as previous test)
+	c.HostSelection = hostselection.AnySigned
+	// should work with no hosts
+	c.Hosts = make([]string, 0)
+	c.QueryInfo = security.QueryInfo
+	security.QuerySigningKey = key
 	vals.Set("host", queryToken)
 	u.RawQuery = vals.Encode()
 	h = c.NewHandler()
@@ -136,7 +154,7 @@ func TestHandler_HandleDownload(t *testing.T) {
 
 	u, _ := url.Parse(gateway)
 	c := Config{
-		HostSelection:     "roundrobin",
+		HostSelection:     hostselection.RoundRobin,
 		Hosts:             hosts,
 		PAATokenGenerator: paaTokenMock,
 		GatewayAddress:    u,
@@ -199,7 +217,7 @@ func TestHandler_HandleSignedDownload(t *testing.T) {
 
 	u, _ := url.Parse(gateway)
 	c := Config{
-		HostSelection:     "roundrobin",
+		HostSelection:     hostselection.RoundRobin,
 		Hosts:             hosts,
 		PAATokenGenerator: paaTokenMock,
 		GatewayAddress:    u,
@@ -292,7 +310,7 @@ func TestHandler_HandleDownloadWithRdpTemplate(t *testing.T) {
 
 	u, _ := url.Parse(gateway)
 	c := Config{
-		HostSelection:     "roundrobin",
+		HostSelection:     hostselection.RoundRobin,
 		Hosts:             hosts,
 		PAATokenGenerator: paaTokenMock,
 		GatewayAddress:    u,

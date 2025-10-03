@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"strings"
+
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/config/hostselection"
 )
 
 var (
@@ -15,12 +17,12 @@ var (
 
 func CheckHost(ctx context.Context, host string) (bool, error) {
 	switch HostSelection {
-	case "any":
+	case hostselection.Any, hostselection.AnySigned:
 		return true, nil
-	case "signed":
+	case hostselection.Signed:
 		// todo get from context?
 		return false, errors.New("cannot verify host in 'signed' mode as token data is missing")
-	case "roundrobin", "unsigned":
+	case hostselection.RoundRobin, hostselection.Unsigned:
 		s := getTunnel(ctx)
 		if s.User.UserName() == "" {
 			return false, errors.New("no valid session info or username found in context")
