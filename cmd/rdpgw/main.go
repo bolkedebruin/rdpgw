@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -326,7 +327,7 @@ func main() {
 
 	// setup server
 	server := http.Server{
-		Addr:         ":" + strconv.Itoa(conf.Server.Port),
+		Addr:         net.JoinHostPort(conf.Server.BindAddress, strconv.Itoa(conf.Server.Port)),
 		Handler:      r,
 		TLSConfig:    cfg,
 		TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler)), // disable http2

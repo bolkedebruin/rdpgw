@@ -3,6 +3,10 @@ Server:
  KeyFile: /opt/rdpgw/key.pem
  GatewayAddress: localhost:9443
  Port: 9443
+ # BindAddress: ""           # Binds to all interfaces (default)
+ # BindAddress: "127.0.0.1"  # Localhost only (IPv4)
+ # BindAddress: "::1"        # Localhost only (IPv6)
+ # BindAddress: "192.168.1.10"  # Specific IP
  Hosts:
   - xrdp:3389
  RoundRobin: false
