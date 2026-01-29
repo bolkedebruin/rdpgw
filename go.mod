@@ -1,6 +1,7 @@
 module github.com/bolkedebruin/rdpgw
 
-go 1.22
+go 1.23.0
+
 toolchain go1.24.1
 
 require (
@@ -24,6 +25,7 @@ require (
 	github.com/msteinert/pam/v2 v2.0.0
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/prometheus/client_golang v1.19.0
+	github.com/spf13/afero v1.15.0
 	github.com/stretchr/testify v1.10.0
 	github.com/thought-machine/go-flags v1.6.3
 	golang.org/x/crypto v0.36.0
@@ -54,7 +56,7 @@ require (
 	github.com/prometheus/procfs v0.13.0 // indirect
 	golang.org/x/net v0.38.0 // indirect
 	golang.org/x/sys v0.31.0 // indirect
-	golang.org/x/text v0.23.0 // indirect
+	golang.org/x/text v0.28.0 // indirect
 	google.golang.org/appengine v1.6.8 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240314234333-6e1732d8331c // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
