@@ -78,24 +78,23 @@ func (g *Gateway) HandleGatewayProtocol(w http.ResponseWriter, r *http.Request) 
 	ctx = context.WithValue(ctx, CtxTunnel, t)
 
 	if r.Method == MethodRDGOUT {
-		if r.Header.Get("Connection") != "upgrade" && r.Header.Get("Upgrade") != "websocket" {
-			g.handleLegacyProtocol(w, r.WithContext(ctx), t)
-			return
-		}
-		r.Method = "GET" // force
-		conn, err := upgrader.Upgrade(w, r, nil)
-		if err != nil {
-			log.Printf("Cannot upgrade falling back to old protocol: %t", err)
-			return
-		}
-		defer conn.Close()
+		if r.Header.Get("Connection") == "upgrade" && r.Header.Get("Upgrade") == "websocket" {
+			r.Method = "GET" // force
 
-		err = g.setSendReceiveBuffers(conn.UnderlyingConn())
-		if err != nil {
-			log.Printf("Cannot set send/receive buffers: %t", err)
+			conn, err := upgrader.Upgrade(w, r, nil)
+			if err == nil {
+				defer conn.Close()
+				
+				err = g.setSendReceiveBuffers(conn.UnderlyingConn())
+				if err != nil {
+					log.Printf("Cannot set send/receive buffers: %v", err)
+				}
+				g.handleWebsocketProtocol(ctx, conn, t)
+				return 
+			}
+			log.Printf("Cannot upgrade falling back to old protocol: %v", err)
 		}
-
-		g.handleWebsocketProtocol(ctx, conn, t)
+		g.handleLegacyProtocol(w, r.WithContext(ctx), t)
 	} else if r.Method == MethodRDGIN {
 		g.handleLegacyProtocol(w, r.WithContext(ctx), t)
 	}
