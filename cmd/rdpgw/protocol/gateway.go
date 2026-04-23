@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"reflect"
+	"strings"
 	"syscall"
 	"time"
 
@@ -78,27 +79,47 @@ func (g *Gateway) HandleGatewayProtocol(w http.ResponseWriter, r *http.Request) 
 	ctx = context.WithValue(ctx, CtxTunnel, t)
 
 	if r.Method == MethodRDGOUT {
-		if r.Header.Get("Connection") != "upgrade" && r.Header.Get("Upgrade") != "websocket" {
-			g.handleLegacyProtocol(w, r.WithContext(ctx), t)
+		if headerHasToken(r.Header, "Connection", "upgrade") && headerHasToken(r.Header, "Upgrade", "websocket") {
+			r.Method = "GET" // upgrader requires GET
+			conn, err := upgrader.Upgrade(w, r, nil)
+			if err != nil {
+				// Upgrade has already written an HTTP error response on the
+				// wire, so we cannot transparently fall back to the legacy
+				// protocol here. The header pre-check above handles the
+				// real-world fallback case: clients or reverse proxies that
+				// don't send the Upgrade/Connection tokens route to legacy
+				// without ever touching the upgrader.
+				log.Printf("cannot upgrade connection to websocket: %v", err)
+				return
+			}
+			defer conn.Close()
+
+			if err := g.setSendReceiveBuffers(conn.UnderlyingConn()); err != nil {
+				log.Printf("cannot set send/receive buffers: %v", err)
+			}
+			g.handleWebsocketProtocol(ctx, conn, t)
 			return
 		}
-		r.Method = "GET" // force
-		conn, err := upgrader.Upgrade(w, r, nil)
-		if err != nil {
-			log.Printf("Cannot upgrade falling back to old protocol: %t", err)
-			return
-		}
-		defer conn.Close()
-
-		err = g.setSendReceiveBuffers(conn.UnderlyingConn())
-		if err != nil {
-			log.Printf("Cannot set send/receive buffers: %t", err)
-		}
-
-		g.handleWebsocketProtocol(ctx, conn, t)
+		g.handleLegacyProtocol(w, r.WithContext(ctx), t)
 	} else if r.Method == MethodRDGIN {
 		g.handleLegacyProtocol(w, r.WithContext(ctx), t)
 	}
+}
+
+// headerHasToken reports whether the HTTP header named by name contains
+// token, matched case-insensitively against comma-separated tokens.
+// Fields like Connection carry a list (e.g. "keep-alive, Upgrade") so a
+// plain equality check on the raw value misses legitimate clients and
+// well-behaved reverse proxies.
+func headerHasToken(h http.Header, name, token string) bool {
+	for _, v := range h.Values(name) {
+		for _, t := range strings.Split(v, ",") {
+			if strings.EqualFold(strings.TrimSpace(t), token) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (g *Gateway) setSendReceiveBuffers(conn net.Conn) error {
