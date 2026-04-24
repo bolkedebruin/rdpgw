@@ -287,6 +287,9 @@ and RDP file will download to your desktop. This file can be opened by one
 of the remote desktop clients and it will try to connect to the gateway and
 desktop host behind it.
 
+Use `https://your-gateway/connect?multimon=1` to include the `use multimon`
+RDP setting for clients that should span the session across multiple monitors.
+
 ## Integration
 The gateway exposes an endpoint for the verification of user tokens at
 https://yourserver/tokeninfo . The query parameter is 'access_token' so

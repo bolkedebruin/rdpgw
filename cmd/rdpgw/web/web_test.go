@@ -182,6 +182,118 @@ func TestHandler_HandleDownload(t *testing.T) {
 
 }
 
+func TestHandler_HandleDownloadMultimon(t *testing.T) {
+	tests := []struct {
+		name         string
+		query        string
+		template     string
+		wantStatus   int
+		wantMultimon string
+	}{
+		{
+			name:         "enabled",
+			query:        "?multimon=1",
+			wantStatus:   http.StatusOK,
+			wantMultimon: "1",
+		},
+		{
+			name:         "appends without blank line",
+			query:        "?multimon=1",
+			template:     "full address:s:10.0.0.1:3389\r\n",
+			wantStatus:   http.StatusOK,
+			wantMultimon: "1",
+		},
+		{
+			name:         "disabled",
+			query:        "?multimon=0",
+			wantStatus:   http.StatusOK,
+			wantMultimon: "0",
+		},
+		{
+			name:         "overrides template",
+			query:        "?multimon=0",
+			template:     "use multimon:i:1\r\n",
+			wantStatus:   http.StatusOK,
+			wantMultimon: "0",
+		},
+		{
+			name:         "keeps template without query parameter",
+			template:     "use multimon:i:1\r\n",
+			wantStatus:   http.StatusOK,
+			wantMultimon: "1",
+		},
+		{
+			name:       "invalid",
+			query:      "?multimon=true",
+			wantStatus: http.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req, err := http.NewRequest("GET", "/connect"+tt.query, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			rr := httptest.NewRecorder()
+			id := identity.NewUser()
+
+			id.SetUserName(testuser)
+			id.SetAuthenticated(true)
+
+			req = identity.AddToRequestCtx(id, req)
+
+			var templateFile string
+			if tt.template != "" {
+				f, err := os.CreateTemp("", "rdp")
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer os.Remove(f.Name())
+
+				if _, err := f.WriteString(tt.template); err != nil {
+					t.Fatal(err)
+				}
+				if err := f.Close(); err != nil {
+					t.Fatal(err)
+				}
+				templateFile = f.Name()
+			}
+
+			u, _ := url.Parse(gateway)
+			c := Config{
+				HostSelection:     "roundrobin",
+				Hosts:             hosts,
+				PAATokenGenerator: paaTokenMock,
+				GatewayAddress:    u,
+				TemplateFile:      templateFile,
+			}
+			h := c.NewHandler()
+
+			hh := http.HandlerFunc(h.HandleDownload)
+			hh.ServeHTTP(rr, req)
+
+			if status := rr.Code; status != tt.wantStatus {
+				t.Errorf("handler returned wrong status code: got %v want %v",
+					status, tt.wantStatus)
+			}
+
+			if tt.wantMultimon == "" {
+				return
+			}
+
+			data := rdpToMap(strings.Split(rr.Body.String(), rdp.CRLF))
+			if data["use multimon"] != tt.wantMultimon {
+				t.Errorf("use multimon key in rdp does not match: got %v want %v", data["use multimon"], tt.wantMultimon)
+			}
+			if strings.Contains(rr.Body.String(), rdp.CRLF+rdp.CRLF+"use multimon") {
+				t.Error("use multimon should not be preceded by a blank line")
+			}
+		})
+	}
+}
+
 func TestHandler_HandleSignedDownload(t *testing.T) {
 	req, err := http.NewRequest("GET", "/connect", nil)
 	if err != nil {

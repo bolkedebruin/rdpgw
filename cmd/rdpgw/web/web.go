@@ -400,6 +400,57 @@ func (h *Handler) getHost(ctx context.Context, u *url.URL) (string, error) {
 	}
 }
 
+func rdpKey(line string) string {
+	p := strings.IndexByte(line, ':')
+	if p <= 0 {
+		return ""
+	}
+	return strings.ToLower(strings.TrimSpace(line[:p]))
+}
+
+func upsertRdpLines(rdpText string, want []string) string {
+	rdpText = strings.ReplaceAll(rdpText, "\r\n", "\n")
+	rdpText = strings.TrimRight(rdpText, "\n")
+	lines := strings.Split(rdpText, "\n")
+	keyIndex := make(map[string]int, len(lines))
+
+	for i, line := range lines {
+		line = strings.TrimRight(line, "\r")
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		key := rdpKey(line)
+		if key == "" {
+			continue
+		}
+		if _, exists := keyIndex[key]; !exists {
+			keyIndex[key] = i
+		}
+		lines[i] = line
+	}
+
+	for _, line := range want {
+		line = strings.TrimSpace(strings.TrimRight(line, "\r"))
+		if line == "" {
+			continue
+		}
+		key := rdpKey(line)
+		if key == "" {
+			continue
+		}
+		if idx, ok := keyIndex[key]; ok {
+			lines[idx] = line
+		} else {
+			keyIndex[key] = len(lines)
+			lines = append(lines, line)
+		}
+	}
+
+	out := strings.Join(lines, "\n")
+	out = strings.TrimRight(out, "\n") + "\n"
+	return strings.ReplaceAll(out, "\n", "\r\n")
+}
+
 func (h *Handler) HandleDownload(w http.ResponseWriter, r *http.Request) {
 	id := identity.FromRequestCtx(r)
 	ctx := r.Context()
@@ -419,6 +470,17 @@ func (h *Handler) HandleDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	host = strings.Replace(host, "{{ preferred_username }}", id.UserName(), 1)
+
+	multimonLine := ""
+	if multimon := strings.TrimSpace(r.URL.Query().Get("multimon")); multimon != "" {
+		switch multimon {
+		case "0", "1":
+			multimonLine = "use multimon:i:" + multimon
+		default:
+			http.Error(w, `invalid query parameter "multimon": must be "0" or "1"`, http.StatusBadRequest)
+			return
+		}
+	}
 
 	// split the username into user and domain
 	var user = id.UserName()
@@ -497,14 +559,16 @@ func (h *Handler) HandleDownload(w http.ResponseWriter, r *http.Request) {
 	d.Settings.GatewayCredentialMethod = 1
 	d.Settings.GatewayUsageMethod = 1
 
-	// no rdp siging so return as-is
-	if h.rdpSigner == nil {
-		http.ServeContent(w, r, fn, time.Now(), strings.NewReader(d.String()))
-		return
+	rdpContent := d.String()
+	if multimonLine != "" {
+		rdpContent = upsertRdpLines(rdpContent, []string{multimonLine})
 	}
 
-	// get rdp content
-	rdpContent := d.String()
+	// no rdp signing so return as-is
+	if h.rdpSigner == nil {
+		http.ServeContent(w, r, fn, time.Now(), strings.NewReader(rdpContent))
+		return
+	}
 
 	// sign rdp content
 	signedContent, err := h.rdpSigner.Sign(rdpContent)
