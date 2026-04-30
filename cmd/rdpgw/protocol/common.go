@@ -15,6 +15,7 @@ import (
 )
 
 const (
+	headerLen       = 8
 	maxFragmentSize = 65536
 )
 
@@ -92,20 +93,26 @@ func createPacket(pktType uint16, data []byte) (packet []byte) {
 	return buf.Bytes()
 }
 
-// readHeader parses a packet and verifies its reported size
+// readHeader parses a packet and verifies its reported size. The wire
+// layout is [type:2][reserved:2][size:4][body...] where size counts the
+// 8-byte header plus the body. handleMsgFrame caps the reassembled body
+// at maxFragmentSize, so any size outside [headerLen, headerLen+maxFragmentSize]
+// is invalid and rejected before slicing.
 func readHeader(data []byte) (packetType uint16, size uint32, packet []byte, err error) {
-	// header needs to be 8 min
-	if len(data) < 8 {
+	if len(data) < headerLen {
 		return 0, 0, nil, errors.New("header too short, fragment likely")
 	}
 	r := bytes.NewReader(data)
 	binary.Read(r, binary.LittleEndian, &packetType)
 	r.Seek(4, io.SeekStart)
 	binary.Read(r, binary.LittleEndian, &size)
-	if len(data) < int(size) {
-		return packetType, size, data[8:], errors.New("data incomplete, fragment received")
+	if size < headerLen || size-headerLen > maxFragmentSize {
+		return packetType, size, nil, fmt.Errorf("invalid declared size %d", size)
 	}
-	return packetType, size, data[8:size], nil
+	if len(data) < int(size) {
+		return packetType, size, data[headerLen:], errors.New("data incomplete, fragment received")
+	}
+	return packetType, size, data[headerLen:size], nil
 }
 
 // forwards data from a Connection to Transport and wraps it in the rdpgw protocol

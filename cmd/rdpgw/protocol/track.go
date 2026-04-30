@@ -1,8 +1,14 @@
 package protocol
 
-import "fmt"
+import (
+	"fmt"
+	"sync"
+)
 
-var Connections map[string]*Monitor
+var (
+	Connections        = map[string]*Monitor{}
+	connectionsMu      sync.RWMutex
+)
 
 type Monitor struct {
 	Processor *Processor
@@ -14,9 +20,8 @@ const (
 )
 
 func RegisterTunnel(t *Tunnel, p *Processor) {
-	if Connections == nil {
-		Connections = make(map[string]*Monitor)
-	}
+	connectionsMu.Lock()
+	defer connectionsMu.Unlock()
 
 	Connections[t.Id] = &Monitor{
 		Processor: p,
@@ -25,40 +30,20 @@ func RegisterTunnel(t *Tunnel, p *Processor) {
 }
 
 func RemoveTunnel(t *Tunnel) {
+	connectionsMu.Lock()
+	defer connectionsMu.Unlock()
+
 	delete(Connections, t.Id)
 }
 
 func Disconnect(id string) error {
-	if Connections == nil {
+	connectionsMu.RLock()
+	m, ok := Connections[id]
+	connectionsMu.RUnlock()
+
+	if !ok {
 		return fmt.Errorf("%s connection does not exist", id)
 	}
-
-	if m, ok := Connections[id]; !ok {
-		m.Processor.ctl <- ctlDisconnect
-		return nil
-	}
-
-	return fmt.Errorf("%s connection does not exist", id)
+	m.Processor.ctl <- ctlDisconnect
+	return nil
 }
-
-// CalculateSpeedPerSecond calculate moving average.
-/*
-func CalculateSpeedPerSecond(connId string) (in int, out int) {
-	now := time.Now().UnixMilli()
-
-	c := Connections[connId]
-	total := int64(0)
-	for _, v := range c.Tunnel.BytesReceived {
-		total += v
-	}
-	in = int(total / (now - c.TimeStamp) * 1000)
-
-	total = int64(0)
-	for _, v := range c.BytesSent {
-		total += v
-	}
-	out = int(total / (now - c.TimeStamp))
-
-	return in, out
-}
-*/

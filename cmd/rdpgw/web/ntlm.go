@@ -2,15 +2,17 @@ package web
 
 import (
 	"context"
-        "errors"
-        "github.com/bolkedebruin/rdpgw/cmd/rdpgw/identity"
+	"errors"
+	"log"
+	"net"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/identity"
 	"github.com/bolkedebruin/rdpgw/shared/auth"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-        "log"
-	"net"
-        "net/http"
-        "time"
 )
 
 type ntlmAuthMode uint32
@@ -47,13 +49,15 @@ func (h *NTLMAuthHandler) NTLMAuth(next http.HandlerFunc) http.HandlerFunc {
         }
 }
 
-func (h *NTLMAuthHandler) getAuthPayload (r *http.Request) (payload string, authMode ntlmAuthMode, err error) {
+func (h *NTLMAuthHandler) getAuthPayload(r *http.Request) (payload string, authMode ntlmAuthMode, err error) {
 	authorisationEncoded := r.Header.Get("Authorization")
-	if authorisationEncoded[0:5] == "NTLM " {
-		return authorisationEncoded[5:], authNTLM, nil
+	const ntlmPrefix = "NTLM "
+	const negotiatePrefix = "Negotiate "
+	if strings.HasPrefix(authorisationEncoded, ntlmPrefix) {
+		return authorisationEncoded[len(ntlmPrefix):], authNTLM, nil
 	}
-	if authorisationEncoded[0:10] == "Negotiate " {
-		return authorisationEncoded[10:], authNegotiate, nil
+	if strings.HasPrefix(authorisationEncoded, negotiatePrefix) {
+		return authorisationEncoded[len(negotiatePrefix):], authNegotiate, nil
 	}
 	return "", authNone, errors.New("Invalid NTLM Authorisation header")
 }

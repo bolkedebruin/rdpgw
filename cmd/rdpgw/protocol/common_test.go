@@ -1,6 +1,7 @@
 package protocol
 
 import (
+	"encoding/binary"
 	"fmt"
 	"math/rand"
 	"sync"
@@ -261,6 +262,30 @@ func TestFragmentTooLarge(t *testing.T) {
 	assert.Nil(t, err)
 	assert.NotNil(t, messages[0].err)
 	assert.Contains(t, "fragment exceeded max fragment size", messages[0].err.Error())
+}
+
+// TestReadHeaderRejectsUndersizedSize checks that readHeader rejects a
+// declared size smaller than the 8-byte header itself. The reported size is
+// taken from the wire, so an attacker-supplied frame with size in [0,7] must
+// surface as an error rather than slicing data[8:size] with high < low.
+func TestReadHeaderRejectsUndersizedSize(t *testing.T) {
+	for _, size := range []uint32{0, 1, 2, 7} {
+		t.Run(fmt.Sprintf("size_%d", size), func(t *testing.T) {
+			buf := make([]byte, 8)
+			binary.LittleEndian.PutUint16(buf[0:2], 1)
+			binary.LittleEndian.PutUint32(buf[4:8], size)
+
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("readHeader panicked on size=%d: %v", size, r)
+				}
+			}()
+			_, _, _, err := readHeader(buf)
+			if err == nil {
+				t.Errorf("readHeader returned no error for invalid size=%d", size)
+			}
+		})
+	}
 }
 
 // TestFragmentWithMultiMessage the first message is fragmented,
