@@ -4,15 +4,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
+	"time"
+
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/identity"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/protocol"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
 	"golang.org/x/oauth2"
-	"log"
-	"time"
 )
+
+const paaAudience = "rdpgw-paa"
 
 var (
 	SigningKey        []byte
@@ -30,7 +33,6 @@ var VerifyClientIP bool = true
 type customClaims struct {
 	RemoteServer string `json:"remoteServer"`
 	ClientIP     string `json:"clientIp"`
-	AccessToken  string `json:"accessToken"`
 }
 
 func CheckSession(next protocol.CheckHostFunc) protocol.CheckHostFunc {
@@ -87,28 +89,24 @@ func CheckPAACookie(ctx context.Context, tokenString string) (bool, error) {
 
 	// ...but doesn't check the expiry claim :/
 	err = standard.Validate(jwt.Expected{
-		Issuer: "rdpgw",
-		Time:   time.Now(),
+		Issuer:      "rdpgw",
+		AnyAudience: jwt.Audience{paaAudience},
+		Time:        time.Now(),
 	})
 
 	if err != nil {
-		log.Printf("token validation failed due to %tunnel", err)
-		return false, err
-	}
-
-	// validate the access token
-	tokenSource := Oauth2Config.TokenSource(ctx, &oauth2.Token{AccessToken: custom.AccessToken})
-	user, err := OIDCProvider.UserInfo(ctx, tokenSource)
-	if err != nil {
-		log.Printf("Cannot get user info for access token: %tunnel", err)
+		log.Printf("token validation failed due to %s", err)
 		return false, err
 	}
 
 	tunnel := getTunnel(ctx)
+	if tunnel == nil {
+		return false, errors.New("no tunnel in context")
+	}
 
 	tunnel.TargetServer = custom.RemoteServer
 	tunnel.RemoteAddr = custom.ClientIP
-	tunnel.User.SetUserName(user.Subject)
+	tunnel.User.SetUserName(standard.Subject)
 
 	return true, nil
 }
@@ -124,16 +122,16 @@ func GeneratePAAToken(ctx context.Context, username string, server string) (stri
 	}
 
 	standard := jwt.Claims{
-		Issuer:  "rdpgw",
-		Expiry:  jwt.NewNumericDate(time.Now().Add(time.Minute * 5)),
-		Subject: username,
+		Issuer:   "rdpgw",
+		Audience: jwt.Audience{paaAudience},
+		Expiry:   jwt.NewNumericDate(time.Now().Add(time.Minute * 5)),
+		Subject:  username,
 	}
 
 	id := identity.FromCtx(ctx)
 	private := customClaims{
 		RemoteServer: server,
 		ClientIP:     id.GetAttribute(identity.AttrClientIp).(string),
-		AccessToken:  id.GetAttribute(identity.AttrAccessToken).(string),
 	}
 
 	if token, err := jwt.Signed(sig).Claims(standard).Claims(private).Serialize(); err != nil {
