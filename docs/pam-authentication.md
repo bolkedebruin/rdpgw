@@ -69,6 +69,23 @@ Run the `rdpgw-auth` helper program:
 systemctl start rdpgw-auth
 ```
 
+### 4. Allow the gateway process to call the socket
+
+`rdpgw-auth` only accepts connections from its own UID by default. If
+the rdpgw process runs as a different user, list its UID (or a shared
+GID) explicitly:
+
+```bash
+# rdpgw runs as UID 1001
+./rdpgw-auth -s /tmp/rdpgw-auth.sock --allow-uid 1001
+
+# rdpgw and rdpgw-auth share group 'rdpgw' (GID 1100)
+./rdpgw-auth -s /tmp/rdpgw-auth.sock --allow-gid 1100
+```
+
+The socket itself is created with mode `0660`, so listing a shared GID
+on the daemon is the typical privilege-separated deployment.
+
 ## Authentication Flow
 
 1. Client connects to gateway with username/password
