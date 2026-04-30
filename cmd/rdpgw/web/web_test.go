@@ -182,6 +182,200 @@ func TestHandler_HandleDownload(t *testing.T) {
 
 }
 
+func TestHandler_HandleDownload_RdpOverrides(t *testing.T) {
+	tests := []struct {
+		name        string
+		query       string
+		allow       []string
+		template    string
+		wantStatus  int
+		wantContain []string // substrings expected in body when status==200
+		wantMissing []string
+	}{
+		{
+			name:        "allowed bool override applies",
+			query:       "?usemultimon=1",
+			allow:       []string{"use multimon"},
+			wantStatus:  http.StatusOK,
+			wantContain: []string{"use multimon:i:1\r\n"},
+		},
+		{
+			name:        "allowed bool override emits default value explicitly",
+			query:       "?usemultimon=0",
+			allow:       []string{"use multimon"},
+			wantStatus:  http.StatusOK,
+			wantContain: []string{"use multimon:i:0\r\n"},
+		},
+		{
+			name:        "override beats template",
+			query:       "?usemultimon=0",
+			allow:       []string{"use multimon"},
+			template:    "use multimon:i:1\r\n",
+			wantStatus:  http.StatusOK,
+			wantContain: []string{"use multimon:i:0\r\n"},
+			wantMissing: []string{"use multimon:i:1\r\n"},
+		},
+		{
+			name:       "no allow list disables overrides",
+			query:      "?usemultimon=1",
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "key not in allow list is rejected",
+			query:      "?audiomode=2",
+			allow:      []string{"use multimon"},
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "invalid bool value rejected",
+			query:      "?usemultimon=hello",
+			allow:      []string{"use multimon"},
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "invalid int value rejected",
+			query:      "?audiomode=loud",
+			allow:      []string{"audiomode"},
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:        "allow list normalizes (caller uses url-friendly form)",
+			query:       "?usemultimon=1",
+			allow:       []string{"USE MULTIMON"},
+			wantStatus:  http.StatusOK,
+			wantContain: []string{"use multimon:i:1\r\n"},
+		},
+		{
+			name:        "unrelated query params are ignored",
+			query:       "?host=10.0.0.1:3389&usemultimon=1",
+			allow:       []string{"use multimon"},
+			wantStatus:  http.StatusOK,
+			wantContain: []string{"use multimon:i:1\r\n"},
+		},
+		{
+			name:        "string field override applies",
+			query:       "?alternateshell=explorer.exe",
+			allow:       []string{"alternate shell"},
+			wantStatus:  http.StatusOK,
+			wantContain: []string{"alternate shell:s:explorer.exe\r\n"},
+		},
+		{
+			name:        "url override cannot escape authoritative server fields",
+			query:       "?username=evil@attacker",
+			allow:       []string{"username"}, // operator footgun: still must not leak past server set
+			wantStatus:  http.StatusOK,
+			wantContain: []string{"username:s:" + testuser + "\r\n"},
+			wantMissing: []string{"username:s:evil@attacker\r\n"},
+		},
+	}
+
+	u, _ := url.Parse(gateway)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req, err := http.NewRequest("GET", "/connect"+tt.query, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			rr := httptest.NewRecorder()
+			id := identity.NewUser()
+			id.SetUserName(testuser)
+			id.SetAuthenticated(true)
+			req = identity.AddToRequestCtx(id, req)
+
+			var templateFile string
+			if tt.template != "" {
+				f, err := os.CreateTemp("", "rdp")
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer os.Remove(f.Name())
+				if _, err := f.WriteString(tt.template); err != nil {
+					t.Fatal(err)
+				}
+				if err := f.Close(); err != nil {
+					t.Fatal(err)
+				}
+				templateFile = f.Name()
+			}
+
+			c := Config{
+				HostSelection:     "roundrobin",
+				Hosts:             hosts,
+				PAATokenGenerator: paaTokenMock,
+				GatewayAddress:    u,
+				RdpOpts:           RdpOpts{OverridableRdpKeys: tt.allow},
+				TemplateFile:      templateFile,
+			}
+			h := c.NewHandler()
+			http.HandlerFunc(h.HandleDownload).ServeHTTP(rr, req)
+
+			if rr.Code != tt.wantStatus {
+				t.Fatalf("status: got %d, want %d (body=%q)", rr.Code, tt.wantStatus, rr.Body.String())
+			}
+			if rr.Code != http.StatusOK {
+				return
+			}
+			body := rr.Body.String()
+			for _, s := range tt.wantContain {
+				if !strings.Contains(body, s) {
+					t.Errorf("body missing %q\nbody=\n%s", s, body)
+				}
+			}
+			for _, s := range tt.wantMissing {
+				if strings.Contains(body, s) {
+					t.Errorf("body contains forbidden %q\nbody=\n%s", s, body)
+				}
+			}
+		})
+	}
+}
+
+func TestHandler_HandleSignedDownload_RdpOverrideApplies(t *testing.T) {
+	// The override must take effect on the signed path too: ApplyOverrides
+	// runs on the same Builder used to render the signed content.
+	req, err := http.NewRequest("GET", "/connect?usemultimon=1", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	id := identity.NewUser()
+	id.SetUserName(testuser)
+	id.SetAuthenticated(true)
+	req = identity.AddToRequestCtx(id, req)
+
+	u, _ := url.Parse(gateway)
+	c := Config{
+		HostSelection:     "roundrobin",
+		Hosts:             hosts,
+		PAATokenGenerator: paaTokenMock,
+		GatewayAddress:    u,
+		RdpOpts:           RdpOpts{OverridableRdpKeys: []string{"use multimon"}},
+	}
+	h := c.NewHandler()
+
+	fs := afero.NewMemMapFs()
+	if err := genKeypair(fs); err != nil {
+		t.Fatalf("could not generate key pair: %s", err)
+	}
+	signer, err := rdpsign.New("test.crt", "test.key", rdpsign.WithFs(fs))
+	if err != nil {
+		t.Fatalf("could not create signer: %s", err)
+	}
+	h.rdpSigner = signer
+
+	http.HandlerFunc(h.HandleDownload).ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want 200 (body=%q)", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "use multimon:i:1\r\n") {
+		t.Errorf("signed body missing use multimon:i:1\nbody=\n%s", body)
+	}
+	if !strings.Contains(body, "signature:s:") {
+		t.Errorf("signed body missing signature\nbody=\n%s", body)
+	}
+}
+
 func TestHandler_HandleSignedDownload(t *testing.T) {
 	req, err := http.NewRequest("GET", "/connect", nil)
 	if err != nil {

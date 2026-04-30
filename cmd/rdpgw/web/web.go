@@ -72,6 +72,13 @@ type RdpOpts struct {
 	UsernameTemplate string
 	SplitUserDomain  bool
 	NoUsername       bool
+	// OverridableRdpKeys is the operator-supplied allow-list of RDP setting
+	// keys that the /connect endpoint may override from URL query parameters.
+	// Empty (the default) disables URL-based RDP overrides entirely. Each
+	// entry is matched against the rdp struct tag of an RdpSettings field
+	// after normalization (lowercase, no whitespace), so "use multimon",
+	// "Use Multimon" and "usemultimon" are equivalent.
+	OverridableRdpKeys []string
 }
 
 type Handler struct {
@@ -482,6 +489,16 @@ func (h *Handler) HandleDownload(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, errors.New("unable to load RDP template").Error(), http.StatusInternalServerError)
 			return
 		}
+	}
+
+	// Apply URL-driven RDP option overrides (e.g. ?usemultimon=1) before
+	// the server-controlled fields below, so authoritative gateway/auth
+	// settings always win regardless of what an operator put on the
+	// allow-list.
+	if err := d.ApplyOverrides(r.URL.Query(), h.rdpOpts.OverridableRdpKeys); err != nil {
+		log.Printf("rejected rdp override for user %s: %s", id.UserName(), err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 
 	if !h.rdpOpts.NoUsername {

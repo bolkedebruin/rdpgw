@@ -108,6 +108,11 @@ type ClientConfig struct {
 	NoUsername       bool   `koanf:"nousername"`
 	SigningCert      string `koanf:"signingcert"`
 	SigningKey       string `koanf:"signingkey"`
+	// RdpOverridableKeys is the operator allow-list of RDP setting keys that
+	// the /connect endpoint may override from URL query parameters. Empty
+	// disables URL-based overrides. Entries are normalized (lowercase, no
+	// whitespace), so "use multimon" and "usemultimon" are equivalent.
+	RdpOverridableKeys []string `koanf:"rdpoverridablekeys"`
 }
 
 func ToCamel(s string) string {

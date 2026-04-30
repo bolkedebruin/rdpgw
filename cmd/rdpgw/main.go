@@ -109,9 +109,10 @@ func main() {
 		Hosts:            conf.Server.Hosts,
 		HostSelection:    conf.Server.HostSelection,
 		RdpOpts: web.RdpOpts{
-			UsernameTemplate: conf.Client.UsernameTemplate,
-			SplitUserDomain:  conf.Client.SplitUserDomain,
-			NoUsername:       conf.Client.NoUsername,
+			UsernameTemplate:   conf.Client.UsernameTemplate,
+			SplitUserDomain:    conf.Client.SplitUserDomain,
+			NoUsername:         conf.Client.NoUsername,
+			OverridableRdpKeys: conf.Client.RdpOverridableKeys,
 		},
 		GatewayAddress: url,
 		TemplateFile:   conf.Client.Defaults,

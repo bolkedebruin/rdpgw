@@ -287,6 +287,45 @@ and RDP file will download to your desktop. This file can be opened by one
 of the remote desktop clients and it will try to connect to the gateway and
 desktop host behind it.
 
+### Overriding RDP options from the URL
+The `/connect` endpoint can apply caller-supplied RDP setting overrides from
+URL query parameters when (and only when) the operator explicitly opts in.
+This lets users vary settings such as multi-monitor, audio mode or
+clipboard redirection without maintaining separate RDP templates.
+
+The query parameter name is the underlying RDP key with whitespace removed
+and lowercased. For example:
+
+| RDP key (in the file) | Query parameter |
+|-----------------------|-----------------|
+| `use multimon`        | `usemultimon`   |
+| `audiomode`           | `audiomode`     |
+| `redirectclipboard`   | `redirectclipboard` |
+| `screen mode id`      | `screenmodeid`  |
+
+Values are validated against the field type: booleans accept `0`/`1` or
+`true`/`false`, integers must parse as base-10 numbers, strings are taken
+verbatim. Unknown query parameters are ignored so the existing `host`,
+etc. continue to work.
+
+To enable, list the keys you want to expose under `client.rdpoverridablekeys`
+in your YAML configuration (or via the `RDPGW_CLIENT__RDPOVERRIDABLEKEYS`
+environment variable as a space-separated list):
+
+```yaml
+client:
+  rdpoverridablekeys:
+    - use multimon
+    - audiomode
+```
+
+With the snippet above, `https://your-gateway/connect?usemultimon=1` adds
+`use multimon:i:1` to the generated RDP file. Keys that are not on the
+allow-list are rejected with `400 Bad Request`. Authoritative settings
+controlled by the gateway (gateway address, access token, full address,
+username) always win over URL parameters even if an operator adds those
+keys to the allow-list — but adding sensitive keys is still discouraged.
+
 ## Integration
 The gateway exposes an endpoint for the verification of user tokens at
 https://yourserver/tokeninfo . The query parameter is 'access_token' so
