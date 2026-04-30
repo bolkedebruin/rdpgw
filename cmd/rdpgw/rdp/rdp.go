@@ -95,6 +95,7 @@ type RdpSettings struct {
 type Builder struct {
 	Settings RdpSettings
 	Metadata mapstructure.Metadata
+	forced   map[string]struct{}
 }
 
 func NewBuilder() *Builder {
@@ -137,15 +138,92 @@ func NewBuilderFromFile(filename string) (*Builder, error) {
 func (rb *Builder) String() string {
 	var sb strings.Builder
 
-	addStructToString(rb.Settings, rb.Metadata, &sb)
+	rb.addStructToString(rb.Settings, &sb)
 
 	return sb.String()
 }
 
-func addStructToString(st interface{}, metadata mapstructure.Metadata, sb *strings.Builder) {
+// NormalizeRdpKey returns the canonical, URL-friendly form of an rdp tag
+// (lowercase, no whitespace). Used to look up fields by query parameter name
+// and to compare entries in the operator-supplied allow-list. For example,
+// "use multimon", "Use Multimon" and "usemultimon" all normalize to
+// "usemultimon".
+func NormalizeRdpKey(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	return strings.ReplaceAll(s, " ", "")
+}
+
+// ApplyOverrides applies a set of caller-supplied RDP option overrides onto
+// the Builder's settings. Each input key is normalized via NormalizeRdpKey and
+// matched against the rdp struct tags of RdpSettings. Keys that do not match
+// any field are ignored (so passing the entire request query is safe). Keys
+// that match a field but are not present in allowed return an error: the
+// allow-list is opt-in by design and empty by default.
+//
+// Values are validated against the field's Go type: bools accept 0/1 or
+// true/false; ints must parse as base-10 integers; strings are taken
+// verbatim. Overridden fields are tracked so they always serialize, even when
+// the new value equals the field's default.
+func (rb *Builder) ApplyOverrides(values map[string][]string, allowed []string) error {
+	if len(values) == 0 {
+		return nil
+	}
+
+	allow := make(map[string]struct{}, len(allowed))
+	for _, k := range allowed {
+		allow[NormalizeRdpKey(k)] = struct{}{}
+	}
+
+	s := structs.New(&rb.Settings)
+	byKey := make(map[string]*structs.Field, len(s.Fields()))
+	for _, f := range s.Fields() {
+		tag := f.Tag("rdp")
+		if tag == "" {
+			continue
+		}
+		byKey[NormalizeRdpKey(tag)] = f
+	}
+
+	if rb.forced == nil {
+		rb.forced = make(map[string]struct{})
+	}
+
+	for k, vs := range values {
+		nk := NormalizeRdpKey(k)
+		f, ok := byKey[nk]
+		if !ok {
+			continue
+		}
+		if _, ok := allow[nk]; !ok {
+			return fmt.Errorf("rdp option %q is not allowed to be overridden", k)
+		}
+		if len(vs) == 0 {
+			continue
+		}
+		v := strings.TrimSpace(vs[0])
+		if v == "" {
+			return fmt.Errorf("rdp option %q has empty value", k)
+		}
+		if err := setRdpFieldFromString(f, v); err != nil {
+			return fmt.Errorf("invalid value for rdp option %q: %w", k, err)
+		}
+		rb.forced[f.Name()] = struct{}{}
+	}
+	return nil
+}
+
+func (rb *Builder) isForced(f *structs.Field) bool {
+	if rb.forced == nil {
+		return false
+	}
+	_, ok := rb.forced[f.Name()]
+	return ok
+}
+
+func (rb *Builder) addStructToString(st interface{}, sb *strings.Builder) {
 	s := structs.New(st)
 	for _, f := range s.Fields() {
-		if isZero(f) && !isSet(f, metadata) {
+		if isZero(f) && !isSet(f, rb.Metadata) && !rb.isForced(f) {
 			continue
 		}
 		sb.WriteString(f.Tag("rdp"))
@@ -249,5 +327,29 @@ func setVariable(f *structs.Field, v string) error {
 		return f.Set(b)
 	default:
 		return errors.New("invalid field type")
+	}
+}
+
+func setRdpFieldFromString(f *structs.Field, v string) error {
+	switch f.Kind() {
+	case reflect.String:
+		return f.Set(v)
+	case reflect.Int:
+		i, err := strconv.Atoi(v)
+		if err != nil {
+			return fmt.Errorf("expected integer, got %q", v)
+		}
+		return f.Set(i)
+	case reflect.Bool:
+		switch strings.ToLower(v) {
+		case "0", "false":
+			return f.Set(false)
+		case "1", "true":
+			return f.Set(true)
+		default:
+			return fmt.Errorf("expected 0/1 or true/false, got %q", v)
+		}
+	default:
+		return fmt.Errorf("unsupported rdp field kind %s", f.Kind())
 	}
 }
