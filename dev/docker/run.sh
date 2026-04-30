@@ -1,34 +1,25 @@
 #!/bin/sh
+set -e
 
-USER=rdpgw
+cd /opt/rdpgw
 
-file="/root/createusers.txt"
-if [ -f $file ]
-  then
-    while IFS=: read -r username password is_sudo
-        do
-            echo "Username: $username, Password: **** , Sudo: $is_sudo"
-
-            if getent passwd "$username" > /dev/null 2>&1
-              then
-                echo "User Exists"
-              else
-                adduser -s /sbin/nologin "$username"
-                echo "$username:$password" | chpasswd
-            fi
-    done <"$file"
+# Generate an ephemeral self-signed cert at first start when one is not
+# already mounted/present at the configured path. Each container instance
+# gets its own key; nothing is baked into the image. This is intended for
+# the dev compose stack -- production deployments should mount a real
+# certificate, or set Tls=auto so rdpgw obtains one from Let's Encrypt.
+CERT="${RDPGW_SERVER__CERT_FILE:-/opt/rdpgw/server.pem}"
+KEY="${RDPGW_SERVER__KEY_FILE:-/opt/rdpgw/key.pem}"
+if [ ! -f "${CERT}" ] && [ ! -f "${KEY}" ]; then
+  echo "Generating ephemeral self-signed cert at ${CERT} / ${KEY} (dev only)"
+  openssl req -x509 -newkey rsa:2048 -keyout "${KEY}" -out "${CERT}" \
+    -sha256 -days 365 -nodes \
+    -subj "/CN=rdpgw-ephemeral"
 fi
 
-cd /opt/rdpgw || exit 1
-
-if [ -n "${RDPGW_SERVER__AUTHENTICATION}" ]; then
-  if [ "${RDPGW_SERVER__AUTHENTICATION}" = "local" ]; then
-    echo "Starting rdpgw-auth"
-    /opt/rdpgw/rdpgw-auth &
-  fi
+if [ "${RDPGW_SERVER__AUTHENTICATION}" = "local" ]; then
+  echo "Starting rdpgw-auth"
+  /opt/rdpgw/rdpgw-auth &
 fi
 
-# drop privileges and run the application
-su -c /opt/rdpgw/rdpgw "${USER}" -- "$@" &
-wait
-exit $?
+exec /opt/rdpgw/rdpgw "$@"

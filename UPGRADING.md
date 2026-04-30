@@ -2,6 +2,50 @@
 
 ## Unreleased
 
+### Container image no longer bakes a TLS cert and runs as UID 1001
+
+Two changes to `dev/docker/Dockerfile` and the dev image's entrypoint:
+
+* The build step that ran `openssl genrsa` / `openssl x509` and shipped
+  the resulting key/cert in the image is gone. The runtime image now
+  contains `openssl` and the entrypoint mints an ephemeral self-signed
+  cert at first start when no cert is mounted at the configured path.
+  Each container instance gets its own key.
+* The entrypoint runs as UID 1001 throughout. The previous `USER 0`
+  block, the dead `createusers.txt` loop in `run.sh`, and the
+  `chmod u+s` on `rdpgw-auth` (which set the bit on a file owned by
+  1001 and was therefore a no-op anyway) have been removed.
+
+If you mount your own cert (recommended for any non-dev deployment),
+make sure `RDPGW_SERVER__CERT_FILE` and `RDPGW_SERVER__KEY_FILE` point
+to the mounted paths. Otherwise the entrypoint generates a fresh
+self-signed pair at the configured locations on first start.
+
+If your deployment relies on `rdpgw-auth` running with elevated
+privileges from the same image, run it from a separate container or
+use Linux capabilities -- see
+[docs/pam-authentication.md](docs/pam-authentication.md) for the
+privilege-separation model.
+
+### Refuse to start when known placeholder secrets are configured
+
+These literal values appearing in `Server.SessionKey`,
+`Server.SessionEncryptionKey`, `Security.PAATokenSigningKey`,
+`Security.PAATokenEncryptionKey`, `Security.UserTokenSigningKey`,
+`Security.UserTokenEncryptionKey`, or `Security.QueryTokenSigningKey`
+will now cause rdpgw to refuse to start:
+
+```
+thisisasessionkeyreplacethisjetzt
+thisisasessionkeyreplacethisjetz
+thisisasessionkeyreplacethisnunu!
+thisisasessionkeyreplacethisnunu
+thisisasessionencryptionkey12345
+```
+
+These are the published example values from `README.md` and the dev
+compose files. Replace them with unique 32-character strings.
+
 ### `rdpgw-auth` only accepts connections from the daemon's own UID by default
 
 The auth daemon previously created its socket world-writable

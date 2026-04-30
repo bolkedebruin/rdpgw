@@ -53,6 +53,85 @@ func TestAuthenticationConstants(t *testing.T) {
 	}
 }
 
+func TestCheckDefaultSecrets(t *testing.T) {
+	const placeholder = "thisisasessionkeyreplacethisjetzt"
+
+	cases := []struct {
+		name      string
+		mutate    func(*Configuration)
+		wantField string
+	}{
+		{
+			name:      "session key",
+			mutate:    func(c *Configuration) { c.Server.SessionKey = placeholder },
+			wantField: "server.sessionkey",
+		},
+		{
+			name:      "session encryption key",
+			mutate:    func(c *Configuration) { c.Server.SessionEncryptionKey = placeholder },
+			wantField: "server.sessionencryptionkey",
+		},
+		{
+			name:      "paa signing key",
+			mutate:    func(c *Configuration) { c.Security.PAATokenSigningKey = placeholder },
+			wantField: "security.paatokensigningkey",
+		},
+		{
+			name:      "paa encryption key",
+			mutate:    func(c *Configuration) { c.Security.PAATokenEncryptionKey = placeholder },
+			wantField: "security.paatokenencryptionkey",
+		},
+		{
+			name:      "user signing key",
+			mutate:    func(c *Configuration) { c.Security.UserTokenSigningKey = placeholder },
+			wantField: "security.usertokensigningkey",
+		},
+		{
+			name:      "user encryption key",
+			mutate:    func(c *Configuration) { c.Security.UserTokenEncryptionKey = placeholder },
+			wantField: "security.usertokenencryptionkey",
+		},
+		{
+			name:      "query signing key",
+			mutate:    func(c *Configuration) { c.Security.QueryTokenSigningKey = placeholder },
+			wantField: "security.querytokensigningkey",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := &Configuration{}
+			tc.mutate(c)
+			err := checkDefaultSecrets(c)
+			if err == nil {
+				t.Fatalf("checkDefaultSecrets accepted a placeholder value in %s", tc.wantField)
+			}
+			if got := err.Error(); !contains(got, tc.wantField) {
+				t.Errorf("error message %q should mention the field %q", got, tc.wantField)
+			}
+		})
+	}
+}
+
+func TestCheckDefaultSecretsAllowsRandomValues(t *testing.T) {
+	c := &Configuration{}
+	c.Server.SessionKey = "5aa3a1568fe8421cd7e127d5ace28d2d"
+	c.Server.SessionEncryptionKey = "d3ecd7e565e56e37e2f2e95b584d8c0c"
+	c.Security.PAATokenSigningKey = "0123456789abcdef0123456789abcdef"
+	if err := checkDefaultSecrets(c); err != nil {
+		t.Errorf("checkDefaultSecrets rejected non-placeholder values: %v", err)
+	}
+}
+
+func contains(haystack, needle string) bool {
+	for i := 0; i+len(needle) <= len(haystack); i++ {
+		if haystack[i:i+len(needle)] == needle {
+			return true
+		}
+	}
+	return false
+}
+
 func TestHeaderConfigValidation(t *testing.T) {
 	cases := []struct {
 		name        string
