@@ -15,6 +15,12 @@ Header:
   UserIdHeader: "X-Forwarded-User-Id"   # Optional: User ID header
   EmailHeader: "X-Forwarded-Email"      # Optional: Email header
   DisplayNameHeader: "X-Forwarded-Name" # Optional: Display name header
+  # Required: CIDR allow-list of upstream proxies that may stamp the
+  # headers above. Requests arriving from any other RemoteAddr are
+  # refused with 401, so the user header cannot be minted by callers
+  # that bypass the proxy. RDPGW refuses to start when this is empty.
+  TrustedProxies:
+    - "10.0.0.0/8"
 
 Caps:
   TokenAuth: true
@@ -37,6 +43,12 @@ Header:
   UserHeader: "X-MS-CLIENT-PRINCIPAL-NAME"
   UserIdHeader: "X-MS-CLIENT-PRINCIPAL-ID"
   EmailHeader: "X-MS-CLIENT-PRINCIPAL-EMAIL"
+  TrustedProxies:
+    # Reach RDPGW only via Azure Private Link / a private VNet peering, then
+    # list the connector subnet here. Do not expose RDPGW publicly when using
+    # App Proxy: the App Proxy egress is not a fixed IP range, so a public
+    # listener cannot be safely gated by CIDR.
+    - "10.0.0.0/8"
 
 Security:
   VerifyClientIp: false  # Required for App Proxy
@@ -105,6 +117,9 @@ Header:
   UserHeader: "X-Goog-Authenticated-User-Email"
   UserIdHeader: "X-Goog-Authenticated-User-ID"
   EmailHeader: "X-Goog-Authenticated-User-Email"
+  TrustedProxies:
+    - "35.191.0.0/16"      # Google IAP / load balancer health checkers
+    - "130.211.0.0/22"     # Google Cloud Load Balancing
 ```
 
 **Setup**: Enable IAP on your Cloud Load Balancer pointing to RDPGW. Configure OAuth consent screen and authorized users/groups.
@@ -116,6 +131,10 @@ Header:
   UserHeader: "X-Amzn-Oidc-Subject"
   EmailHeader: "X-Amzn-Oidc-Email"
   DisplayNameHeader: "X-Amzn-Oidc-Name"
+  TrustedProxies:
+    # Place RDPGW in a private subnet whose only ingress is the ALB, then
+    # list the ALB-facing subnet here.
+    - "10.0.0.0/16"
 ```
 
 **Setup**: Configure ALB with Cognito User Pool authentication. Enable OIDC headers forwarding to RDPGW target group.
@@ -127,6 +146,8 @@ Header:
   UserHeader: "X-Forwarded-User"
   EmailHeader: "X-Forwarded-Email"
   DisplayNameHeader: "X-Forwarded-Name"
+  TrustedProxies:
+    - "172.16.0.0/12"  # Docker network or whatever subnet Traefik runs on
 ```
 
 **Setup**: Use Traefik ForwardAuth middleware with external auth service (e.g., OAuth2 Proxy, Authelia) that sets headers.
@@ -137,6 +158,8 @@ Header:
 Header:
   UserHeader: "X-Auth-User"
   EmailHeader: "X-Auth-Email"
+  TrustedProxies:
+    - "127.0.0.0/8"  # nginx on the same host as RDPGW
 ```
 
 **nginx config**:
@@ -207,15 +230,23 @@ map $http_upgrade $connection_upgrade {
 
 ## Security Considerations
 
-- **Trust Boundary**: RDPGW trusts headers set by the proxy. Ensure the proxy cannot be bypassed.
-- **Header Validation**: Configure proxy to strip/override user headers from client requests.
-- **Network Security**: Deploy RDPGW in private network accessible only via the proxy.
+- **TrustedProxies is mandatory**: RDPGW refuses to start when header authentication is enabled but `Header.TrustedProxies` is empty. Any request with a `RemoteAddr` outside the configured CIDRs is rejected with 401 before the user header is read. Without this gate any caller on the network could mint an authenticated session by setting the header.
+- **Header Validation**: Even with a CIDR allow-list, configure the proxy to strip duplicate inbound copies of `UserHeader` (and the optional id/email/display-name headers) so a client cannot smuggle one through the trusted proxy.
+- **Network Security**: Deploy RDPGW in a private network accessible only via the proxy. The CIDR allow-list is a second line of defense, not a replacement for network segmentation.
 - **TLS**: Enable TLS between proxy and RDPGW in production environments.
 
 ## Validation
 
-Test header authentication:
+Test header authentication via your proxy (the request must reach RDPGW from a `TrustedProxies` CIDR):
 ```bash
 curl -H "X-Forwarded-User: testuser@domain.com" \
      https://your-proxy/connect
+```
+
+A direct request to RDPGW from outside the trusted-proxy range must return `401 Unauthorized` even when the user header is set:
+```bash
+curl -H "X-Forwarded-User: testuser@domain.com" \
+     https://rdpgw-internal/connect
+# HTTP/1.1 401 Unauthorized
+# Untrusted upstream
 ```

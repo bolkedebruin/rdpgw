@@ -74,6 +74,9 @@ type HeaderConfig struct {
 	UserIdHeader    string `koanf:"useridheader"`
 	EmailHeader     string `koanf:"emailheader"`
 	DisplayNameHeader string `koanf:"displaynameheader"`
+	// TrustedProxies is the CIDR allow-list of upstream proxies allowed to
+	// stamp UserHeader (and friends). Empty disables header auth at runtime.
+	TrustedProxies  []string `koanf:"trustedproxies"`
 }
 
 type RDGCapsConfig struct {
