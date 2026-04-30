@@ -119,6 +119,10 @@ func TestHeaderAuthenticated(t *testing.T) {
 				w.WriteHeader(http.StatusOK)
 			})
 
+			// httptest.NewRequest sets RemoteAddr to 192.0.2.1:1234, so trust
+			// the surrounding TEST-NET-1 range for header-auth scenarios.
+			trusted := []string{"192.0.2.0/24"}
+
 			// Determine header config based on test case
 			var headerConfig *HeaderConfig
 			switch tc.name {
@@ -128,28 +132,33 @@ func TestHeaderAuthenticated(t *testing.T) {
 					UserIdHeader:      "X-MS-CLIENT-PRINCIPAL-ID",
 					EmailHeader:       "X-MS-CLIENT-PRINCIPAL-EMAIL",
 					DisplayNameHeader: "",
+					TrustedProxies:    trusted,
 				}
 			case "google_iap_headers":
 				headerConfig = &HeaderConfig{
-					UserHeader:   "X-Goog-Authenticated-User-Email",
-					UserIdHeader: "X-Goog-Authenticated-User-ID",
-					EmailHeader:  "X-Goog-Authenticated-User-Email",
+					UserHeader:     "X-Goog-Authenticated-User-Email",
+					UserIdHeader:   "X-Goog-Authenticated-User-ID",
+					EmailHeader:    "X-Goog-Authenticated-User-Email",
+					TrustedProxies: trusted,
 				}
 			case "aws_alb_headers":
 				headerConfig = &HeaderConfig{
 					UserHeader:        "X-Amzn-Oidc-Subject",
 					EmailHeader:       "X-Amzn-Oidc-Email",
 					DisplayNameHeader: "X-Amzn-Oidc-Name",
+					TrustedProxies:    trusted,
 				}
 			case "custom_headers":
 				headerConfig = &HeaderConfig{
 					UserHeader:        "X-Forwarded-User",
 					EmailHeader:       "X-Forwarded-Email",
 					DisplayNameHeader: "X-Forwarded-Name",
+					TrustedProxies:    trusted,
 				}
 			default:
 				headerConfig = &HeaderConfig{
-					UserHeader: "X-Forwarded-User",
+					UserHeader:     "X-Forwarded-User",
+					TrustedProxies: trusted,
 				}
 			}
 
@@ -273,6 +282,64 @@ func TestHeaderConfig(t *testing.T) {
 	}
 }
 
+// TestHeaderAuthRequiresTrustedProxy asserts that the user header is honored
+// only when the request arrives from an operator-declared trusted proxy.
+// Without that gate the header is mintable by any caller on the network — an
+// authentication bypass.
+func TestHeaderAuthRequiresTrustedProxy(t *testing.T) {
+	cases := []struct {
+		name       string
+		trusted    []string
+		remoteAddr string
+		wantStatus int
+	}{
+		{
+			name:       "untrusted remote with no allow-list",
+			trusted:    nil,
+			remoteAddr: "198.51.100.7:5678",
+			wantStatus: http.StatusUnauthorized,
+		},
+		{
+			name:       "untrusted remote outside allow-list",
+			trusted:    []string{"10.0.0.0/8"},
+			remoteAddr: "198.51.100.7:5678",
+			wantStatus: http.StatusUnauthorized,
+		},
+		{
+			name:       "trusted remote inside allow-list",
+			trusted:    []string{"10.0.0.0/8"},
+			remoteAddr: "10.1.2.3:5678",
+			wantStatus: http.StatusOK,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := &HeaderConfig{
+				UserHeader:     "X-Forwarded-User",
+				TrustedProxies: tc.trusted,
+			}
+			h := cfg.New()
+			auth := h.Authenticated(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			}))
+
+			req := httptest.NewRequest("GET", "/test", nil)
+			req.RemoteAddr = tc.remoteAddr
+			req.Header.Set("X-Forwarded-User", "administrator")
+			req = identity.AddToRequestCtx(identity.NewUser(), req)
+
+			rr := httptest.NewRecorder()
+			auth.ServeHTTP(rr, req)
+
+			if rr.Code != tc.wantStatus {
+				t.Fatalf("status: got %d, want %d (RemoteAddr=%q, trusted=%v)",
+					rr.Code, tc.wantStatus, tc.remoteAddr, tc.trusted)
+			}
+		})
+	}
+}
+
 // Test that the authentication flow sets the correct attributes
 func TestHeaderAttributesSetting(t *testing.T) {
 	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -296,8 +363,9 @@ func TestHeaderAttributesSetting(t *testing.T) {
 	})
 
 	headerConfig := &HeaderConfig{
-		UserHeader:   "X-Forwarded-User",
-		UserIdHeader: "X-Forwarded-User-Id",
+		UserHeader:     "X-Forwarded-User",
+		UserIdHeader:   "X-Forwarded-User-Id",
+		TrustedProxies: []string{"192.0.2.0/24"},
 	}
 	headerAuth := headerConfig.New()
 	authHandler := headerAuth.Authenticated(testHandler)

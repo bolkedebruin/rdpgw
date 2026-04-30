@@ -247,12 +247,16 @@ func main() {
 
 	// header auth (configurable proxy)
 	if conf.Server.HeaderEnabled() {
-		log.Printf("enabling header authentication with user header: %s", conf.Header.UserHeader)
+		if len(conf.Header.TrustedProxies) == 0 {
+			log.Fatalf("header authentication is enabled but `header.trustedproxies` is empty; refusing to start in an exploitable configuration")
+		}
+		log.Printf("enabling header authentication with user header: %s (trusted proxies: %v)", conf.Header.UserHeader, conf.Header.TrustedProxies)
 		headerConfig := &web.HeaderConfig{
 			UserHeader:        conf.Header.UserHeader,
 			UserIdHeader:      conf.Header.UserIdHeader,
 			EmailHeader:       conf.Header.EmailHeader,
 			DisplayNameHeader: conf.Header.DisplayNameHeader,
+			TrustedProxies:    conf.Header.TrustedProxies,
 		}
 		headerAuth := headerConfig.New()
 		r.Handle("/connect", headerAuth.Authenticated(http.HandlerFunc(h.HandleDownload)))
