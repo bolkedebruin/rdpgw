@@ -2,6 +2,7 @@ package rdp
 
 import (
 	"log"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -204,4 +205,135 @@ func TestApplyOverrides_NilValuesNoOp(t *testing.T) {
 	if err := b.ApplyOverrides(nil, []string{"use multimon"}); err != nil {
 		t.Errorf("ApplyOverrides(nil) should be a no-op, got: %v", err)
 	}
+}
+
+// TestStringFieldBoundaryHygiene asserts that CR/LF/NUL inside a string
+// field cannot introduce additional rendered directives. The .rdp format is
+// line-delimited, so an unfiltered \r\n turns the value into an extra
+// `key:type:value` line that the caller never set.
+func TestStringFieldBoundaryHygiene(t *testing.T) {
+	cases := []struct {
+		name  string
+		clean func(*Builder)
+		dirty func(*Builder)
+	}{
+		{
+			name:  "username with CRLF",
+			clean: func(b *Builder) { b.Settings.Username = "alice" },
+			dirty: func(b *Builder) {
+				b.Settings.Username = "alice\r\nalternate shell:s:notepad.exe"
+			},
+		},
+		{
+			name:  "domain with CRLF",
+			clean: func(b *Builder) { b.Settings.Domain = "ad" },
+			dirty: func(b *Builder) {
+				b.Settings.Domain = "ad\r\nalternate shell:s:notepad.exe"
+			},
+		},
+		{
+			name:  "full address with CRLF",
+			clean: func(b *Builder) { b.Settings.FullAddress = "host:3389" },
+			dirty: func(b *Builder) {
+				b.Settings.FullAddress = "host:3389\r\nalternate shell:s:notepad.exe"
+			},
+		},
+		{
+			name:  "alternate shell with bare LF",
+			clean: func(b *Builder) { b.Settings.AlternateShell = "explorer.exe" },
+			dirty: func(b *Builder) {
+				b.Settings.AlternateShell = "explorer.exe\nshell working directory:s:c:\\"
+			},
+		},
+		{
+			name:  "username with embedded NUL",
+			clean: func(b *Builder) { b.Settings.Username = "alicebob" },
+			dirty: func(b *Builder) { b.Settings.Username = "alice\x00bob" },
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cleanB := NewBuilder()
+			dirtyB := NewBuilder()
+			tc.clean(cleanB)
+			tc.dirty(dirtyB)
+
+			cleanKeys := renderedKeys(cleanB.String())
+			dirtyKeys := renderedKeys(dirtyB.String())
+
+			if extra := keysExtra(dirtyKeys, cleanKeys); len(extra) > 0 {
+				t.Errorf("dirty value introduced extra rendered keys: %v\n"+
+					"clean keys: %v\ndirty keys: %v\nfull dirty output:\n%s",
+					extra, cleanKeys, dirtyKeys, dirtyB.String())
+			}
+
+			out := dirtyB.String()
+			if strings.ContainsRune(out, 0x00) {
+				t.Errorf("output contains NUL: %q", out)
+			}
+
+			// Bare CR or LF is a line break for many RDP parsers (mstsc
+			// included) even when the renderer uses CRLF.
+			for i := 0; i < len(out); i++ {
+				switch out[i] {
+				case '\r':
+					if i+1 >= len(out) || out[i+1] != '\n' {
+						t.Errorf("bare CR at byte %d: %q", i, out)
+					}
+				case '\n':
+					if i == 0 || out[i-1] != '\r' {
+						t.Errorf("bare LF at byte %d: %q", i, out)
+					}
+				}
+			}
+
+			for i, line := range strings.Split(strings.TrimRight(out, CRLF), CRLF) {
+				if line == "" {
+					continue
+				}
+				parts := strings.SplitN(line, ":", 3)
+				if len(parts) != 3 {
+					t.Errorf("line %d is not of form key:type:value: %q", i, line)
+					continue
+				}
+				switch parts[1] {
+				case "s", "i", "b":
+				default:
+					t.Errorf("line %d has unknown type tag %q: %q", i, parts[1], line)
+				}
+			}
+		})
+	}
+}
+
+func renderedKeys(out string) []string {
+	var keys []string
+	for _, line := range strings.Split(strings.TrimRight(out, CRLF), CRLF) {
+		if line == "" {
+			continue
+		}
+		if i := strings.IndexByte(line, ':'); i > 0 {
+			keys = append(keys, line[:i])
+		}
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// keysExtra is a multiset diff: each occurrence in want consumes one in have.
+func keysExtra(want, have []string) []string {
+	counts := make(map[string]int, len(have))
+	for _, k := range have {
+		counts[k]++
+	}
+	var extra []string
+	for _, k := range want {
+		if counts[k] > 0 {
+			counts[k]--
+			continue
+		}
+		extra = append(extra, k)
+	}
+	return extra
 }
