@@ -9,6 +9,11 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ### Changed
 
+- `X-Forwarded-For` is now honored only when the request arrives from
+  a `Server.TrustedProxies` CIDR. The default `Server.TrustedProxies`
+  is empty, so by default the request's `RemoteAddr` (host portion) is
+  the source of `AttrClientIp`. See [UPGRADING.md](UPGRADING.md) if
+  your deployment relies on a fronting proxy stamping XFF.
 - `server.hostselection: any` now refuses destinations that resolve to
   loopback, RFC1918, link-local, IPv6 ULA, unspecified, or multicast
   addresses, and only forwards to ports in `Server.AllowedDestinationPorts`
@@ -20,5 +25,6 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ### Added
 
+- `Server.TrustedProxies` (`[]string`, CIDR, default empty).
 - `Server.AllowedDestinationPorts` (`[]int`, default `[3389]`).
 - `Server.AllowPrivateDestinations` (`bool`, default `false`).

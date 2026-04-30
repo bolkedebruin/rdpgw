@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+### `X-Forwarded-For` is no longer trusted by default
+
+Previously rdpgw read the first `X-Forwarded-For` entry into the
+request identity unconditionally. The resulting client IP attribute is
+later compared against the value embedded in the gateway access
+cookie, so any caller reaching rdpgw directly could set
+`X-Forwarded-For` to any value and steer that binding.
+
+After upgrading, `X-Forwarded-For` is honored only when the request
+arrives from a `Server.TrustedProxies` CIDR. Otherwise the client IP
+comes from `r.RemoteAddr`. The default `Server.TrustedProxies` is
+empty, so by default `X-Forwarded-For` is ignored entirely.
+
+If your deployment fronts rdpgw with a reverse proxy or load balancer
+on a known subnet, list it:
+
+```yaml
+Server:
+  TrustedProxies:
+    - 10.0.0.0/8        # the proxy's egress subnet
+```
+
+If no proxy fronts rdpgw, leave `TrustedProxies` empty -- the
+request's `RemoteAddr` is the right source for client identity in
+that case.
+
 ### `hostselection: any` now refuses non-routable destinations and non-RDP ports by default
 
 Previously, when `server.hostselection: any` was set, rdpgw forwarded
