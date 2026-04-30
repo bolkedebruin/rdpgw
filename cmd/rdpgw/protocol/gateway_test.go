@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/identity"
+	"github.com/patrickmn/go-cache"
 )
 
 func TestHeaderHasToken(t *testing.T) {
@@ -142,5 +143,65 @@ func TestHandleGatewayProtocolRouting(t *testing.T) {
 				t.Errorf("status line = %q, want %q", line, tc.wantStatusLine)
 			}
 		})
+	}
+}
+
+// TestTunnelOwnershipEnforced asserts that an Rdg-Connection-Id which already
+// has a cached tunnel cannot be reused by a different identity. The connection
+// id travels in plain HTTP headers, so a client that learns or guesses one
+// must not be able to attach to the original tunnel — the cache is for
+// matching the two halves of the same client's session, not for authorizing
+// access.
+func TestTunnelOwnershipEnforced(t *testing.T) {
+	connId := "shared-connid-ownership"
+
+	aliceID := identity.NewUser()
+	aliceID.SetUserName("alice")
+	aliceID.SetAttribute(identity.AttrRemoteAddr, "10.1.1.1:1234")
+	aliceID.SetAttribute(identity.AttrClientIp, "10.1.1.1")
+	c.Set(connId, &Tunnel{
+		RDGId:      connId,
+		RemoteAddr: "10.1.1.1:1234",
+		User:       aliceID,
+	}, cache.DefaultExpiration)
+	defer c.Delete(connId)
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		bob := identity.NewUser()
+		bob.SetUserName("bob")
+		bob.SetAttribute(identity.AttrRemoteAddr, "10.2.2.2:5678")
+		bob.SetAttribute(identity.AttrClientIp, "10.2.2.2")
+		r = identity.AddToRequestCtx(bob, r)
+		(&Gateway{}).HandleGatewayProtocol(w, r)
+	})
+	srv := httptest.NewServer(handler)
+	defer srv.Close()
+
+	addr := strings.TrimPrefix(srv.URL, "http://")
+	conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer conn.Close()
+	if err := conn.SetDeadline(time.Now().Add(3 * time.Second)); err != nil {
+		t.Fatalf("set deadline: %v", err)
+	}
+
+	req := "RDG_OUT_DATA /remoteDesktopGateway/ HTTP/1.1\r\n" +
+		"Host: " + addr + "\r\n" +
+		"Rdg-Connection-Id: " + connId + "\r\n" +
+		"\r\n"
+	if _, err := conn.Write([]byte(req)); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	line, err := bufio.NewReader(conn).ReadString('\n')
+	if err != nil {
+		t.Fatalf("read status line: %v", err)
+	}
+	line = strings.TrimRight(line, "\r\n")
+
+	if strings.HasPrefix(line, "HTTP/1.1 2") {
+		t.Fatalf("a different identity attached to a cached tunnel via Rdg-Connection-Id (status %q); the header was treated as authorization", line)
 	}
 }

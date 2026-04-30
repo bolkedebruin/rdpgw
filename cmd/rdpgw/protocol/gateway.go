@@ -75,6 +75,11 @@ func (g *Gateway) HandleGatewayProtocol(w http.ResponseWriter, r *http.Request) 
 		}
 	} else {
 		t = x.(*Tunnel)
+		if !tunnelOwnerMatches(t, id) {
+			log.Printf("rejecting reuse of Rdg-Connection-Id %q from a different identity", connId)
+			http.Error(w, "Tunnel is owned by a different session", http.StatusUnauthorized)
+			return
+		}
 	}
 	ctx = context.WithValue(ctx, CtxTunnel, t)
 
@@ -104,6 +109,25 @@ func (g *Gateway) HandleGatewayProtocol(w http.ResponseWriter, r *http.Request) 
 	} else if r.Method == MethodRDGIN {
 		g.handleLegacyProtocol(w, r.WithContext(ctx), t)
 	}
+}
+
+// tunnelOwnerMatches reports whether the cached tunnel was opened by the same
+// identity making the current request. The Rdg-Connection-Id is a client-
+// chosen header that pairs the two halves of a session; without this check
+// any caller who learns or guesses one can attach to another user's tunnel.
+func tunnelOwnerMatches(t *Tunnel, id identity.Identity) bool {
+	if t == nil || t.User == nil || id == nil {
+		return false
+	}
+	if t.User.UserName() == "" || t.User.UserName() != id.UserName() {
+		return false
+	}
+	cachedIp, _ := t.User.GetAttribute(identity.AttrClientIp).(string)
+	reqIp, _ := id.GetAttribute(identity.AttrClientIp).(string)
+	if cachedIp == "" {
+		return false
+	}
+	return cachedIp == reqIp
 }
 
 // headerHasToken reports whether the HTTP header named by name contains
