@@ -24,7 +24,9 @@ const (
 var opts struct {
 	ServiceName string `short:"n" long:"name" default:"rdpgw" description:"the PAM service name to use"`
 	SocketAddr  string `short:"s" long:"socket" default:"/tmp/rdpgw-auth.sock" description:"the location of the socket"`
-	ConfigFile string `short:"c" long:"conf" default:"rdpgw-auth.yaml" description:"users config file for NTLM (yaml)"`
+	ConfigFile  string `short:"c" long:"conf" default:"rdpgw-auth.yaml" description:"users config file for NTLM (yaml)"`
+	AllowUID    []int  `long:"allow-uid" description:"additional UIDs allowed to connect to the socket; the daemon's own UID is always allowed (repeatable)"`
+	AllowGID    []int  `long:"allow-gid" description:"GIDs allowed to connect to the socket (repeatable)"`
 }
 
 type AuthServiceImpl struct {
@@ -127,12 +129,19 @@ func main() {
 	}
 	cleanup()
 
-	oldUmask := syscall.Umask(0)
+	oldUmask := syscall.Umask(0117)
 	listener, err := net.Listen(protocol, opts.SocketAddr)
 	syscall.Umask(oldUmask)
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	// The daemon's own UID is always permitted; additional callers must
+	// be enumerated by the operator. This stops any local user on a
+	// shared host from speaking gRPC against the PAM oracle.
+	allowedUIDs := append([]int{os.Getuid()}, opts.AllowUID...)
+	listener = newGatedListener(listener, allowedUIDs, opts.AllowGID)
+
 	server := grpc.NewServer()
 	db := database.NewConfig(conf.Users)
 	service := NewAuthService(opts.ServiceName, db)

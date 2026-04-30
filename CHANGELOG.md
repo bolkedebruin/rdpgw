@@ -9,6 +9,11 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ### Changed
 
+- `rdpgw-auth` now creates its socket with mode `0660` and accepts only
+  connections whose peer UID is on an allow-list (default: the daemon's
+  own UID). Operators running rdpgw and rdpgw-auth as different users
+  must list the gateway's UID via `--allow-uid` or share a group via
+  `--allow-gid`. See [UPGRADING.md](UPGRADING.md).
 - `X-Forwarded-For` is now honored only when the request arrives from
   a `Server.TrustedProxies` CIDR. The default `Server.TrustedProxies`
   is empty, so by default the request's `RemoteAddr` (host portion) is
@@ -25,6 +30,7 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ### Added
 
+- `rdpgw-auth --allow-uid` and `--allow-gid` flags (repeatable).
 - `Server.TrustedProxies` (`[]string`, CIDR, default empty).
 - `Server.AllowedDestinationPorts` (`[]int`, default `[3389]`).
 - `Server.AllowPrivateDestinations` (`bool`, default `false`).

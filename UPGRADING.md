@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+### `rdpgw-auth` only accepts connections from the daemon's own UID by default
+
+The auth daemon previously created its socket world-writable
+(`Umask(0)`) and accepted any local UID that could `connect(2)` to it.
+Two changes:
+
+* The socket is now created with mode `0660` (no access for `other`).
+* The daemon reads `SO_PEERCRED` on every accepted connection and
+  rejects callers whose UID is not on the allow-list. The default
+  allow-list is the daemon's own UID.
+
+If `rdpgw` and `rdpgw-auth` run as the same user, no action is
+required. Otherwise, list the gateway's UID (or a shared GID):
+
+```
+./rdpgw-auth -s /tmp/rdpgw-auth.sock --allow-uid 1001
+./rdpgw-auth -s /tmp/rdpgw-auth.sock --allow-gid 1100
+```
+
+`--allow-uid` and `--allow-gid` are repeatable.
+
 ### `X-Forwarded-For` is no longer trusted by default
 
 Previously rdpgw read the first `X-Forwarded-For` entry into the
