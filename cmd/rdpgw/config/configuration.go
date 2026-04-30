@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -12,6 +13,45 @@ import (
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
 )
+
+// knownDefaultSecrets is the list of placeholder session/token-key values
+// that appear in README.md and the dev compose files. Operators that
+// copy-paste the examples into a real deployment would be running with
+// widely-published keys, so the gateway refuses to start when one of these
+// is set for any of the session-/token-binding fields.
+var knownDefaultSecrets = []string{
+	"thisisasessionkeyreplacethisjetzt",
+	"thisisasessionkeyreplacethisjetz",
+	"thisisasessionkeyreplacethisnunu!",
+	"thisisasessionkeyreplacethisnunu",
+	"thisisasessionencryptionkey12345",
+}
+
+func checkDefaultSecrets(c *Configuration) error {
+	fields := []struct {
+		name  string
+		value string
+	}{
+		{"server.sessionkey", c.Server.SessionKey},
+		{"server.sessionencryptionkey", c.Server.SessionEncryptionKey},
+		{"security.paatokensigningkey", c.Security.PAATokenSigningKey},
+		{"security.paatokenencryptionkey", c.Security.PAATokenEncryptionKey},
+		{"security.usertokensigningkey", c.Security.UserTokenSigningKey},
+		{"security.usertokenencryptionkey", c.Security.UserTokenEncryptionKey},
+		{"security.querytokensigningkey", c.Security.QueryTokenSigningKey},
+	}
+	for _, f := range fields {
+		if f.value == "" {
+			continue
+		}
+		for _, def := range knownDefaultSecrets {
+			if f.value == def {
+				return fmt.Errorf("%s is set to a known placeholder value (%q); replace it with a unique secret before starting", f.name, def)
+			}
+		}
+	}
+	return nil
+}
 
 const (
 	TlsDisable = "disable"
@@ -218,6 +258,10 @@ func Load(configFile string) Configuration {
 	k.UnmarshalWithConf("Security", &Conf.Security, koanfTag)
 	k.UnmarshalWithConf("Client", &Conf.Client, koanfTag)
 	k.UnmarshalWithConf("Kerberos", &Conf.Kerberos, koanfTag)
+
+	if err := checkDefaultSecrets(&Conf); err != nil {
+		log.Fatalf("refusing to start: %s", err)
+	}
 
 	if len(Conf.Security.PAATokenEncryptionKey) != 32 {
 		Conf.Security.PAATokenEncryptionKey, _ = security.GenerateRandomString(32)
