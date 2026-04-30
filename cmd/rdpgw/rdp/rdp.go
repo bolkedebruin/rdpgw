@@ -232,7 +232,7 @@ func (rb *Builder) addStructToString(st interface{}, sb *strings.Builder) {
 		switch f.Kind() {
 		case reflect.String:
 			sb.WriteString("s:")
-			sb.WriteString(f.Value().(string))
+			sb.WriteString(sanitizeRdpValue(f.Name(), f.Value().(string)))
 		case reflect.Int:
 			sb.WriteString("i:")
 			fmt.Fprintf(sb, "%d", f.Value())
@@ -307,6 +307,35 @@ func initStruct(st interface{}) {
 			log.Fatalf("cannot init rdp struct: %s", err)
 		}
 	}
+}
+
+// sanitizeRdpValue strips ASCII control bytes (< 0x20 and 0x7F) from a string
+// before it is written into an .rdp file. Any control byte in a value can be
+// reinterpreted by RDP clients as a directive boundary, so an unfiltered \r,
+// \n or NUL inside e.g. a username produces extra signed directives that the
+// caller never set.
+func sanitizeRdpValue(field, v string) string {
+	clean := true
+	for i := 0; i < len(v); i++ {
+		if c := v[i]; c < 0x20 || c == 0x7f {
+			clean = false
+			break
+		}
+	}
+	if clean {
+		return v
+	}
+	var b strings.Builder
+	b.Grow(len(v))
+	for i := 0; i < len(v); i++ {
+		c := v[i]
+		if c < 0x20 || c == 0x7f {
+			continue
+		}
+		b.WriteByte(c)
+	}
+	log.Printf("rdp: stripped control bytes from field %s", field)
+	return b.String()
 }
 
 func setVariable(f *structs.Field, v string) error {
