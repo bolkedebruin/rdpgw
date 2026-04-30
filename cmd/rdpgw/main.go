@@ -101,6 +101,8 @@ func main() {
 		conf.Server.MaxSessionLength,
 	)
 
+	web.InitTrustedProxies(conf.Server.TrustedProxies)
+
 	// configure web backend
 	w := &web.Config{
 		QueryInfo:        security.QueryInfo,

@@ -178,6 +178,12 @@ Server:
  # link-local / IPv6 ULA / unspecified / multicast destinations unless
  # this is true. Default false. Has no effect on the curated host modes.
  # AllowPrivateDestinations: false
+ # CIDR allow-list of upstream proxies whose X-Forwarded-For header is
+ # trusted when deriving the client IP. Empty (default) makes the
+ # gateway ignore X-Forwarded-For and use the request's RemoteAddr.
+ # Set this to the proxy/load-balancer subnet that fronts the gateway.
+ # TrustedProxies:
+ #  - 10.0.0.0/8
  # a random strings of at least 32 characters to secure cookies on the client
  # make sure to share this across the different pods
  SessionKey: thisisasessionkeyreplacethisjetzt

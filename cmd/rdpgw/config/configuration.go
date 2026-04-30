@@ -64,6 +64,11 @@ type ServerConfig struct {
 	// forward to loopback, RFC1918, link-local, and IPv6 ULA targets.
 	// Default false.
 	AllowPrivateDestinations bool `koanf:"allowprivatedestinations"`
+	// TrustedProxies is the CIDR allow-list of upstream proxies whose
+	// X-Forwarded-For header is honored when deriving the client IP.
+	// Empty (the default) makes the gateway ignore X-Forwarded-For
+	// entirely and use r.RemoteAddr.
+	TrustedProxies []string `koanf:"trustedproxies"`
 }
 
 type KerberosConfig struct {
