@@ -84,9 +84,10 @@ func TestGetHost(t *testing.T) {
 		t.Fatalf("host %s is not equal to input %s", host, hosts[0])
 	}
 
-	// check any
+	// check any -- TEST-NET-3 literal stays in the policy's "publicly
+	// routable" branch so this case still exercises the happy path.
 	c.HostSelection = "any"
-	test := "bla.bla.com"
+	test := "203.0.113.5:3389"
 	vals.Set("host", test)
 	u.RawQuery = vals.Encode()
 	h = c.NewHandler()
@@ -116,6 +117,77 @@ func TestGetHost(t *testing.T) {
 	}
 	if host != hosts[0] {
 		t.Fatalf("%s does not equal %s", host, hosts[0])
+	}
+}
+
+// TestGetHostAnyRejectsSensitiveDestinations asserts that with
+// HostSelection="any" the gateway refuses hosts that resolve to addresses
+// it should not be reachable as: loopback, RFC1918, link-local, the cloud
+// metadata service, IPv6 loopback / ULA. Without this check an
+// authenticated user can use the gateway as a generic TCP relay against
+// any internal target the gateway can reach.
+func TestGetHostAnyRejectsSensitiveDestinations(t *testing.T) {
+	cases := []struct {
+		name string
+		host string
+	}{
+		{"loopback v4", "127.0.0.1:3389"},
+		{"loopback name", "localhost:3389"},
+		{"cloud metadata", "169.254.169.254:80"},
+		{"rfc1918 10/8", "10.0.0.5:3389"},
+		{"rfc1918 192.168/16", "192.168.1.10:3389"},
+		{"rfc1918 172.16/12", "172.16.5.10:3389"},
+		{"ipv6 loopback", "[::1]:3389"},
+		{"ipv6 ula", "[fc00::1]:3389"},
+		{"non-rdp port on public host", "203.0.113.5:6379"},
+	}
+
+	c := Config{
+		HostSelection: "any",
+		Hosts:         hosts,
+	}
+	h := c.NewHandler()
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			u := &url.URL{Host: "example.com"}
+			vals := u.Query()
+			vals.Set("host", tc.host)
+			u.RawQuery = vals.Encode()
+
+			got, err := h.getHost(context.Background(), u)
+			if err == nil {
+				t.Errorf("getHost(%q) returned %q with no error; sensitive destinations must be refused in 'any' mode", tc.host, got)
+			}
+		})
+	}
+}
+
+// TestGetHostAnyAllowsExplicitOptIn confirms that an operator can re-enable
+// access to private destinations and additional ports for `any` mode when
+// the deployment legitimately needs it.
+func TestGetHostAnyAllowsExplicitOptIn(t *testing.T) {
+	c := Config{
+		HostSelection:            "any",
+		Hosts:                    hosts,
+		AllowedDestinationPorts:  []int{3389, 5985},
+		AllowPrivateDestinations: true,
+	}
+	h := c.NewHandler()
+
+	for _, target := range []string{"10.0.0.1:3389", "127.0.0.1:5985"} {
+		u := &url.URL{Host: "example.com"}
+		vals := u.Query()
+		vals.Set("host", target)
+		u.RawQuery = vals.Encode()
+
+		got, err := h.getHost(context.Background(), u)
+		if err != nil {
+			t.Errorf("getHost(%q) rejected with %v; explicit opt-in must allow private and extra-port destinations", target, err)
+		}
+		if got != target {
+			t.Errorf("getHost(%q) = %q, want unchanged", target, got)
+		}
 	}
 }
 

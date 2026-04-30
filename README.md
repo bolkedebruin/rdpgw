@@ -166,8 +166,18 @@ Server:
  #  - roundrobin, which selects a random host from the list (default)
  #  - signed, a listed host specified in the signed query parameter
  #  - unsigned, a listed host specified in the query parameter
- #  - any, insecurely allow any host specified in the query parameter
+ #  - any, allow any host specified in the query parameter, gated by the
+ #    AllowedDestinationPorts / AllowPrivateDestinations options below.
  HostSelection: roundrobin 
+ # When HostSelection: any, only these TCP ports may be forwarded to.
+ # Empty defaults to [3389]. Ignored for the curated host modes
+ # (roundrobin, signed, unsigned).
+ # AllowedDestinationPorts:
+ #  - 3389
+ # When HostSelection: any, refuse to forward to loopback / RFC1918 /
+ # link-local / IPv6 ULA / unspecified / multicast destinations unless
+ # this is true. Default false. Has no effect on the curated host modes.
+ # AllowPrivateDestinations: false
  # a random strings of at least 32 characters to secure cookies on the client
  # make sure to share this across the different pods
  SessionKey: thisisasessionkeyreplacethisjetzt

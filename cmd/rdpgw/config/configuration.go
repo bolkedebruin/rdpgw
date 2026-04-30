@@ -56,6 +56,14 @@ type ServerConfig struct {
 	Authentication       []string `koanf:"authentication"`
 	AuthSocket           string   `koanf:"authsocket"`
 	BasicAuthTimeout     int      `koanf:"basicauthtimeout"`
+	// AllowedDestinationPorts gates the TCP ports `hostselection: any` may
+	// forward to. Empty defaults to {3389}. Ignored for the curated host
+	// modes (roundrobin, signed, unsigned).
+	AllowedDestinationPorts []int `koanf:"alloweddestinationports"`
+	// AllowPrivateDestinations, when true, lets `hostselection: any`
+	// forward to loopback, RFC1918, link-local, and IPv6 ULA targets.
+	// Default false.
+	AllowPrivateDestinations bool `koanf:"allowprivatedestinations"`
 }
 
 type KerberosConfig struct {

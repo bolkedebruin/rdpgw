@@ -114,10 +114,12 @@ func main() {
 			NoUsername:         conf.Client.NoUsername,
 			OverridableRdpKeys: conf.Client.RdpOverridableKeys,
 		},
-		GatewayAddress: url,
-		TemplateFile:   conf.Client.Defaults,
-		RdpSigningCert: conf.Client.SigningCert,
-		RdpSigningKey:  conf.Client.SigningKey,
+		GatewayAddress:           url,
+		TemplateFile:             conf.Client.Defaults,
+		RdpSigningCert:           conf.Client.SigningCert,
+		RdpSigningKey:            conf.Client.SigningKey,
+		AllowedDestinationPorts:  conf.Server.AllowedDestinationPorts,
+		AllowPrivateDestinations: conf.Server.AllowPrivateDestinations,
 	}
 
 	if conf.Caps.TokenAuth {

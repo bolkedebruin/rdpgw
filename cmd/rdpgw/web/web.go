@@ -12,10 +12,12 @@ import (
 	"html/template"
 	"log"
 	rnd "math/rand"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -42,6 +44,16 @@ type Config struct {
 	RdpSigningCert     string
 	RdpSigningKey      string
 	TemplatesPath      string
+	// AllowedDestinationPorts gates which TCP ports the `any` host-selection
+	// mode may forward to. Empty defaults to {3389}. Ignored for
+	// roundrobin / signed / unsigned where the operator already curates the
+	// hosts list.
+	AllowedDestinationPorts []int
+	// AllowPrivateDestinations, when true, lets `any` mode forward to
+	// loopback / RFC1918 / link-local / IPv6 ULA destinations. Default
+	// false: only globally-routable addresses are accepted. Operators that
+	// genuinely need to reach private destinations from `any` must opt in.
+	AllowPrivateDestinations bool
 }
 
 // WebConfig represents the web interface configuration
@@ -96,6 +108,88 @@ type Handler struct {
 	templatesPath      string
 	webConfig          *WebConfig
 	htmlTemplate       *template.Template
+	destPolicy         destinationPolicy
+}
+
+// destinationPolicy gates the host strings accepted in `any` host-selection
+// mode. With `signed` / `unsigned` / `roundrobin` the operator curates the
+// hosts list; with `any` the value comes from the request, so the gateway
+// must ensure it isn't being asked to act as a TCP relay against an
+// internal-only target.
+type destinationPolicy struct {
+	allowedPorts             map[int]struct{}
+	allowPrivateDestinations bool
+}
+
+func newDestinationPolicy(allowedPorts []int, allowPrivate bool) destinationPolicy {
+	if len(allowedPorts) == 0 {
+		allowedPorts = []int{3389}
+	}
+	set := make(map[int]struct{}, len(allowedPorts))
+	for _, p := range allowedPorts {
+		set[p] = struct{}{}
+	}
+	return destinationPolicy{
+		allowedPorts:             set,
+		allowPrivateDestinations: allowPrivate,
+	}
+}
+
+// allow validates a host:port (or bare host) string against the policy.
+// Returns nil if the destination is acceptable, an error otherwise. The
+// zero-value policy is treated as the secure default ({3389}, public-only).
+func (p destinationPolicy) allow(hostport string) error {
+	host, port, err := net.SplitHostPort(hostport)
+	if err != nil {
+		// no port present -- assume the protocol default
+		host = hostport
+		port = "3389"
+	}
+	portNum, err := strconv.Atoi(port)
+	if err != nil {
+		return fmt.Errorf("invalid port %q in %q", port, hostport)
+	}
+	allowedPorts := p.allowedPorts
+	if len(allowedPorts) == 0 {
+		allowedPorts = map[int]struct{}{3389: {}}
+	}
+	if _, ok := allowedPorts[portNum]; !ok {
+		return fmt.Errorf("port %d not in allow-list", portNum)
+	}
+
+	if p.allowPrivateDestinations {
+		return nil
+	}
+
+	if ip := net.ParseIP(host); ip != nil {
+		return checkPublicIP(host, ip)
+	}
+	addrs, err := net.LookupIP(host)
+	if err != nil {
+		return fmt.Errorf("cannot resolve %q: %s", host, err)
+	}
+	for _, ip := range addrs {
+		if err := checkPublicIP(host, ip); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func checkPublicIP(host string, ip net.IP) error {
+	switch {
+	case ip.IsLoopback():
+		return fmt.Errorf("destination %q (%s) is loopback", host, ip)
+	case ip.IsPrivate():
+		return fmt.Errorf("destination %q (%s) is in a private range", host, ip)
+	case ip.IsLinkLocalUnicast():
+		return fmt.Errorf("destination %q (%s) is link-local", host, ip)
+	case ip.IsUnspecified():
+		return fmt.Errorf("destination %q (%s) is unspecified", host, ip)
+	case ip.IsMulticast():
+		return fmt.Errorf("destination %q (%s) is multicast", host, ip)
+	}
+	return nil
 }
 
 func (c *Config) NewHandler() *Handler {
@@ -115,6 +209,7 @@ func (c *Config) NewHandler() *Handler {
 		rdpOpts:            c.RdpOpts,
 		rdpDefaults:        c.TemplateFile,
 		templatesPath:      c.TemplatesPath,
+		destPolicy:         newDestinationPolicy(c.AllowedDestinationPorts, c.AllowPrivateDestinations),
 	}
 
 	// set up RDP signer if config values are set
@@ -400,6 +495,10 @@ func (h *Handler) getHost(ctx context.Context, u *url.URL) (string, error) {
 		hosts, ok := u.Query()["host"]
 		if !ok {
 			return "", errors.New("invalid query parameter")
+		}
+		if err := h.destPolicy.allow(hosts[0]); err != nil {
+			log.Printf("rejecting `any` destination %q: %s", hosts[0], err)
+			return "", fmt.Errorf("destination not allowed: %s", err)
 		}
 		return hosts[0], nil
 	default:

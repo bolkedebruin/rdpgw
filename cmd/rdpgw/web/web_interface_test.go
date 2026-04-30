@@ -341,9 +341,12 @@ func TestHostSelectionIntegration(t *testing.T) {
 			name:          "any host allowed",
 			hostSelection: "any",
 			hosts:         []string{"host1.com"},
-			queryParams:   "?host=any-host.com",
-			expectHost:    "any-host.com",
-			expectError:   false,
+			// TEST-NET-3 literal stays in the policy's "publicly
+			// routable + RDP port" branch, which is the only thing
+			// `any` mode accepts by default.
+			queryParams: "?host=203.0.113.5:3389",
+			expectHost:  "203.0.113.5:3389",
+			expectError: false,
 		},
 	}
 
