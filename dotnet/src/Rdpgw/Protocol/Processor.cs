@@ -117,7 +117,7 @@ public sealed class Processor
             throw new InvalidOperationException($"{E_PROXY_INTERNALERROR:x}: PAA cookie rejected, wrong state");
         }
         var (_, cookie) = TunnelRequest(data);
-        if (_gw.CheckPAACookie is not null && !await _gw.CheckPAACookie(cookie).ConfigureAwait(false))
+        if (_gw.CheckPAACookie is not null && !await _gw.CheckPAACookie(_tunnel.Context!, cookie).ConfigureAwait(false))
         {
             await _tunnel.WriteAsync(TunnelResponse(E_PROXY_COOKIE_AUTHENTICATION_ACCESS_DENIED)).ConfigureAwait(false);
             throw new UnauthorizedAccessException($"{E_PROXY_COOKIE_AUTHENTICATION_ACCESS_DENIED:x}: invalid PAA cookie");
@@ -135,7 +135,7 @@ public sealed class Processor
             throw new InvalidOperationException($"{E_PROXY_INTERNALERROR:x}: Tunnel auth rejected, wrong state");
         }
         var client = TunnelAuthRequest(data);
-        if (_gw.CheckClientName is not null && !await _gw.CheckClientName(client).ConfigureAwait(false))
+        if (_gw.CheckClientName is not null && !await _gw.CheckClientName(_tunnel.Context!, client).ConfigureAwait(false))
         {
             await _tunnel.WriteAsync(TunnelAuthResponse(ERROR_ACCESS_DENIED)).ConfigureAwait(false);
             throw new UnauthorizedAccessException($"{ERROR_ACCESS_DENIED:x}: Tunnel auth rejected, invalid client name");
@@ -154,7 +154,7 @@ public sealed class Processor
         }
         var (server, port) = ChannelRequest(data);
         var host = $"{server}:{port}";
-        if (_gw.CheckHost is not null && !await _gw.CheckHost(host).ConfigureAwait(false))
+        if (_gw.CheckHost is not null && !await _gw.CheckHost(_tunnel.Context!, host).ConfigureAwait(false))
         {
             await _tunnel.WriteAsync(ChannelResponse(E_PROXY_RAP_ACCESSDENIED)).ConfigureAwait(false);
             throw new UnauthorizedAccessException($"{E_PROXY_RAP_ACCESSDENIED:x}: denied by security policy");

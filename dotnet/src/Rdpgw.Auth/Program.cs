@@ -3,8 +3,6 @@ using Rdpgw.Auth;
 using Rdpgw.Auth.Config;
 using Rdpgw.Auth.Database;
 using Rdpgw.Auth.Ntlm;
-using Rdpgw.Auth.Pam;
-using Rdpgw.Auth.Unix;
 
 CommandLineOptions options;
 try

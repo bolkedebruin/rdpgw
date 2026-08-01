@@ -1,7 +1,6 @@
 using Grpc.Core;
 using Rdpgw.Auth.Database;
 using Rdpgw.Auth.Ntlm;
-using Rdpgw.Auth.Pam;
 using ProtoAuth = Rdpgw.Shared.Auth;
 
 namespace Rdpgw.Auth;

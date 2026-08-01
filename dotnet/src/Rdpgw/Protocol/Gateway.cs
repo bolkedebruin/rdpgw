@@ -11,9 +11,9 @@ public sealed class Gateway
     private const string MethodRDGOUT = "RDG_OUT_DATA";
     private static readonly MemoryCache Cache = new(new MemoryCacheOptions());
 
-    public Func<string, Task<bool>>? CheckPAACookie { get; set; }
-    public Func<string, Task<bool>>? CheckClientName { get; set; }
-    public Func<string, Task<bool>>? CheckHost { get; set; }
+    public Func<HttpContext, string, Task<bool>>? CheckPAACookie { get; set; }
+    public Func<HttpContext, string, Task<bool>>? CheckClientName { get; set; }
+    public Func<HttpContext, string, Task<bool>>? CheckHost { get; set; }
     public RedirectFlags RedirectFlags { get; set; } = new();
     public int IdleTimeout { get; set; }
     public bool SmartCardAuth { get; set; }
@@ -34,6 +34,7 @@ public sealed class Gateway
                 RDGId = connId,
                 RemoteAddr = Convert.ToString(id.GetAttribute(IdentityContext.AttrRemoteAddr)) ?? string.Empty,
                 User = id,
+                Context = context,
             };
         }
         else if (!TunnelOwnerMatches(tunnel, id))

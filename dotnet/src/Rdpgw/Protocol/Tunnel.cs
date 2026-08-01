@@ -1,4 +1,5 @@
 using System.Net.Sockets;
+using Microsoft.AspNetCore.Http;
 using Rdpgw.Identity;
 using Rdpgw.Transport;
 
@@ -14,6 +15,7 @@ public sealed class Tunnel
     public ITransport? TransportIn { get; internal set; }
     public ITransport? TransportOut { get; internal set; }
     public TcpClient? Rwc { get; set; }
+    public HttpContext? Context { get; set; }
     private long _bytesSent;
     private long _bytesReceived;
     public long BytesSent => Interlocked.Read(ref _bytesSent);

@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace Rdpgw.Auth.Pam;
+namespace Rdpgw.Auth;
 
 internal static class NativePam
 {
