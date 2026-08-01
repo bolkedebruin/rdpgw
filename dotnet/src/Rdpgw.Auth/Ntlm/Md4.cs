@@ -17,7 +17,7 @@ internal static class Md4
         uint a = 0x67452301, b = 0xefcdab89, c = 0x98badcfe, d = 0x10325476;
         for (var offset = 0; offset < message.Length; offset += 64)
         {
-            Span<uint> x = stackalloc uint[16];
+            var x = new uint[16];
             for (var i = 0; i < 16; i++)
             {
                 x[i] = BinaryPrimitives.ReadUInt32LittleEndian(message.AsSpan(offset + i * 4));

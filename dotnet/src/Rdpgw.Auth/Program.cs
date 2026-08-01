@@ -24,10 +24,11 @@ if (options.Help)
     return 0;
 }
 
+var socketPath = Path.GetFullPath(options.SocketAddr);
 var configuration = Configuration.Load(options.ConfigFile);
-if (File.Exists(options.SocketAddr))
+if (File.Exists(socketPath))
 {
-    File.Delete(options.SocketAddr);
+    File.Delete(socketPath);
 }
 
 if (options.AllowUid.Count > 0 || options.AllowGid.Count > 0)
@@ -44,7 +45,7 @@ builder.Services.AddSingleton<NtlmAuth>();
 builder.Services.AddSingleton<AuthService>();
 builder.WebHost.ConfigureKestrel(kestrel =>
 {
-    kestrel.ListenUnixSocket(options.SocketAddr, listenOptions =>
+    kestrel.ListenUnixSocket(socketPath, listenOptions =>
     {
         listenOptions.Protocols = HttpProtocols.Http2;
     });
@@ -73,12 +74,12 @@ finally
     }
 }
 
-if (OperatingSystem.IsLinux() && File.Exists(options.SocketAddr))
+if (OperatingSystem.IsLinux() && File.Exists(socketPath))
 {
-    var rc = NativeUnix.chmod(options.SocketAddr, Convert.ToUInt32("660", 8));
+    var rc = NativeUnix.chmod(socketPath, Convert.ToUInt32("660", 8));
     if (rc != 0)
     {
-        Console.Error.WriteLine($"Failed to chmod socket {options.SocketAddr}: errno {Environment.ProcessId}");
+        Console.Error.WriteLine($"Failed to chmod socket {socketPath}: errno {System.Runtime.InteropServices.Marshal.GetLastPInvokeError()}");
     }
 }
 

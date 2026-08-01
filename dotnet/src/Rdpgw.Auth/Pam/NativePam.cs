@@ -2,7 +2,7 @@ using System.Runtime.InteropServices;
 
 namespace Rdpgw.Auth.Pam;
 
-internal static partial class NativePam
+internal static class NativePam
 {
     internal const int PamSuccess = 0;
     internal const int PamPromptEchoOff = 1;
@@ -34,18 +34,18 @@ internal static partial class NativePam
         public IntPtr AppDataPtr;
     }
 
-    [LibraryImport("libpam.so.0", StringMarshalling = StringMarshalling.Utf8)]
-    internal static partial int pam_start(string serviceName, string user, ref PamConv pamConv, out IntPtr pamh);
+    [DllImport("libpam.so.0", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+    internal static extern int pam_start(string serviceName, string user, ref PamConv pamConv, out IntPtr pamh);
 
-    [LibraryImport("libpam.so.0")]
-    internal static partial int pam_authenticate(IntPtr pamh, int flags);
+    [DllImport("libpam.so.0", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int pam_authenticate(IntPtr pamh, int flags);
 
-    [LibraryImport("libpam.so.0")]
-    internal static partial int pam_acct_mgmt(IntPtr pamh, int flags);
+    [DllImport("libpam.so.0", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int pam_acct_mgmt(IntPtr pamh, int flags);
 
-    [LibraryImport("libpam.so.0")]
-    internal static partial int pam_end(IntPtr pamh, int pamStatus);
+    [DllImport("libpam.so.0", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int pam_end(IntPtr pamh, int pamStatus);
 
-    [LibraryImport("libpam.so.0")]
-    internal static partial IntPtr pam_strerror(IntPtr pamh, int errnum);
+    [DllImport("libpam.so.0", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern IntPtr pam_strerror(IntPtr pamh, int errnum);
 }

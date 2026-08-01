@@ -34,7 +34,7 @@ public sealed record class CommandLineOptions
             {
                 case "-h":
                 case "--help":
-                    options = options withHelp();
+                    options = options.withHelp();
                     break;
                 case "-n":
                 case "--name":
