@@ -1,0 +1,15 @@
+{
+  "version": 2,
+  "dgSpecHash": "mMEHoFNNRbc=",
+  "success": true,
+  "projectFilePath": "/home/runner/work/rdpgw/rdpgw/dotnet/src/Rdpgw.Shared/Rdpgw.Shared.csproj",
+  "expectedPackageFiles": [
+    "/home/runner/.nuget/packages/google.protobuf/3.31.1/google.protobuf.3.31.1.nupkg.sha512",
+    "/home/runner/.nuget/packages/grpc.core.api/2.71.0/grpc.core.api.2.71.0.nupkg.sha512",
+    "/home/runner/.nuget/packages/grpc.net.client/2.71.0/grpc.net.client.2.71.0.nupkg.sha512",
+    "/home/runner/.nuget/packages/grpc.net.common/2.71.0/grpc.net.common.2.71.0.nupkg.sha512",
+    "/home/runner/.nuget/packages/grpc.tools/2.72.0/grpc.tools.2.72.0.nupkg.sha512",
+    "/home/runner/.nuget/packages/microsoft.extensions.logging.abstractions/6.0.0/microsoft.extensions.logging.abstractions.6.0.0.nupkg.sha512"
+  ],
+  "logs": []
+}

@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package auth;
+
+option go_package = "./auth";
+option csharp_namespace = "Rdpgw.Shared.Auth";
+
+message UserPass {
+  string username = 1;
+  string password = 2;
+}
+
+message AuthResponse {
+  bool authenticated = 1;
+  string error = 2;
+}
+
+message NtlmRequest {
+  string session = 1;
+  string ntlmMessage = 2;
+}
+
+message NtlmResponse {
+  bool authenticated = 1;
+  string username = 2;
+  string ntlmMessage = 3;
+}
+
+service Authenticate {
+  rpc Authenticate (UserPass) returns (AuthResponse) {}
+  rpc NTLM (NtlmRequest) returns (NtlmResponse) {}
+}

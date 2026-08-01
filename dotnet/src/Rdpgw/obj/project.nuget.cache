@@ -1,0 +1,28 @@
+{
+  "version": 2,
+  "dgSpecHash": "TlVrq4rFz/E=",
+  "success": true,
+  "projectFilePath": "/home/runner/work/rdpgw/rdpgw/dotnet/src/Rdpgw/Rdpgw.csproj",
+  "expectedPackageFiles": [
+    "/home/runner/.nuget/packages/google.protobuf/3.31.1/google.protobuf.3.31.1.nupkg.sha512",
+    "/home/runner/.nuget/packages/grpc.core.api/2.71.0/grpc.core.api.2.71.0.nupkg.sha512",
+    "/home/runner/.nuget/packages/grpc.net.client/2.71.0/grpc.net.client.2.71.0.nupkg.sha512",
+    "/home/runner/.nuget/packages/grpc.net.common/2.71.0/grpc.net.common.2.71.0.nupkg.sha512",
+    "/home/runner/.nuget/packages/microsoft.aspnetcore.authentication.negotiate/10.0.10/microsoft.aspnetcore.authentication.negotiate.10.0.10.nupkg.sha512",
+    "/home/runner/.nuget/packages/microsoft.aspnetcore.authentication.openidconnect/10.0.10/microsoft.aspnetcore.authentication.openidconnect.10.0.10.nupkg.sha512",
+    "/home/runner/.nuget/packages/microsoft.bcl.cryptography/10.0.2/microsoft.bcl.cryptography.10.0.2.nupkg.sha512",
+    "/home/runner/.nuget/packages/microsoft.identitymodel.abstractions/8.22.0/microsoft.identitymodel.abstractions.8.22.0.nupkg.sha512",
+    "/home/runner/.nuget/packages/microsoft.identitymodel.jsonwebtokens/8.22.0/microsoft.identitymodel.jsonwebtokens.8.22.0.nupkg.sha512",
+    "/home/runner/.nuget/packages/microsoft.identitymodel.logging/8.22.0/microsoft.identitymodel.logging.8.22.0.nupkg.sha512",
+    "/home/runner/.nuget/packages/microsoft.identitymodel.protocols/8.19.2/microsoft.identitymodel.protocols.8.19.2.nupkg.sha512",
+    "/home/runner/.nuget/packages/microsoft.identitymodel.protocols.openidconnect/8.19.2/microsoft.identitymodel.protocols.openidconnect.8.19.2.nupkg.sha512",
+    "/home/runner/.nuget/packages/microsoft.identitymodel.tokens/8.22.0/microsoft.identitymodel.tokens.8.22.0.nupkg.sha512",
+    "/home/runner/.nuget/packages/prometheus-net/8.2.1/prometheus-net.8.2.1.nupkg.sha512",
+    "/home/runner/.nuget/packages/prometheus-net.aspnetcore/8.2.1/prometheus-net.aspnetcore.8.2.1.nupkg.sha512",
+    "/home/runner/.nuget/packages/system.directoryservices.protocols/10.0.10/system.directoryservices.protocols.10.0.10.nupkg.sha512",
+    "/home/runner/.nuget/packages/system.identitymodel.tokens.jwt/8.19.2/system.identitymodel.tokens.jwt.8.19.2.nupkg.sha512",
+    "/home/runner/.nuget/packages/system.security.cryptography.pkcs/9.0.0/system.security.cryptography.pkcs.9.0.0.nupkg.sha512",
+    "/home/runner/.nuget/packages/yamldotnet/16.3.0/yamldotnet.16.3.0.nupkg.sha512"
+  ],
+  "logs": []
+}
