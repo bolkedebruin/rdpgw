@@ -70,7 +70,8 @@ builder.WebHost.ConfigureKestrel(options =>
         }
         else if (!string.IsNullOrEmpty(conf.Server.CertFile) && !string.IsNullOrEmpty(conf.Server.KeyFile))
         {
-            listen.UseHttps(conf.Server.CertFile, conf.Server.KeyFile);
+            var cert = System.Security.Cryptography.X509Certificates.X509Certificate2.CreateFromPemFile(conf.Server.CertFile, conf.Server.KeyFile);
+            listen.UseHttps(cert);
         }
         else
         {
