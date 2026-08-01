@@ -1,0 +1,110 @@
+@page "/"
+@using Rdpgw.Identity
+@using Rdpgw.Web
+@implements IDisposable
+@inject Handler Handler
+@inject IHttpContextAccessor HttpContextAccessor
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject PersistentComponentState ApplicationState
+
+<PageTitle>@Handler.WebConfig.Branding.Title</PageTitle>
+
+<MudLayout>
+    <MudAppBar Elevation="1" Color="Color.Primary">
+        <img src="/assets/icon.svg" alt="Logo" height="32" class="mr-3" />
+        <MudText Typo="Typo.h6">@Handler.WebConfig.Branding.Logo</MudText>
+        <MudSpacer />
+        @if (Handler.WebConfig.UI.ShowUserAvatar)
+        {
+            <MudAvatar Color="Color.Secondary" Class="mr-2">@GetInitials(_state.Username)</MudAvatar>
+        }
+        <MudText Typo="Typo.body1">@_state.Username</MudText>
+    </MudAppBar>
+    <MudMainContent>
+        <MudContainer MaxWidth="MaxWidth.Medium" Class="mt-8">
+            <MudText Typo="Typo.h4" Align="Align.Center" Class="mb-6">@Handler.WebConfig.Branding.PageTitle</MudText>
+
+            <MudGrid Justify="Justify.Center">
+                @foreach (var host in _state.Hosts)
+                {
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudCard Elevation="3" Class="d-flex flex-column" Style="height: 100%;">
+                            <MudCardContent Class="flex-grow-1">
+                                <div class="d-flex align-center mb-3">
+                                    <MudIcon Icon="@Icons.Material.Filled.DesktopWindows" Color="Color.Primary" Size="Size.Large" Class="mr-3" />
+                                    <MudText Typo="Typo.h6">@host.Name</MudText>
+                                </div>
+                                <MudText Typo="Typo.body2">@host.Description</MudText>
+                            </MudCardContent>
+                            <MudCardActions>
+                                <MudButton Variant="Variant.Filled"
+                                           Color="Color.Primary"
+                                           FullWidth="true"
+                                           StartIcon="@Icons.Material.Filled.Login"
+                                           Disabled="@(_connectingHostId is not null)"
+                                           OnClick="@(() => ConnectAsync(host))">
+                                    @(_connectingHostId == host.Id ? "Downloading..." : $"Connect to {host.Name}")
+                                </MudButton>
+                            </MudCardActions>
+                        </MudCard>
+                    </MudItem>
+                }
+            </MudGrid>
+
+            @if (_connectingHostId is not null)
+            {
+                <MudPaper Elevation="0" Class="mt-6 pa-4" Style="background: transparent;">
+                    <MudText Typo="Typo.body1" Align="Align.Center" Class="mb-2">@Handler.WebConfig.Messages.Preparing</MudText>
+                    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Rounded="true" Size="Size.Medium" />
+                </MudPaper>
+            }
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
+
+@code {
+    private const string StateKey = "rdpgw-home";
+    private HomeState _state = new(string.Empty, []);
+    private string? _connectingHostId;
+    private PersistingComponentStateSubscription _subscription;
+
+    protected override void OnInitialized()
+    {
+        _subscription = ApplicationState.RegisterOnPersisting(PersistState, RenderMode.InteractiveServer);
+        if (ApplicationState.TryTakeFromJson<HomeState>(StateKey, out var restored) && restored is not null)
+        {
+            _state = restored;
+            return;
+        }
+        var identity = HttpContextAccessor.HttpContext is { } ctx ? IdentityContext.FromContext(ctx) : null;
+        _state = new HomeState(identity?.UserName ?? string.Empty, Handler.GetHosts());
+    }
+
+    private Task PersistState()
+    {
+        ApplicationState.PersistAsJson(StateKey, _state);
+        return Task.CompletedTask;
+    }
+
+    private async Task ConnectAsync(Handler.Host host)
+    {
+        _connectingHostId = host.Id;
+        var url = "/connect";
+        if (!string.IsNullOrEmpty(host.Address)) url += "?host=" + Uri.EscapeDataString(host.Address);
+        Navigation.NavigateTo(url, forceLoad: true);
+        Snackbar.Add("RDP file download started. Please open it with your RDP client.", Severity.Success);
+        await Task.Delay(Handler.WebConfig.UI.ProgressAnimationDurationMs);
+        _connectingHostId = null;
+    }
+
+    private static string GetInitials(string name)
+    {
+        var initials = string.Concat(name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Select(w => w[0]).Take(2)).ToUpperInvariant();
+        return initials.Length > 0 ? initials : "U";
+    }
+
+    public void Dispose() => _subscription.Dispose();
+
+    public sealed record HomeState(string Username, List<Handler.Host> Hosts);
+}

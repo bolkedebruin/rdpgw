@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Authentication.Negotiate;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
+using MudBlazor.Services;
 using Prometheus;
+using Rdpgw.Components;
 using Rdpgw.Config;
 using Rdpgw.KdcProxy;
 using Rdpgw.Protocol;
@@ -59,6 +61,10 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddAuthentication(NegotiateDefaults.AuthenticationScheme).AddNegotiate();
 builder.Services.AddAuthorization();
 builder.Services.AddMetricServer(options => { });
+builder.Services.AddSingleton(web);
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddRazorComponents().AddInteractiveServerComponents();
+builder.Services.AddMudServices();
 builder.WebHost.ConfigureKestrel(options =>
 {
     options.ListenAnyIP(conf.Server.Port, listen =>
@@ -86,6 +92,7 @@ app.UseWebSockets();
 app.UseAuthentication();
 app.UseAuthorization();
 app.Use(async (ctx, next) => await ContextMiddleware.EnrichContext(ctx, next));
+app.UseAntiforgery();
 app.UseMetricServer("/metrics");
 
 var gw = new Gateway
@@ -118,6 +125,10 @@ async Task WebAuth(HttpContext ctx, Func<Task> next)
     await next();
 }
 
+app.UseWhen(
+    ctx => ctx.Request.Path == "/" || ctx.Request.Path.StartsWithSegments("/_blazor"),
+    branch => branch.Use(async (ctx, next) => await WebAuth(ctx, () => next(ctx))));
+
 app.Map("/tokeninfo", TokenInfoEndpoint.TokenInfo);
 
 if (conf.Server.OpenIDEnabled())
@@ -136,13 +147,12 @@ if (conf.Server.HeaderEnabled())
 if (oidc is not null || headerAuth is not null)
 {
     app.Map("/connect", ctx => WebAuth(ctx, () => web.HandleDownload(ctx)));
-    app.Map("/", ctx => WebAuth(ctx, () => web.HandleWebInterface(ctx)));
     app.Map("/api/v1/hosts", ctx => WebAuth(ctx, () => web.HandleHostList(ctx)));
     app.Map("/api/v1/user", ctx => WebAuth(ctx, () => web.HandleUserInfo(ctx)));
+    app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
 }
 
-app.Map("/static/style.css", ctx => web.ServeStaticFile(ctx, "style.css"));
-app.Map("/static/app.js", ctx => web.ServeStaticFile(ctx, "app.js"));
+app.MapStaticAssets();
 app.Map("/assets/connect.svg", ctx => web.ServeAssetFile(ctx, "connect.svg"));
 app.Map("/assets/icon.svg", ctx => web.ServeAssetFile(ctx, "icon.svg"));
 

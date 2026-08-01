@@ -69,7 +69,8 @@ public sealed class Handler
     private readonly string _templatesPath;
     private readonly DestinationPolicy _destPolicy;
     private readonly WebConfig _webConfig = new();
-    private readonly string _htmlTemplate;
+
+    public WebConfig WebConfig => _webConfig;
 
     public Handler(WebHandlerConfig c)
     {
@@ -88,9 +89,6 @@ public sealed class Handler
         _rdpSigningKey = c.RdpSigningKey;
         _templatesPath = string.IsNullOrEmpty(c.TemplatesPath) ? "./templates" : c.TemplatesPath;
         _destPolicy = new DestinationPolicy(c.AllowedDestinationPorts, c.AllowPrivateDestinations);
-        var path = Path.Combine(_templatesPath, "index.html");
-        if (File.Exists(path)) { _htmlTemplate = File.ReadAllText(path); Console.WriteLine($"Loaded HTML template from {path}"); }
-        else { Console.WriteLine($"Warning: Failed to load HTML template {path}; using embedded fallback template"); _htmlTemplate = FallbackHtmlTemplate; }
         if (!string.IsNullOrEmpty(_rdpSigningCert) || !string.IsNullOrEmpty(_rdpSigningKey)) Console.WriteLine("RDP file signing is configured but not implemented in the .NET port; unsigned RDP files will be returned");
     }
 
@@ -140,15 +138,16 @@ public sealed class Handler
         await ctx.Response.WriteAsync(b.ToString());
     }
 
+    public List<Host> GetHosts() => _hostSelection == "roundrobin"
+        ? [new Host("roundrobin", "Available Servers", "", "Connect to an available server automatically", true)]
+        : _hosts.Select((h, i) => new Host($"host_{i}", h, h, $"Connect to {h}", i == 0)).ToList();
+
     public async Task HandleHostList(HttpContext ctx)
     {
         var id = IdentityContext.FromContext(ctx) ?? new User();
         if (!id.Authenticated) { ctx.Response.StatusCode = 401; await ctx.Response.WriteAsync("Unauthorized"); return; }
-        var hosts = _hostSelection == "roundrobin"
-            ? new[] { new Host("roundrobin", "Available Servers", "", "Connect to an available server automatically", true) }
-            : _hosts.Select((h, i) => new Host($"host_{i}", h, h, $"Connect to {h}", i == 0)).ToArray();
         ctx.Response.ContentType = "application/json";
-        await JsonSerializer.SerializeAsync(ctx.Response.Body, hosts, JsonOptions);
+        await JsonSerializer.SerializeAsync(ctx.Response.Body, GetHosts(), JsonOptions);
     }
 
     public async Task HandleUserInfo(HttpContext ctx)
@@ -159,15 +158,6 @@ public sealed class Handler
         await JsonSerializer.SerializeAsync(ctx.Response.Body, new { username = id.UserName, authenticated = id.Authenticated, authTime = id.AuthTime });
     }
 
-    public async Task HandleWebInterface(HttpContext ctx)
-    {
-        var id = IdentityContext.FromContext(ctx) ?? new User();
-        if (!id.Authenticated) { ctx.Response.Redirect("/connect"); return; }
-        ctx.Response.ContentType = "text/html";
-        await ctx.Response.WriteAsync(RenderTemplate(_htmlTemplate));
-    }
-
-    public Task ServeStaticFile(HttpContext ctx, string filename) => ServeFile(ctx, Path.Combine(_templatesPath, filename), filename);
     public async Task ServeAssetFile(HttpContext ctx, string filename)
     {
         var candidates = new List<string> { "./assets/" + filename, "/app/assets/" + filename, "/opt/rdpgw/assets/" + filename, Path.Combine("assets", filename) };
@@ -221,13 +211,6 @@ public sealed class Handler
         return host;
     }
 
-    private string RenderTemplate(string template) => template
-        .Replace("{{.Title}}", WebUtility.HtmlEncode(_webConfig.Branding.Title))
-        .Replace("{{.Logo}}", WebUtility.HtmlEncode(_webConfig.Branding.Logo))
-        .Replace("{{.PageTitle}}", WebUtility.HtmlEncode(_webConfig.Branding.PageTitle))
-        .Replace("{{.SelectServerMessage}}", WebUtility.HtmlEncode(_webConfig.Messages.SelectServer))
-        .Replace("{{.PreparingMessage}}", WebUtility.HtmlEncode(_webConfig.Messages.Preparing));
-
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
     public sealed record Host(string Id, string Name, string Address, string Description, bool IsDefault);
     private sealed class DestinationPolicy(List<int> allowedPorts, bool allowPrivate)
@@ -250,5 +233,4 @@ public sealed class Handler
             return b[0] == 10 || b[0] == 127 || (b[0] == 172 && b[1] >= 16 && b[1] <= 31) || (b[0] == 192 && b[1] == 168) || (b[0] == 169 && b[1] == 254);
         }
     }
-    private const string FallbackHtmlTemplate = "<!DOCTYPE html><html><head><title>{{.Title}}</title></head><body><h1>{{.PageTitle}}</h1><div id=\"serversGrid\"></div><script src=\"/static/app.js\"></script></body></html>";
 }

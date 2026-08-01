@@ -58,3 +58,9 @@ implementation, so the existing documentation in the repository root applies.
   API where available and otherwise ignores the setting.
 * **User session serialization** uses JSON rather than Go's `gob` encoding, so
   sessions are not interchangeable between the Go and .NET binaries.
+* **Web interface**: the Go version serves a Go-template HTML page with vanilla
+  JavaScript from `templates/`. The .NET port instead renders the web UI with
+  Blazor (interactive server components) using the
+  [MudBlazor](https://mudblazor.com) component library; the `/api/v1/hosts` and
+  `/api/v1/user` endpoints remain available for compatibility, but the
+  `templates/` directory and `/static/*` endpoints are not used.

@@ -52,7 +52,12 @@ public static class ContextMiddleware
         await next();
     }
 
-    internal static string RemoteAddr(HttpContext ctx) => ctx.Connection.RemoteIpAddress is null ? string.Empty : $"{ctx.Connection.RemoteIpAddress}:{ctx.Connection.RemotePort}";
+    internal static string RemoteAddr(HttpContext ctx)
+    {
+        var ip = ctx.Connection.RemoteIpAddress;
+        if (ip is null) return string.Empty;
+        return ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6 ? $"[{ip}]:{ctx.Connection.RemotePort}" : $"{ip}:{ctx.Connection.RemotePort}";
+    }
     internal static bool RemoteIsTrustedProxy(string remoteAddr)
     {
         if (Trusted.Count == 0) return false;
