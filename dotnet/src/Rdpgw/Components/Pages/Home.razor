@@ -79,7 +79,7 @@
             return;
         }
         var identity = HttpContextAccessor.HttpContext is { } ctx ? IdentityContext.FromContext(ctx) : null;
-        _state = new HomeState(identity?.UserName ?? string.Empty, Handler.GetHosts());
+        _state = new HomeState(identity?.UserName ?? string.Empty, Handler.GetHosts(identity?.UserName ?? string.Empty));
     }
 
     private Task PersistState()

@@ -112,7 +112,7 @@ public static class Tokens
             case "unsigned":
                 var user = IdentityContext.FromContext(context)?.UserName ?? string.Empty;
                 if (string.IsNullOrEmpty(user)) throw new InvalidOperationException("no valid session info or username found in context");
-                return Task.FromResult(SecurityOptions.HostsProvider().Any(h => h.Replace("{{ preferred_username }}", user, StringComparison.Ordinal) == host));
+                return Task.FromResult(SecurityOptions.HostsProvider(user).Any(h => h.Replace("{{ preferred_username }}", user, StringComparison.Ordinal) == host));
             default:
                 throw new InvalidOperationException("unrecognized host selection criteria");
         }

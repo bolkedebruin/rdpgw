@@ -139,11 +139,11 @@ public sealed class Handler
         await ctx.Response.WriteAsync(b.ToString());
     }
 
-    public List<Host> GetHosts()
+    public List<Host> GetHosts(string userName)
     {
         if (_hostSelection == "roundrobin")
             return [new Host("roundrobin", "Available Servers", "", "Connect to an available server automatically", true)];
-        var entries = _hostStore.GetAll();
+        var entries = _hostStore.GetVisible(userName);
         var hasDefault = entries.Any(h => h.IsDefault);
         return entries.Select((h, i) => new Host($"host_{h.Id}", h.Name, h.Address, h.Description, hasDefault ? h.IsDefault : i == 0)).ToList();
     }
@@ -153,7 +153,7 @@ public sealed class Handler
         var id = IdentityContext.FromContext(ctx) ?? new User();
         if (!id.Authenticated) { ctx.Response.StatusCode = 401; await ctx.Response.WriteAsync("Unauthorized"); return; }
         ctx.Response.ContentType = "application/json";
-        await JsonSerializer.SerializeAsync(ctx.Response.Body, GetHosts(), JsonOptions);
+        await JsonSerializer.SerializeAsync(ctx.Response.Body, GetHosts(id.UserName), JsonOptions);
     }
 
     public async Task HandleUserInfo(HttpContext ctx)
@@ -187,15 +187,16 @@ public sealed class Handler
 
     private async Task<string> GetHost(HttpContext ctx) => _hostSelection switch
     {
-        "roundrobin" => SelectRandomHost(),
+        "roundrobin" => SelectRandomHost(ctx),
         "signed" => await GetSignedHost(ctx),
         "unsigned" => GetUnsignedHost(ctx),
         "any" => await GetAnyHost(ctx),
-        _ => SelectRandomHost(),
+        _ => SelectRandomHost(ctx),
     };
-    private string SelectRandomHost()
+    private static string UserFromContext(HttpContext ctx) => IdentityContext.FromContext(ctx)?.UserName ?? string.Empty;
+    private string SelectRandomHost(HttpContext ctx)
     {
-        var hosts = _hostStore.GetHostAddresses();
+        var hosts = _hostStore.GetHostAddresses(UserFromContext(ctx));
         if (hosts.Count < 1) throw new InvalidOperationException("no hosts configured in the host database");
         return hosts[Random.Shared.Next(hosts.Count)];
     }
@@ -204,14 +205,14 @@ public sealed class Handler
         var token = ctx.Request.Query["host"].FirstOrDefault();
         if (string.IsNullOrEmpty(token) || _queryInfo is null) throw new InvalidOperationException("invalid query parameter");
         var host = await _queryInfo(ctx, token, _queryTokenIssuer);
-        if (!_hostStore.GetHostAddresses().Contains(host)) throw new InvalidOperationException("invalid host specified in query token");
+        if (!_hostStore.GetHostAddresses(UserFromContext(ctx)).Contains(host)) throw new InvalidOperationException("invalid host specified in query token");
         return host;
     }
     private string GetUnsignedHost(HttpContext ctx)
     {
         var host = ctx.Request.Query["host"].FirstOrDefault();
         if (string.IsNullOrEmpty(host)) throw new InvalidOperationException("invalid query parameter");
-        if (!_hostStore.GetHostAddresses().Contains(host)) throw new InvalidOperationException("invalid host specified in query parameter");
+        if (!_hostStore.GetHostAddresses(UserFromContext(ctx)).Contains(host)) throw new InvalidOperationException("invalid host specified in query parameter");
         return host;
     }
     private async Task<string> GetAnyHost(HttpContext ctx)

@@ -1,11 +1,15 @@
 @page "/hosts"
 @using Rdpgw.Components.Dialogs
 @using Rdpgw.Data
+@using Rdpgw.Identity
 @using Rdpgw.Web
+@implements IDisposable
 @inject Handler Handler
 @inject HostStore HostStore
+@inject IHttpContextAccessor HttpContextAccessor
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject PersistentComponentState ApplicationState
 
 <PageTitle>@Handler.WebConfig.Branding.Title - Hosts</PageTitle>
 
@@ -59,20 +63,49 @@
 </MudLayout>
 
 @code {
+    private const string StateKey = "rdpgw-hosts-owner";
     private List<HostEntry> _hosts = [];
     private bool _loading = true;
+    private string _owner = string.Empty;
+    private PersistingComponentStateSubscription _subscription;
 
-    protected override async Task OnInitializedAsync() => await LoadAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        _subscription = ApplicationState.RegisterOnPersisting(PersistState, RenderMode.InteractiveServer);
+        if (ApplicationState.TryTakeFromJson<string>(StateKey, out var restored) && restored is not null)
+        {
+            _owner = restored;
+        }
+        else
+        {
+            var identity = HttpContextAccessor.HttpContext is { } ctx ? IdentityContext.FromContext(ctx) : null;
+            _owner = identity?.UserName ?? string.Empty;
+        }
+        await LoadAsync();
+    }
+
+    private Task PersistState()
+    {
+        ApplicationState.PersistAsJson(StateKey, _owner);
+        return Task.CompletedTask;
+    }
+
+    public void Dispose() => _subscription.Dispose();
 
     private async Task LoadAsync()
     {
         _loading = true;
-        _hosts = await HostStore.GetAllAsync();
+        _hosts = await HostStore.GetOwnedAsync(_owner);
         _loading = false;
     }
 
     private async Task AddHostAsync()
     {
+        if (string.IsNullOrEmpty(_owner))
+        {
+            Snackbar.Add("Cannot add a host: no authenticated user found.", Severity.Error);
+            return;
+        }
         var parameters = new DialogParameters<HostEditDialog> { { d => d.Host, new HostEntry() } };
         var dialog = await DialogService.ShowAsync<HostEditDialog>("Add Host", parameters);
         var result = await dialog.Result;
@@ -80,7 +113,7 @@
         {
             try
             {
-                await HostStore.AddAsync(host);
+                await HostStore.AddAsync(host, _owner);
                 Snackbar.Add($"Host '{host.Name}' added.", Severity.Success);
             }
             catch (Exception ex)
@@ -101,7 +134,7 @@
         {
             try
             {
-                await HostStore.UpdateAsync(updated);
+                await HostStore.UpdateAsync(updated, _owner);
                 Snackbar.Add($"Host '{updated.Name}' updated.", Severity.Success);
             }
             catch (Exception ex)
@@ -119,7 +152,7 @@
         {
             try
             {
-                await HostStore.DeleteAsync(host.Id);
+                await HostStore.DeleteAsync(host.Id, _owner);
                 Snackbar.Add($"Host '{host.Name}' deleted.", Severity.Success);
             }
             catch (Exception ex)

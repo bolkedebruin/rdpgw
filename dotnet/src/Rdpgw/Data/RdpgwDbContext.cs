@@ -12,7 +12,8 @@ public sealed class RdpgwDbContext(DbContextOptions<RdpgwDbContext> options) : D
         {
             entity.Property(h => h.Name).IsRequired();
             entity.Property(h => h.Address).IsRequired();
-            entity.HasIndex(h => h.Address).IsUnique();
+            entity.Property(h => h.Owner).IsRequired().HasDefaultValue(string.Empty);
+            entity.HasIndex(h => new { h.Owner, h.Address }).IsUnique();
         });
     }
 }
