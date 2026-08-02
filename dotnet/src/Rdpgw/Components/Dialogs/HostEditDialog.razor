@@ -1,0 +1,34 @@
+@using Rdpgw.Data
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form">
+            <MudTextField T="string" @bind-Value="Host.Name" Label="Name" Required="true" RequiredError="Name is required" Class="mb-3" />
+            <MudTextField T="string" @bind-Value="Host.Address" Label="Address" Required="true" RequiredError="Address is required"
+                          HelperText="Hostname or hostname:port of the remote desktop, e.g. desktop.example.com:3389" Class="mb-3" />
+            <MudTextField T="string" @bind-Value="Host.Description" Label="Description" Class="mb-3" />
+            <MudSwitch T="bool" @bind-Value="Host.IsDefault" Label="Default host" Color="Color.Primary" />
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveAsync">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public HostEntry Host { get; set; } = new();
+
+    private MudForm _form = default!;
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task SaveAsync()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid) return;
+        MudDialog.Close(DialogResult.Ok(Host));
+    }
+}

@@ -96,6 +96,7 @@ public sealed class Configuration
             Port = 443,
             SessionStore = SessionStoreCookie,
             HostSelection = HostSelectionRoundRobin,
+            DatabaseFile = "rdpgw.db",
             Authentication = [AuthenticationOpenId],
             AuthSocket = "/tmp/rdpgw-auth.sock",
             BasicAuthTimeout = 5,
@@ -156,6 +157,7 @@ public sealed class Configuration
                 case "server.keyfile": c.Server.KeyFile = AsString(value); break;
                 case "server.hosts": c.Server.Hosts = AsStringList(value); break;
                 case "server.hostselection": c.Server.HostSelection = AsString(value); break;
+                case "server.databasefile": c.Server.DatabaseFile = AsString(value); break;
                 case "server.sessionkey": c.Server.SessionKey = AsString(value); break;
                 case "server.sessionencryptionkey": c.Server.SessionEncryptionKey = AsString(value); break;
                 case "server.sessionstore": c.Server.SessionStore = AsString(value); break;
@@ -268,6 +270,7 @@ public sealed class ServerConfig
     public string KeyFile { get; set; } = string.Empty;
     public List<string> Hosts { get; set; } = [];
     public string HostSelection { get; set; } = string.Empty;
+    public string DatabaseFile { get; set; } = string.Empty;
     public string SessionKey { get; set; } = string.Empty;
     public string SessionEncryptionKey { get; set; } = string.Empty;
     public string SessionStore { get; set; } = string.Empty;

@@ -64,3 +64,11 @@ implementation, so the existing documentation in the repository root applies.
   [MudBlazor](https://mudblazor.com) component library; the `/api/v1/hosts` and
   `/api/v1/user` endpoints remain available for compatibility, but the
   `templates/` directory and `/static/*` endpoints are not used.
+* **Host database**: the .NET port stores the hosts that users may connect to
+  in a SQLite database (managed via EF Core) instead of the static
+  `server.hosts` list in the configuration file. The database file location is
+  configured with `server.databasefile` (default `rdpgw.db`); it is created
+  automatically on first start and seeded once from any hosts still present
+  under the legacy `server.hosts` key. Hosts can be managed at runtime on the
+  `/hosts` page of the web UI, which offers a table with add/edit/delete
+  dialogs.

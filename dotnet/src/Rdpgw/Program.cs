@@ -1,10 +1,13 @@
 using Microsoft.AspNetCore.Authentication.Negotiate;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using MudBlazor.Services;
 using Prometheus;
 using Rdpgw.Components;
 using Rdpgw.Config;
+using Rdpgw.Data;
 using Rdpgw.KdcProxy;
 using Rdpgw.Protocol;
 using Rdpgw.Security;
@@ -21,6 +24,11 @@ for (var i = 0; i < args.Length; i++)
 }
 var conf = Configuration.Load(configFile);
 
+var dbFile = string.IsNullOrEmpty(conf.Server.DatabaseFile) ? "rdpgw.db" : conf.Server.DatabaseFile;
+var dbOptions = new DbContextOptionsBuilder<RdpgwDbContext>().UseSqlite($"Data Source={dbFile}").Options;
+var hostStore = new HostStore(new PooledDbContextFactory<RdpgwDbContext>(dbOptions));
+await hostStore.InitializeAsync(conf.Server.Hosts);
+
 var gwAddress = string.IsNullOrEmpty(conf.Server.GatewayAddress) ? new Uri("https://localhost") : new Uri(conf.Server.GatewayAddress, UriKind.RelativeOrAbsolute);
 if (!gwAddress.IsAbsoluteUri) gwAddress = new Uri("https:" + conf.Server.GatewayAddress);
 var cb = new UriBuilder(gwAddress) { Path = "callback" }.Uri;
@@ -32,7 +40,7 @@ SecurityOptions.UserEncryptionKey = System.Text.Encoding.UTF8.GetBytes(conf.Secu
 SecurityOptions.UserSigningKey = System.Text.Encoding.UTF8.GetBytes(conf.Security.UserTokenSigningKey);
 SecurityOptions.QuerySigningKey = System.Text.Encoding.UTF8.GetBytes(conf.Security.QueryTokenSigningKey);
 SecurityOptions.HostSelection = conf.Server.HostSelection;
-SecurityOptions.Hosts = conf.Server.Hosts;
+SecurityOptions.HostsProvider = hostStore.GetHostAddresses;
 
 Sessions.InitStore(System.Text.Encoding.UTF8.GetBytes(conf.Server.SessionKey), System.Text.Encoding.UTF8.GetBytes(conf.Server.SessionEncryptionKey), conf.Server.SessionStore, conf.Server.MaxSessionLength);
 ContextMiddleware.InitTrustedProxies(conf.Server.TrustedProxies);
@@ -42,7 +50,7 @@ var webConfig = new WebHandlerConfig
     QueryInfo = Security.QueryInfo,
     QueryTokenIssuer = conf.Security.QueryTokenIssuer,
     EnableUserToken = conf.Security.EnableUserToken,
-    Hosts = conf.Server.Hosts,
+    HostStore = hostStore,
     HostSelection = conf.Server.HostSelection,
     RdpOpts = new RdpOpts { UsernameTemplate = conf.Client.UsernameTemplate, SplitUserDomain = conf.Client.SplitUserDomain, NoUsername = conf.Client.NoUsername, OverridableRdpKeys = conf.Client.RdpOverridableKeys },
     GatewayAddress = gwAddress,
@@ -62,6 +70,7 @@ builder.Services.AddAuthentication(NegotiateDefaults.AuthenticationScheme).AddNe
 builder.Services.AddAuthorization();
 builder.Services.AddMetricServer(options => { });
 builder.Services.AddSingleton(web);
+builder.Services.AddSingleton(hostStore);
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 builder.Services.AddMudServices();
@@ -126,7 +135,7 @@ async Task WebAuth(HttpContext ctx, Func<Task> next)
 }
 
 app.UseWhen(
-    ctx => ctx.Request.Path == "/" || ctx.Request.Path.StartsWithSegments("/_blazor"),
+    ctx => ctx.Request.Path == "/" || ctx.Request.Path.StartsWithSegments("/hosts") || ctx.Request.Path.StartsWithSegments("/_blazor"),
     branch => branch.Use(async (ctx, next) => await WebAuth(ctx, () => next(ctx))));
 
 app.Map("/tokeninfo", TokenInfoEndpoint.TokenInfo);

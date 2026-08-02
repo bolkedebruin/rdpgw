@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Http;
+using Rdpgw.Data;
 using Rdpgw.Identity;
 using Rdpgw.Rdp;
 
@@ -19,7 +20,7 @@ public sealed class WebHandlerConfig
     public QueryInfoFunc? QueryInfo { get; set; }
     public string QueryTokenIssuer { get; set; } = string.Empty;
     public bool EnableUserToken { get; set; }
-    public List<string> Hosts { get; set; } = [];
+    public HostStore? HostStore { get; set; }
     public string HostSelection { get; set; } = string.Empty;
     public Uri GatewayAddress { get; set; } = new("https://localhost");
     public RdpOpts RdpOpts { get; set; } = new();
@@ -60,7 +61,7 @@ public sealed class Handler
     private readonly QueryInfoFunc? _queryInfo;
     private readonly string _queryTokenIssuer;
     private readonly Uri _gatewayAddress;
-    private readonly List<string> _hosts;
+    private readonly HostStore _hostStore;
     private readonly string _hostSelection;
     private readonly RdpOpts _rdpOpts;
     private readonly string _rdpDefaults;
@@ -74,14 +75,14 @@ public sealed class Handler
 
     public Handler(WebHandlerConfig c)
     {
-        if (c.Hosts.Count < 1) throw new InvalidOperationException("Not enough hosts to connect to specified");
+        if (c.HostStore is null) throw new InvalidOperationException("No host store specified");
         _paaTokenGenerator = c.PAATokenGenerator;
         _enableUserToken = c.EnableUserToken;
         _userTokenGenerator = c.UserTokenGenerator;
         _queryInfo = c.QueryInfo;
         _queryTokenIssuer = c.QueryTokenIssuer;
         _gatewayAddress = c.GatewayAddress;
-        _hosts = c.Hosts;
+        _hostStore = c.HostStore;
         _hostSelection = c.HostSelection;
         _rdpOpts = c.RdpOpts;
         _rdpDefaults = c.TemplateFile;
@@ -138,9 +139,14 @@ public sealed class Handler
         await ctx.Response.WriteAsync(b.ToString());
     }
 
-    public List<Host> GetHosts() => _hostSelection == "roundrobin"
-        ? [new Host("roundrobin", "Available Servers", "", "Connect to an available server automatically", true)]
-        : _hosts.Select((h, i) => new Host($"host_{i}", h, h, $"Connect to {h}", i == 0)).ToList();
+    public List<Host> GetHosts()
+    {
+        if (_hostSelection == "roundrobin")
+            return [new Host("roundrobin", "Available Servers", "", "Connect to an available server automatically", true)];
+        var entries = _hostStore.GetAll();
+        var hasDefault = entries.Any(h => h.IsDefault);
+        return entries.Select((h, i) => new Host($"host_{h.Id}", h.Name, h.Address, h.Description, hasDefault ? h.IsDefault : i == 0)).ToList();
+    }
 
     public async Task HandleHostList(HttpContext ctx)
     {
@@ -187,20 +193,25 @@ public sealed class Handler
         "any" => await GetAnyHost(ctx),
         _ => SelectRandomHost(),
     };
-    private string SelectRandomHost() => _hosts[Random.Shared.Next(_hosts.Count)];
+    private string SelectRandomHost()
+    {
+        var hosts = _hostStore.GetHostAddresses();
+        if (hosts.Count < 1) throw new InvalidOperationException("no hosts configured in the host database");
+        return hosts[Random.Shared.Next(hosts.Count)];
+    }
     private async Task<string> GetSignedHost(HttpContext ctx)
     {
         var token = ctx.Request.Query["host"].FirstOrDefault();
         if (string.IsNullOrEmpty(token) || _queryInfo is null) throw new InvalidOperationException("invalid query parameter");
         var host = await _queryInfo(ctx, token, _queryTokenIssuer);
-        if (!_hosts.Contains(host)) throw new InvalidOperationException("invalid host specified in query token");
+        if (!_hostStore.GetHostAddresses().Contains(host)) throw new InvalidOperationException("invalid host specified in query token");
         return host;
     }
     private string GetUnsignedHost(HttpContext ctx)
     {
         var host = ctx.Request.Query["host"].FirstOrDefault();
         if (string.IsNullOrEmpty(host)) throw new InvalidOperationException("invalid query parameter");
-        if (!_hosts.Contains(host)) throw new InvalidOperationException("invalid host specified in query parameter");
+        if (!_hostStore.GetHostAddresses().Contains(host)) throw new InvalidOperationException("invalid host specified in query parameter");
         return host;
     }
     private async Task<string> GetAnyHost(HttpContext ctx)
