@@ -73,18 +73,39 @@ public static class Tokens
         return Task.FromResult(ToTokenClaims(result.ClaimsIdentity.Claims));
     }
 
-    public static async Task<bool> CheckPAACookie(HttpContext context, string tokenString)
+    public sealed record PaaTokenInfo(string Username, string RemoteServer, string ClientIp);
+
+    /// <summary>
+    /// Validates a PAA token and returns its claims. Shared by the local gateway
+    /// cookie check and the gateway federation validation endpoint.
+    /// </summary>
+    public static async Task<PaaTokenInfo> ValidatePAAToken(string tokenString)
     {
         if (string.IsNullOrEmpty(tokenString)) throw new InvalidOperationException("no token to parse");
         var parameters = ValidationParameters(SecurityOptions.SigningKey, null, "rdpgw", PaaAudience);
         var result = await new JsonWebTokenHandler().ValidateTokenAsync(tokenString, parameters);
         if (!result.IsValid) throw new SecurityTokenException($"token validation failed due to {result.Exception?.Message}", result.Exception);
         var claims = result.ClaimsIdentity.Claims.ToDictionary(c => c.Type, c => c.Value);
-        context.Items[SecurityOptions.TunnelTargetServerKey] = Claim(claims, "remoteServer");
-        context.Items[SecurityOptions.TunnelRemoteAddrKey] = Claim(claims, "clientIp");
-        var id = IdentityContext.FromContext(context);
-        if (id is not null) id.UserName = Claim(claims, JwtRegisteredClaimNames.Sub, ClaimTypes.NameIdentifier, "sub");
+        return new PaaTokenInfo(Claim(claims, JwtRegisteredClaimNames.Sub, ClaimTypes.NameIdentifier, "sub"), Claim(claims, "remoteServer"), Claim(claims, "clientIp"));
+    }
+
+    public static async Task<bool> CheckPAACookie(HttpContext context, string tokenString)
+    {
+        var info = await ValidatePAAToken(tokenString);
+        ApplyPaaTokenInfo(context, info);
         return true;
+    }
+
+    /// <summary>
+    /// Stores the validated token claims in the request context so that the tunnel
+    /// can later verify the target host and client IP.
+    /// </summary>
+    public static void ApplyPaaTokenInfo(HttpContext context, PaaTokenInfo info)
+    {
+        context.Items[SecurityOptions.TunnelTargetServerKey] = info.RemoteServer;
+        context.Items[SecurityOptions.TunnelRemoteAddrKey] = info.ClientIp;
+        var id = IdentityContext.FromContext(context);
+        if (id is not null) id.UserName = info.Username;
     }
 
     public static Func<HttpContext, string, Task<bool>> CheckSession(Func<HttpContext, string, Task<bool>> next) => async (context, host) =>

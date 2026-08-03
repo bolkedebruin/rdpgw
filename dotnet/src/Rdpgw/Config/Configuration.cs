@@ -171,6 +171,7 @@ public sealed class Configuration
                 case "server.alloweddestinationports": c.Server.AllowedDestinationPorts = AsIntList(value); break;
                 case "server.allowprivatedestinations": c.Server.AllowPrivateDestinations = AsBool(value); break;
                 case "server.trustedproxies": c.Server.TrustedProxies = AsStringList(value); break;
+                case "server.primarygateway": c.Server.PrimaryGateway = AsString(value); break;
                 case "openid.providerurl": c.OpenId.ProviderUrl = AsString(value); break;
                 case "openid.clientid": c.OpenId.ClientId = AsString(value); break;
                 case "openid.clientsecret": c.OpenId.ClientSecret = AsString(value); break;
@@ -199,6 +200,7 @@ public sealed class Configuration
                 case "security.querytokenissuer": c.Security.QueryTokenIssuer = AsString(value); break;
                 case "security.verifyclientip": c.Security.VerifyClientIp = AsBool(value); break;
                 case "security.enableusertoken": c.Security.EnableUserToken = AsBool(value); break;
+                case "security.gatewaysharedkey": c.Security.GatewaySharedKey = AsString(value); break;
                 case "client.defaults": c.Client.Defaults = AsString(value); break;
                 case "client.usernametemplate": c.Client.UsernameTemplate = AsString(value); break;
                 case "client.splituserdomain": c.Client.SplitUserDomain = AsBool(value); break;
@@ -225,6 +227,12 @@ public sealed class Configuration
         if (c.Server.KerberosEnabled() && string.IsNullOrEmpty(c.Kerberos.Keytab)) throw new InvalidOperationException("kerberos is configured but no keytab was specified");
         if (c.Server.HeaderEnabled() && string.IsNullOrEmpty(c.Header.UserHeader)) throw new InvalidOperationException("header authentication is configured but no user header was specified");
         if (!string.IsNullOrEmpty(c.Server.GatewayAddress) && !c.Server.GatewayAddress.Contains("//", StringComparison.Ordinal)) c.Server.GatewayAddress = "//" + c.Server.GatewayAddress;
+        if (!string.IsNullOrEmpty(c.Server.PrimaryGateway))
+        {
+            if (c.Security.GatewaySharedKey.Length < 32) throw new InvalidOperationException("`server.primarygateway` is set but `security.gatewaysharedkey` is missing or shorter than 32 characters; subservient gateways must share a strong key with the primary");
+            if (!c.Server.PrimaryGateway.Contains("://", StringComparison.Ordinal)) c.Server.PrimaryGateway = "https://" + c.Server.PrimaryGateway;
+        }
+        if (c.Security.GatewaySharedKey.Length > 0 && c.Security.GatewaySharedKey.Length < 32) throw new InvalidOperationException("`security.gatewaysharedkey` must be at least 32 characters");
     }
 
     private static void CheckDefaultSecrets(Configuration c)
@@ -284,6 +292,8 @@ public sealed class ServerConfig
     public List<int> AllowedDestinationPorts { get; set; } = [];
     public bool AllowPrivateDestinations { get; set; }
     public List<string> TrustedProxies { get; set; } = [];
+    /// <summary>URL of the primary gateway. When set, this instance runs as a subservient gateway and validates PAA tokens against the primary.</summary>
+    public string PrimaryGateway { get; set; } = string.Empty;
     public bool OpenIDEnabled() => MatchAuth("openid");
     public bool KerberosEnabled() => MatchAuth("kerberos");
     public bool BasicAuthEnabled() => MatchAuth("local") || MatchAuth("basic");
@@ -296,5 +306,5 @@ public sealed class KerberosConfig { public string Keytab { get; set; } = string
 public sealed class OpenIDConfig { public string ProviderUrl { get; set; } = string.Empty; public string ClientId { get; set; } = string.Empty; public string ClientSecret { get; set; } = string.Empty; }
 public sealed class HeaderConfig { public string UserHeader { get; set; } = string.Empty; public string UserIdHeader { get; set; } = string.Empty; public string EmailHeader { get; set; } = string.Empty; public string DisplayNameHeader { get; set; } = string.Empty; public List<string> TrustedProxies { get; set; } = []; }
 public sealed class CapsConfig { public bool SmartCardAuth { get; set; } public bool TokenAuth { get; set; } public int IdleTimeout { get; set; } public bool RedirectAll { get; set; } public bool DisableRedirect { get; set; } public bool EnableClipboard { get; set; } public bool EnablePrinter { get; set; } public bool EnablePort { get; set; } public bool EnablePnp { get; set; } public bool EnableDrive { get; set; } }
-public sealed class SecurityConfig { public string PAATokenEncryptionKey { get; set; } = string.Empty; public string PAATokenSigningKey { get; set; } = string.Empty; public string UserTokenEncryptionKey { get; set; } = string.Empty; public string UserTokenSigningKey { get; set; } = string.Empty; public string QueryTokenSigningKey { get; set; } = string.Empty; public string QueryTokenIssuer { get; set; } = string.Empty; public bool VerifyClientIp { get; set; } public bool EnableUserToken { get; set; } }
+public sealed class SecurityConfig { public string PAATokenEncryptionKey { get; set; } = string.Empty; public string PAATokenSigningKey { get; set; } = string.Empty; public string UserTokenEncryptionKey { get; set; } = string.Empty; public string UserTokenSigningKey { get; set; } = string.Empty; public string QueryTokenSigningKey { get; set; } = string.Empty; public string QueryTokenIssuer { get; set; } = string.Empty; public bool VerifyClientIp { get; set; } public bool EnableUserToken { get; set; } public string GatewaySharedKey { get; set; } = string.Empty; }
 public sealed class ClientConfig { public string Defaults { get; set; } = string.Empty; public string UsernameTemplate { get; set; } = string.Empty; public bool SplitUserDomain { get; set; } public bool NoUsername { get; set; } public string SigningCert { get; set; } = string.Empty; public string SigningKey { get; set; } = string.Empty; public List<string> RdpOverridableKeys { get; set; } = []; }

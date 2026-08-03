@@ -16,6 +16,7 @@
         <MudText Typo="Typo.h6">@Handler.WebConfig.Branding.Logo</MudText>
         <MudSpacer />
         <MudIconButton Icon="@Icons.Material.Filled.Dns" Color="Color.Inherit" Href="/hosts" aria-label="Manage hosts" Class="mr-2" />
+        <MudIconButton Icon="@Icons.Material.Filled.Lan" Color="Color.Inherit" Href="/gateways" aria-label="Manage gateways" Class="mr-2" />
         @if (Handler.WebConfig.UI.ShowUserAvatar)
         {
             <MudAvatar Color="Color.Secondary" Class="mr-2">@GetInitials(_state.Username)</MudAvatar>

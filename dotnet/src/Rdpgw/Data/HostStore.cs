@@ -57,6 +57,21 @@ public sealed class HostStore(IDbContextFactory<RdpgwDbContext> contextFactory)
         return db.Hosts.AsNoTracking().Where(h => h.Owner == owner || h.Owner == "").OrderBy(h => h.Id).Select(h => h.Address).ToList();
     }
 
+    /// <summary>
+    /// Returns the address of the gateway associated with the given (already
+    /// template-substituted) host address visible to the user, or null when the
+    /// host has no gateway assigned and the server's own address should be used.
+    /// </summary>
+    public string? GetGatewayAddressForHost(string userName, string hostAddress)
+    {
+        using var db = contextFactory.CreateDbContext();
+        var host = db.Hosts.AsNoTracking().Include(h => h.Gateway)
+            .Where(h => h.Owner == userName || h.Owner == "")
+            .AsEnumerable()
+            .FirstOrDefault(h => h.Address.Replace("{{ preferred_username }}", userName) == hostAddress);
+        return host?.Gateway?.Address;
+    }
+
     public async Task AddAsync(HostEntry host, string owner)
     {
         if (string.IsNullOrEmpty(owner)) throw new InvalidOperationException("cannot add a host without an authenticated user");
@@ -77,6 +92,7 @@ public sealed class HostStore(IDbContextFactory<RdpgwDbContext> contextFactory)
         existing.Address = host.Address;
         existing.Description = host.Description;
         existing.IsDefault = host.IsDefault;
+        existing.GatewayId = host.GatewayId;
         await db.SaveChangesAsync();
     }
 

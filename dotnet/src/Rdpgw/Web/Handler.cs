@@ -131,7 +131,8 @@ public sealed class Handler
         catch (Exception ex) { Console.WriteLine($"rejected rdp override for user {id.UserName}: {ex.Message}"); ctx.Response.StatusCode = 400; await ctx.Response.WriteAsync(ex.Message); return; }
         if (!_rdpOpts.NoUsername) { b.Settings.Username = render; if (!string.IsNullOrEmpty(domain)) b.Settings.Domain = domain; }
         b.Settings.FullAddress = host;
-        b.Settings.GatewayHostname = _gatewayAddress.IsDefaultPort ? _gatewayAddress.Host : _gatewayAddress.Authority;
+        var gatewayHost = _hostStore.GetGatewayAddressForHost(id.UserName, host);
+        b.Settings.GatewayHostname = gatewayHost ?? (_gatewayAddress.IsDefaultPort ? _gatewayAddress.Host : _gatewayAddress.Authority);
         b.Settings.GatewayCredentialsSource = RdpCredentialSource.Cookie;
         b.Settings.GatewayAccessToken = token;
         b.Settings.GatewayCredentialMethod = 1;

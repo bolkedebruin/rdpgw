@@ -7,6 +7,14 @@
             <MudTextField T="string" @bind-Value="Host.Address" Label="Address" Required="true" RequiredError="Address is required"
                           HelperText="Hostname or hostname:port of the remote desktop, e.g. desktop.example.com:3389" Class="mb-3" />
             <MudTextField T="string" @bind-Value="Host.Description" Label="Description" Class="mb-3" />
+            <MudSelect T="int?" @bind-Value="Host.GatewayId" Label="Gateway" Clearable="true" Class="mb-3"
+                       HelperText="Gateway the RDP client should connect through; leave empty to use the default gateway">
+                <MudSelectItem T="int?" Value="@((int?)null)">Default gateway</MudSelectItem>
+                @foreach (var gw in Gateways)
+                {
+                    <MudSelectItem T="int?" Value="@((int?)gw.Id)">@gw.Name (@gw.Address)</MudSelectItem>
+                }
+            </MudSelect>
             <MudSwitch T="bool" @bind-Value="Host.IsDefault" Label="Default host" Color="Color.Primary" />
         </MudForm>
     </DialogContent>
@@ -20,6 +28,8 @@
     [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
 
     [Parameter] public HostEntry Host { get; set; } = new();
+
+    [Parameter] public List<GatewayEntry> Gateways { get; set; } = [];
 
     private MudForm _form = default!;
 

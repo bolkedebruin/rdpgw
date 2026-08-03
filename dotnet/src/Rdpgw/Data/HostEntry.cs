@@ -20,5 +20,13 @@ public sealed class HostEntry
     /// </summary>
     public string Owner { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Optional gateway this host is reached through. When unset, the RDP file
+    /// uses the server's own configured gateway address.
+    /// </summary>
+    public int? GatewayId { get; set; }
+
+    public GatewayEntry? Gateway { get; set; }
+
     public bool IsDefault { get; set; }
 }

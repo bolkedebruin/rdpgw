@@ -26,8 +26,11 @@ var conf = Configuration.Load(configFile);
 
 var dbFile = string.IsNullOrEmpty(conf.Server.DatabaseFile) ? "rdpgw.db" : conf.Server.DatabaseFile;
 var dbOptions = new DbContextOptionsBuilder<RdpgwDbContext>().UseSqlite($"Data Source={dbFile}").Options;
-var hostStore = new HostStore(new PooledDbContextFactory<RdpgwDbContext>(dbOptions));
+var dbFactory = new PooledDbContextFactory<RdpgwDbContext>(dbOptions);
+var hostStore = new HostStore(dbFactory);
 await hostStore.InitializeAsync(conf.Server.Hosts);
+var gatewayStore = new GatewayStore(dbFactory);
+await gatewayStore.InitializeAsync(conf.Server.GatewayAddress);
 
 var gwAddress = string.IsNullOrEmpty(conf.Server.GatewayAddress) ? new Uri("https://localhost") : new Uri(conf.Server.GatewayAddress, UriKind.RelativeOrAbsolute);
 if (!gwAddress.IsAbsoluteUri) gwAddress = new Uri("https:" + conf.Server.GatewayAddress);
@@ -71,6 +74,7 @@ builder.Services.AddAuthorization();
 builder.Services.AddMetricServer(options => { });
 builder.Services.AddSingleton(web);
 builder.Services.AddSingleton(hostStore);
+builder.Services.AddSingleton(gatewayStore);
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 builder.Services.AddMudServices();
@@ -120,6 +124,17 @@ if (conf.Caps.TokenAuth)
 }
 else gw.CheckHost = Security.CheckHost;
 
+if (!string.IsNullOrEmpty(conf.Server.PrimaryGateway))
+{
+    // Subservient gateway: PAA tokens are issued by the primary, so validate them
+    // against the primary's federation endpoint using the shared key. The token's
+    // remoteServer claim (checked by CheckSession) authorizes the target host.
+    Console.WriteLine($"running as subservient gateway; validating tokens against primary at {conf.Server.PrimaryGateway}");
+    var remoteValidator = new GatewayFederation.RemoteTokenValidator(new Uri(conf.Server.PrimaryGateway), conf.Security.GatewaySharedKey);
+    gw.CheckPAACookie = remoteValidator.CheckPAACookie;
+    gw.CheckHost = Security.CheckSession((_, _) => Task.FromResult(true));
+}
+
 OIDC? oidc = null;
 HeaderAuth? headerAuth = null;
 NTLMAuthHandler? ntlmAuth = null;
@@ -135,10 +150,17 @@ async Task WebAuth(HttpContext ctx, Func<Task> next)
 }
 
 app.UseWhen(
-    ctx => ctx.Request.Path == "/" || ctx.Request.Path.StartsWithSegments("/hosts") || ctx.Request.Path.StartsWithSegments("/_blazor"),
+    ctx => ctx.Request.Path == "/" || ctx.Request.Path.StartsWithSegments("/hosts") || ctx.Request.Path.StartsWithSegments("/gateways") || ctx.Request.Path.StartsWithSegments("/_blazor"),
     branch => branch.Use(async (ctx, next) => await WebAuth(ctx, () => next(ctx))));
 
 app.Map("/tokeninfo", TokenInfoEndpoint.TokenInfo);
+
+if (string.IsNullOrEmpty(conf.Server.PrimaryGateway) && !string.IsNullOrEmpty(conf.Security.GatewaySharedKey))
+{
+    Console.WriteLine("enabling gateway federation token validation endpoint");
+    var federationKey = System.Text.Encoding.UTF8.GetBytes(conf.Security.GatewaySharedKey);
+    app.MapPost(GatewayFederation.ValidateEndpoint, ctx => GatewayFederation.HandleValidate(ctx, federationKey));
+}
 
 if (conf.Server.OpenIDEnabled())
 {
