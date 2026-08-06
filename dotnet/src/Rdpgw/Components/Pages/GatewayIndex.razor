@@ -1,0 +1,125 @@
+@page "/gateways"
+@using Rdpgw.Components.Dialogs
+@using Rdpgw.Data
+@using Rdpgw.Web
+@inject Handler Handler
+@inject GatewayStore GatewayStore
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>@Handler.WebConfig.Branding.Title - Gateways</PageTitle>
+
+<MudLayout>
+    <MudAppBar Elevation="1" Color="Color.Primary">
+        <img src="/assets/icon.svg" alt="Logo" height="32" class="mr-3" />
+        <MudText Typo="Typo.h6">@Handler.WebConfig.Branding.Logo</MudText>
+        <MudSpacer />
+        <MudButton Href="/" StartIcon="@Icons.Material.Filled.Home" Color="Color.Inherit">Home</MudButton>
+    </MudAppBar>
+    <MudMainContent>
+        <MudContainer MaxWidth="MaxWidth.Large" Class="mt-8">
+            <div class="d-flex align-center mb-4">
+                <MudText Typo="Typo.h4">Gateway Management</MudText>
+                <MudSpacer />
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                           OnClick="AddGatewayAsync">Add Gateway</MudButton>
+            </div>
+
+            <MudTable Items="_gateways" Hover="true" Striped="true" Loading="_loading" Elevation="3">
+                <HeaderContent>
+                    <MudTh>Name</MudTh>
+                    <MudTh>Address</MudTh>
+                    <MudTh>Description</MudTh>
+                    <MudTh Style="width: 120px;">Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Name">@context.Name</MudTd>
+                    <MudTd DataLabel="Address">@context.Address</MudTd>
+                    <MudTd DataLabel="Description">@context.Description</MudTd>
+                    <MudTd DataLabel="Actions">
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                       OnClick="@(() => EditGatewayAsync(context))" aria-label="Edit gateway" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                       OnClick="@(() => DeleteGatewayAsync(context))" aria-label="Delete gateway" />
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText>No gateways configured. Use "Add Gateway" to create one.</MudText>
+                </NoRecordsContent>
+            </MudTable>
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
+
+@code {
+    private List<GatewayEntry> _gateways = [];
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _gateways = await GatewayStore.GetAllAsync();
+        _loading = false;
+    }
+
+    private async Task AddGatewayAsync()
+    {
+        var parameters = new DialogParameters<GatewayEditDialog> { { d => d.Gateway, new GatewayEntry() } };
+        var dialog = await DialogService.ShowAsync<GatewayEditDialog>("Add Gateway", parameters);
+        var result = await dialog.Result;
+        if (result is { Canceled: false, Data: GatewayEntry gateway })
+        {
+            try
+            {
+                await GatewayStore.AddAsync(gateway);
+                Snackbar.Add($"Gateway '{gateway.Name}' added.", Severity.Success);
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Failed to add gateway: {ex.Message}", Severity.Error);
+            }
+            await LoadAsync();
+        }
+    }
+
+    private async Task EditGatewayAsync(GatewayEntry gateway)
+    {
+        var copy = new GatewayEntry { Id = gateway.Id, Name = gateway.Name, Address = gateway.Address, Description = gateway.Description };
+        var parameters = new DialogParameters<GatewayEditDialog> { { d => d.Gateway, copy } };
+        var dialog = await DialogService.ShowAsync<GatewayEditDialog>("Edit Gateway", parameters);
+        var result = await dialog.Result;
+        if (result is { Canceled: false, Data: GatewayEntry updated })
+        {
+            try
+            {
+                await GatewayStore.UpdateAsync(updated);
+                Snackbar.Add($"Gateway '{updated.Name}' updated.", Severity.Success);
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Failed to update gateway: {ex.Message}", Severity.Error);
+            }
+            await LoadAsync();
+        }
+    }
+
+    private async Task DeleteGatewayAsync(GatewayEntry gateway)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync("Delete Gateway", $"Delete gateway '{gateway.Name}' ({gateway.Address})? Hosts using it will fall back to the default gateway.", yesText: "Delete", cancelText: "Cancel");
+        if (confirmed == true)
+        {
+            try
+            {
+                await GatewayStore.DeleteAsync(gateway.Id);
+                Snackbar.Add($"Gateway '{gateway.Name}' deleted.", Severity.Success);
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Failed to delete gateway: {ex.Message}", Severity.Error);
+            }
+            await LoadAsync();
+        }
+    }
+}

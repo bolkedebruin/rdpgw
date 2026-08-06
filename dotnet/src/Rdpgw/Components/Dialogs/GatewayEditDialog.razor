@@ -1,0 +1,33 @@
+@using Rdpgw.Data
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form">
+            <MudTextField T="string" @bind-Value="Gateway.Name" Label="Name" Required="true" RequiredError="Name is required" Class="mb-3" />
+            <MudTextField T="string" @bind-Value="Gateway.Address" Label="Address" Required="true" RequiredError="Address is required"
+                          HelperText="FQDN or FQDN:port of the gateway, e.g. gateway.example.com:443" Class="mb-3" />
+            <MudTextField T="string" @bind-Value="Gateway.Description" Label="Description" Class="mb-3" />
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveAsync">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public GatewayEntry Gateway { get; set; } = new();
+
+    private MudForm _form = default!;
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task SaveAsync()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid) return;
+        MudDialog.Close(DialogResult.Ok(Gateway));
+    }
+}

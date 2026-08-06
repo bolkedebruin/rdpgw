@@ -1,0 +1,35 @@
+@inherits LayoutComponentBase
+@inject Rdpgw.Web.Handler Handler
+
+<MudThemeProvider Theme="_theme" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+@Body
+
+@code {
+    private MudTheme _theme = new();
+
+    protected override void OnInitialized()
+    {
+        var theme = Handler.WebConfig.Theme;
+        _theme = new MudTheme
+        {
+            PaletteLight = new PaletteLight
+            {
+                Primary = theme.PrimaryColor,
+                Secondary = theme.SecondaryColor,
+                Success = theme.SuccessColor,
+                Error = theme.ErrorColor,
+            },
+            PaletteDark = new PaletteDark
+            {
+                Primary = theme.PrimaryColor,
+                Secondary = theme.SecondaryColor,
+                Success = theme.SuccessColor,
+                Error = theme.ErrorColor,
+            },
+        };
+    }
+}

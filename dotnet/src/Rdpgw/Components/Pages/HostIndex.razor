@@ -1,0 +1,173 @@
+@page "/hosts"
+@using Rdpgw.Components.Dialogs
+@using Rdpgw.Data
+@using Rdpgw.Identity
+@using Rdpgw.Web
+@implements IDisposable
+@inject Handler Handler
+@inject HostStore HostStore
+@inject GatewayStore GatewayStore
+@inject IHttpContextAccessor HttpContextAccessor
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject PersistentComponentState ApplicationState
+
+<PageTitle>@Handler.WebConfig.Branding.Title - Hosts</PageTitle>
+
+<MudLayout>
+    <MudAppBar Elevation="1" Color="Color.Primary">
+        <img src="/assets/icon.svg" alt="Logo" height="32" class="mr-3" />
+        <MudText Typo="Typo.h6">@Handler.WebConfig.Branding.Logo</MudText>
+        <MudSpacer />
+        <MudButton Href="/gateways" StartIcon="@Icons.Material.Filled.Lan" Color="Color.Inherit" Class="mr-2">Gateways</MudButton>
+        <MudButton Href="/" StartIcon="@Icons.Material.Filled.Home" Color="Color.Inherit">Home</MudButton>
+    </MudAppBar>
+    <MudMainContent>
+        <MudContainer MaxWidth="MaxWidth.Large" Class="mt-8">
+            <div class="d-flex align-center mb-4">
+                <MudText Typo="Typo.h4">Host Management</MudText>
+                <MudSpacer />
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                           OnClick="AddHostAsync">Add Host</MudButton>
+            </div>
+
+            <MudTable Items="_hosts" Hover="true" Striped="true" Loading="_loading" Elevation="3">
+                <HeaderContent>
+                    <MudTh>Name</MudTh>
+                    <MudTh>Address</MudTh>
+                    <MudTh>Description</MudTh>
+                    <MudTh>Gateway</MudTh>
+                    <MudTh>Default</MudTh>
+                    <MudTh Style="width: 120px;">Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Name">@context.Name</MudTd>
+                    <MudTd DataLabel="Address">@context.Address</MudTd>
+                    <MudTd DataLabel="Description">@context.Description</MudTd>
+                    <MudTd DataLabel="Gateway">@GatewayName(context.GatewayId)</MudTd>
+                    <MudTd DataLabel="Default">
+                        @if (context.IsDefault)
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.Check" Color="Color.Success" />
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Actions">
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                       OnClick="@(() => EditHostAsync(context))" aria-label="Edit host" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                       OnClick="@(() => DeleteHostAsync(context))" aria-label="Delete host" />
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText>No hosts configured. Use "Add Host" to create one.</MudText>
+                </NoRecordsContent>
+            </MudTable>
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
+
+@code {
+    private const string StateKey = "rdpgw-hosts-owner";
+    private List<HostEntry> _hosts = [];
+    private List<GatewayEntry> _gateways = [];
+    private bool _loading = true;
+    private string _owner = string.Empty;
+    private PersistingComponentStateSubscription _subscription;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _subscription = ApplicationState.RegisterOnPersisting(PersistState, RenderMode.InteractiveServer);
+        if (ApplicationState.TryTakeFromJson<string>(StateKey, out var restored) && restored is not null)
+        {
+            _owner = restored;
+        }
+        else
+        {
+            var identity = HttpContextAccessor.HttpContext is { } ctx ? IdentityContext.FromContext(ctx) : null;
+            _owner = identity?.UserName ?? string.Empty;
+        }
+        await LoadAsync();
+    }
+
+    private Task PersistState()
+    {
+        ApplicationState.PersistAsJson(StateKey, _owner);
+        return Task.CompletedTask;
+    }
+
+    public void Dispose() => _subscription.Dispose();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _hosts = await HostStore.GetOwnedAsync(_owner);
+        _gateways = await GatewayStore.GetAllAsync();
+        _loading = false;
+    }
+
+    private string GatewayName(int? gatewayId) => _gateways.FirstOrDefault(g => g.Id == gatewayId)?.Name ?? string.Empty;
+
+    private async Task AddHostAsync()
+    {
+        if (string.IsNullOrEmpty(_owner))
+        {
+            Snackbar.Add("Cannot add a host: no authenticated user found.", Severity.Error);
+            return;
+        }
+        var parameters = new DialogParameters<HostEditDialog> { { d => d.Host, new HostEntry() }, { d => d.Gateways, _gateways } };
+        var dialog = await DialogService.ShowAsync<HostEditDialog>("Add Host", parameters);
+        var result = await dialog.Result;
+        if (result is { Canceled: false, Data: HostEntry host })
+        {
+            try
+            {
+                await HostStore.AddAsync(host, _owner);
+                Snackbar.Add($"Host '{host.Name}' added.", Severity.Success);
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Failed to add host: {ex.Message}", Severity.Error);
+            }
+            await LoadAsync();
+        }
+    }
+
+    private async Task EditHostAsync(HostEntry host)
+    {
+        var copy = new HostEntry { Id = host.Id, Name = host.Name, Address = host.Address, Description = host.Description, IsDefault = host.IsDefault, GatewayId = host.GatewayId };
+        var parameters = new DialogParameters<HostEditDialog> { { d => d.Host, copy }, { d => d.Gateways, _gateways } };
+        var dialog = await DialogService.ShowAsync<HostEditDialog>("Edit Host", parameters);
+        var result = await dialog.Result;
+        if (result is { Canceled: false, Data: HostEntry updated })
+        {
+            try
+            {
+                await HostStore.UpdateAsync(updated, _owner);
+                Snackbar.Add($"Host '{updated.Name}' updated.", Severity.Success);
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Failed to update host: {ex.Message}", Severity.Error);
+            }
+            await LoadAsync();
+        }
+    }
+
+    private async Task DeleteHostAsync(HostEntry host)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync("Delete Host", $"Delete host '{host.Name}' ({host.Address})?", yesText: "Delete", cancelText: "Cancel");
+        if (confirmed == true)
+        {
+            try
+            {
+                await HostStore.DeleteAsync(host.Id, _owner);
+                Snackbar.Add($"Host '{host.Name}' deleted.", Severity.Success);
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Failed to delete host: {ex.Message}", Severity.Error);
+            }
+            await LoadAsync();
+        }
+    }
+}

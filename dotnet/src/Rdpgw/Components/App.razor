@@ -1,0 +1,22 @@
+@inject Rdpgw.Web.Handler Handler
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="/" />
+    <title>@Handler.WebConfig.Branding.Title</title>
+    <link rel="icon" type="image/svg+xml" href="/assets/icon.svg" />
+    <link rel="alternate icon" type="image/x-icon" href="/assets/icon.svg" />
+    <link rel="stylesheet" href="_content/MudBlazor/MudBlazor.min.css" />
+    <HeadOutlet @rendermode="InteractiveServer" />
+</head>
+
+<body>
+    <Routes @rendermode="InteractiveServer" />
+    <script src="_framework/blazor.web.js"></script>
+    <script src="_content/MudBlazor/MudBlazor.min.js"></script>
+</body>
+
+</html>
