@@ -23,7 +23,9 @@ jobs:
       id: go
 
     - name: Install pam-devel
-      run: sudo apt-get -y install libpam-dev
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libpam-dev
 
     - name: Install golint
       run: go get -u golang.org/x/lint/golint
