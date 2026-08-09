@@ -5,8 +5,13 @@ using Rdpgw.Security;
 
 namespace Rdpgw.Web;
 
+/// <summary>
+/// Implements the token introspection-style endpoint for rdpgw encrypted user tokens.
+/// </summary>
 public static class TokenInfoEndpoint
 {
+    /// <summary>Validates the access_token query parameter and returns its claims as JSON.</summary>
+    /// <param name="ctx">HTTP request context for the tokeninfo request.</param>
     public static async Task TokenInfo(HttpContext ctx)
     {
         if (!HttpMethods.IsGet(ctx.Request.Method)) { ctx.Response.StatusCode = 405; await ctx.Response.WriteAsync("Invalid request"); return; }
@@ -14,6 +19,7 @@ public static class TokenInfoEndpoint
         if (string.IsNullOrEmpty(token)) { ctx.Response.StatusCode = 400; await ctx.Response.WriteAsync("access_token missing in request"); return; }
         try
         {
+            // UserInfo performs JWT decryption, optional signature validation, issuer checks, and lifetime checks.
             var info = await Security.Security.UserInfo(ctx, token);
             ctx.Response.ContentType = "application/json; charset=UTF-8";
             await JsonSerializer.SerializeAsync(ctx.Response.Body, info);

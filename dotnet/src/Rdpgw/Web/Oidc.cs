@@ -8,15 +8,27 @@ using Rdpgw.Logging;
 
 namespace Rdpgw.Web;
 
+/// <summary>
+/// Configuration needed to create an OpenID Connect authentication helper.
+/// </summary>
 public sealed class OidcConfig
 {
+    /// <summary>Gets or sets the provider base URL used for discovery.</summary>
     public string ProviderUrl { get; set; } = string.Empty;
+    /// <summary>Gets or sets the registered OIDC client identifier.</summary>
     public string ClientId { get; set; } = string.Empty;
+    /// <summary>Gets or sets the registered OIDC client secret.</summary>
     public string ClientSecret { get; set; } = string.Empty;
+    /// <summary>Gets or sets the redirect URI registered with the provider.</summary>
     public string RedirectUrl { get; set; } = string.Empty;
+    /// <summary>Creates an <see cref="OIDC"/> instance by synchronously completing discovery.</summary>
+    /// <returns>A configured OIDC helper.</returns>
     public OIDC New() => OIDC.CreateAsync(this).GetAwaiter().GetResult();
 }
 
+/// <summary>
+/// Implements the browser OpenID Connect authorization-code flow for the rdpgw web UI.
+/// </summary>
 public sealed class OIDC
 {
     private const string OidcStateKey = "OIDCSTATE";
@@ -31,6 +43,9 @@ public sealed class OIDC
     private OIDC(OidcConfig config, string authorizationEndpoint, string tokenEndpoint, string issuer, ICollection<SecurityKey> keys)
     { _config = config; _authorizationEndpoint = authorizationEndpoint; _tokenEndpoint = tokenEndpoint; _issuer = issuer; _signingKeys = keys; }
 
+    /// <summary>Discovers provider endpoints and signing keys, then creates an OIDC helper.</summary>
+    /// <param name="c">OIDC configuration.</param>
+    /// <returns>A configured OIDC helper.</returns>
     public static async Task<OIDC> CreateAsync(OidcConfig c)
     {
         var baseUrl = c.ProviderUrl.TrimEnd('/');
@@ -42,6 +57,8 @@ public sealed class OIDC
         return new OIDC(c, root.GetProperty("authorization_endpoint").GetString()!, root.GetProperty("token_endpoint").GetString()!, root.GetProperty("issuer").GetString()!, keys);
     }
 
+    /// <summary>Handles the provider redirect, exchanges the authorization code, validates the ID token, and saves the session identity.</summary>
+    /// <param name="ctx">Callback request context.</param>
     public async Task HandleCallback(HttpContext ctx)
     {
         var state = ctx.Request.Query["state"].FirstOrDefault() ?? string.Empty;
@@ -63,6 +80,7 @@ public sealed class OIDC
             ValidateIssuer = true, ValidIssuer = _issuer, ValidateAudience = true, ValidAudience = _config.ClientId,
             ValidateLifetime = true, ValidateIssuerSigningKey = true, IssuerSigningKeys = _signingKeys, ClockSkew = TimeSpan.FromMinutes(5)
         };
+        // ID token validation pins issuer, audience, lifetime, and the signing key set from discovery.
         var result = await new JsonWebTokenHandler().ValidateTokenAsync(rawIdToken, parameters);
         if (!result.IsValid) { ctx.Response.StatusCode = 500; await ctx.Response.WriteAsync("Failed to verify ID Token: " + result.Exception?.Message); return; }
         var claims = result.ClaimsIdentity.Claims.ToDictionary(c => c.Type, c => c.Value);
@@ -74,11 +92,15 @@ public sealed class OIDC
         IdentityContext.AddToContext(ctx, id); Sessions.SaveSessionIdentity(ctx, id);
         if (!redirect.StartsWith("/", StringComparison.Ordinal) || redirect.StartsWith("//", StringComparison.Ordinal))
         {
+            // Only local redirects are allowed so a forged state cannot become an open redirect.
             redirect = "/";
         }
         ctx.Response.Redirect(redirect);
     }
 
+    /// <summary>Ensures a web request has an authenticated OIDC session, redirecting to the provider when needed.</summary>
+    /// <param name="ctx">Current HTTP context.</param>
+    /// <param name="next">Next handler to execute when authenticated.</param>
     public async Task Authenticated(HttpContext ctx, Func<Task> next)
     {
         var id = IdentityContext.FromContext(ctx) ?? new User();
@@ -86,6 +108,7 @@ public sealed class OIDC
         {
             var state = Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
             _logger.LogDebug("OIDC Authenticated: storing state '{State}' for redirect to '{Redirect}'", state, ctx.Request.Path + ctx.Request.QueryString);
+            // The state cookie entry pairs CSRF protection with the local URL to resume after callback.
             Sessions.SetValue(ctx, OidcStateKey, state + "|" + ctx.Request.Path + ctx.Request.QueryString, TimeSpan.FromMinutes(2));
             var url = _authorizationEndpoint + "?" + QueryString.Create(new Dictionary<string, string?>
             {

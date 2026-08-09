@@ -14,9 +14,18 @@ namespace Rdpgw.Web;
 /// </summary>
 public static class GatewayFederation
 {
+    /// <summary>HTTP endpoint path exposed by a primary gateway for remote PAA token validation.</summary>
     public const string ValidateEndpoint = "/api/v1/gateway/validate";
 
+    /// <summary>Request body sent by a subservient gateway to validate a PAA token.</summary>
+    /// <param name="Token">PAA token received from the RDP client.</param>
     private sealed record ValidateRequest(string? Token);
+    /// <summary>Response body returned by the primary gateway after PAA token validation.</summary>
+    /// <param name="Valid">Indicates whether the token was valid.</param>
+    /// <param name="Username">Authenticated username from the token.</param>
+    /// <param name="RemoteServer">Authorized target server from the token.</param>
+    /// <param name="ClientIp">Client IP bound into the token.</param>
+    /// <param name="Error">Validation error description safe for the caller.</param>
     private sealed record ValidateResponse(bool Valid, string? Username, string? RemoteServer, string? ClientIp, string? Error);
 
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, PropertyNameCaseInsensitive = true };
@@ -25,6 +34,8 @@ public static class GatewayFederation
     /// Endpoint handler run on the primary gateway. Validates the shared key in the
     /// Authorization header (constant-time comparison) and then the submitted PAA token.
     /// </summary>
+    /// <param name="ctx">HTTP request context for the validation request.</param>
+    /// <param name="sharedKey">UTF-8 bytes of the shared bearer key configured on all gateways.</param>
     public static async Task HandleValidate(HttpContext ctx, byte[] sharedKey)
     {
         if (!IsAuthorized(ctx, sharedKey))
@@ -45,6 +56,7 @@ public static class GatewayFederation
         ctx.Response.ContentType = "application/json";
         try
         {
+            // The primary owns token validation because it minted the PAA signing key in federation mode.
             var info = await Tokens.ValidatePAAToken(request.Token);
             await JsonSerializer.SerializeAsync(ctx.Response.Body, new ValidateResponse(true, info.Username, info.RemoteServer, info.ClientIp, null), JsonOptions);
         }
@@ -75,6 +87,9 @@ public static class GatewayFederation
         private readonly Uri _validateUri;
         private readonly ILogger _logger = Log.For<RemoteTokenValidator>();
 
+        /// <summary>Initializes a validator that calls the configured primary gateway.</summary>
+        /// <param name="primaryGateway">Base URL of the primary gateway.</param>
+        /// <param name="sharedKey">Shared bearer key used to authenticate federation calls.</param>
         public RemoteTokenValidator(Uri primaryGateway, string sharedKey)
         {
             _validateUri = new Uri(primaryGateway, ValidateEndpoint);
@@ -82,6 +97,10 @@ public static class GatewayFederation
             _http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", sharedKey);
         }
 
+        /// <summary>Validates a PAA token remotely and applies returned claims to the request context.</summary>
+        /// <param name="context">Gateway request context to update.</param>
+        /// <param name="tokenString">PAA token received from the client cookie.</param>
+        /// <returns><see langword="true"/> when the primary gateway accepts the token.</returns>
         public async Task<bool> CheckPAACookie(HttpContext context, string tokenString)
         {
             if (string.IsNullOrEmpty(tokenString)) throw new InvalidOperationException("no token to parse");

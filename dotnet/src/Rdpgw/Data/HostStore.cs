@@ -14,11 +14,13 @@ public sealed class HostStore(IDbContextFactory<RdpgwDbContext> contextFactory)
     /// Creates the database schema if needed and seeds it with any hosts from the
     /// legacy `server.hosts` configuration key when the table is still empty.
     /// </summary>
+    /// <param name="seedHosts">Legacy configured host addresses to import into an empty database.</param>
     public async Task InitializeAsync(IEnumerable<string> seedHosts)
     {
         await using var db = await contextFactory.CreateDbContextAsync();
         await db.Database.EnsureCreatedAsync();
         await MigrateOwnerColumnAsync(db);
+        // The import is intentionally one-shot so later configuration edits do not overwrite user-managed rows.
         if (await db.Hosts.AnyAsync()) return;
         var first = true;
         foreach (var host in seedHosts.Where(h => !string.IsNullOrWhiteSpace(h)).Distinct())
@@ -32,6 +34,8 @@ public sealed class HostStore(IDbContextFactory<RdpgwDbContext> contextFactory)
     /// <summary>
     /// Returns the hosts owned by the given user. Used by the host management page.
     /// </summary>
+    /// <param name="owner">Authenticated username that owns the requested hosts.</param>
+    /// <returns>The user's private hosts ordered by name.</returns>
     public async Task<List<HostEntry>> GetOwnedAsync(string owner)
     {
         await using var db = await contextFactory.CreateDbContextAsync();
@@ -42,6 +46,8 @@ public sealed class HostStore(IDbContextFactory<RdpgwDbContext> contextFactory)
     /// Returns the hosts visible to the given user: their own hosts plus shared
     /// (configuration-seeded) hosts that have no owner.
     /// </summary>
+    /// <param name="owner">Authenticated username whose visible host list is requested.</param>
+    /// <returns>Private and shared hosts ordered by name.</returns>
     public List<HostEntry> GetVisible(string owner)
     {
         using var db = contextFactory.CreateDbContext();
@@ -51,6 +57,8 @@ public sealed class HostStore(IDbContextFactory<RdpgwDbContext> contextFactory)
     /// <summary>
     /// Returns the addresses of the hosts visible to the given user.
     /// </summary>
+    /// <param name="owner">Authenticated username whose visible host addresses are requested.</param>
+    /// <returns>Host addresses ordered by database identifier.</returns>
     public IReadOnlyList<string> GetHostAddresses(string owner)
     {
         using var db = contextFactory.CreateDbContext();
@@ -62,16 +70,26 @@ public sealed class HostStore(IDbContextFactory<RdpgwDbContext> contextFactory)
     /// template-substituted) host address visible to the user, or null when the
     /// host has no gateway assigned and the server's own address should be used.
     /// </summary>
+    /// <param name="userName">Authenticated username used to resolve host ownership and templates.</param>
+    /// <param name="hostAddress">Final host address selected for the RDP file.</param>
+    /// <returns>The assigned gateway address, or <see langword="null"/> to use the server default.</returns>
     public string? GetGatewayAddressForHost(string userName, string hostAddress)
     {
         using var db = contextFactory.CreateDbContext();
         var host = db.Hosts.AsNoTracking().Include(h => h.Gateway)
             .Where(h => h.Owner == userName || h.Owner == "")
             .AsEnumerable()
+            // Template expansion is performed in memory because it depends on the authenticated username.
             .FirstOrDefault(h => h.Address.Replace("{{ preferred_username }}", userName) == hostAddress);
         return host?.Gateway?.Address;
     }
 
+    /// <summary>
+    /// Adds a host owned by the authenticated user.
+    /// </summary>
+    /// <param name="host">Host values to store.</param>
+    /// <param name="owner">Authenticated username that will own the host.</param>
+    /// <exception cref="InvalidOperationException">Thrown when no owner is supplied.</exception>
     public async Task AddAsync(HostEntry host, string owner)
     {
         if (string.IsNullOrEmpty(owner)) throw new InvalidOperationException("cannot add a host without an authenticated user");
@@ -82,6 +100,12 @@ public sealed class HostStore(IDbContextFactory<RdpgwDbContext> contextFactory)
         await db.SaveChangesAsync();
     }
 
+    /// <summary>
+    /// Updates a host owned by the authenticated user.
+    /// </summary>
+    /// <param name="host">Host values, including the existing database identifier, to persist.</param>
+    /// <param name="owner">Authenticated username that must own the host.</param>
+    /// <exception cref="InvalidOperationException">Thrown when the host is absent or belongs to another user.</exception>
     public async Task UpdateAsync(HostEntry host, string owner)
     {
         await using var db = await contextFactory.CreateDbContextAsync();
@@ -96,6 +120,11 @@ public sealed class HostStore(IDbContextFactory<RdpgwDbContext> contextFactory)
         await db.SaveChangesAsync();
     }
 
+    /// <summary>
+    /// Deletes a host if it belongs to the authenticated user.
+    /// </summary>
+    /// <param name="id">Database identifier of the host to delete.</param>
+    /// <param name="owner">Authenticated username that must own the host.</param>
     public async Task DeleteAsync(int id, string owner)
     {
         await using var db = await contextFactory.CreateDbContextAsync();

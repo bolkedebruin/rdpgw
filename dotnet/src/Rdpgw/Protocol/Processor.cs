@@ -9,6 +9,12 @@ using static Rdpgw.Protocol.ProtocolErrors;
 
 namespace Rdpgw.Protocol;
 
+/// <summary>
+/// Implements the MS-TSGU tunnel state machine and bridges accepted DATA packets to the target RDP server.
+/// </summary>
+/// <remarks>
+/// The processor follows the gateway sequence handshake, tunnel create, tunnel authorize, channel create, data, and close.
+/// </remarks>
 public sealed class Processor
 {
     private const int TunnelId = 10;
@@ -18,14 +24,20 @@ public sealed class Processor
     private static readonly ILogger Logger = Log.For<Processor>();
     private int _state = SERVER_STATE_INITIALIZED;
 
+    /// <summary>Initializes a processor for a gateway tunnel.</summary>
+    /// <param name="gw">Gateway configuration and authorization callbacks.</param>
+    /// <param name="tunnel">Tunnel state and transports to process.</param>
     public Processor(Gateway gw, Tunnel tunnel)
     {
         _gw = gw;
         _tunnel = tunnel;
     }
 
+    /// <summary>Runs the packet-processing loop until cancellation, disconnect, or channel close.</summary>
+    /// <param name="ct">Cancellation token tied to the HTTP request lifetime.</param>
     public async Task ProcessAsync(CancellationToken ct)
     {
+        // Combine request cancellation with administrative disconnects from ConnectionTracker.
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, _disconnect.Token);
         var token = linked.Token;
         while (!token.IsCancellationRequested)
@@ -38,6 +50,7 @@ public sealed class Processor
                     Logger.LogWarning("Cannot read message from stream {Error}", message.Error);
                     continue;
                 }
+                // MS-TSGU section 3.2.5 processing requires packets to arrive in handshake-to-channel state-machine order.
                 switch (message.PacketType)
                 {
                     case PKT_TYPE_HANDSHAKE_REQUEST:
@@ -53,6 +66,7 @@ public sealed class Processor
                         await HandleChannelCreateAsync(message.Msg, token).ConfigureAwait(false);
                         break;
                     case PKT_TYPE_DATA:
+                        // DATA payloads carry a 16-bit length prefix followed by opaque RDP bytes.
                         if (_state < SERVER_STATE_CHANNEL_CREATE) throw new InvalidOperationException("wrong state");
                         _state = SERVER_STATE_OPENED;
                         if (_tunnel.Rwc is not null)
@@ -76,10 +90,12 @@ public sealed class Processor
         }
     }
 
+    /// <summary>Requests the processor loop to stop and closes all resources owned by the tunnel.</summary>
     internal void SignalDisconnect()
     {
         _disconnect.Cancel();
         _ = _tunnel.TransportIn?.CloseAsync();
+        // WebSocket tunnels use the same transport for both directions; legacy tunnels have two independent requests.
         if (!ReferenceEquals(_tunnel.TransportIn, _tunnel.TransportOut))
         {
             _ = _tunnel.TransportOut?.CloseAsync();
@@ -95,7 +111,9 @@ public sealed class Processor
             await _tunnel.WriteAsync(HandshakeResponse(0, 0, 0, E_PROXY_INTERNALERROR)).ConfigureAwait(false);
             throw new InvalidOperationException($"{E_PROXY_INTERNALERROR:x}: wrong state");
         }
+        // MS-TSGU section 2.2 handshake request advertises protocol version and supported extended-auth bits.
         var (major, minor, _, reqAuth) = HandshakeRequest(data);
+        // Echo only the authentication capability bits that match configured gateway policy.
         ushort caps;
         try
         {
@@ -118,6 +136,7 @@ public sealed class Processor
             await _tunnel.WriteAsync(TunnelResponse(E_PROXY_INTERNALERROR)).ConfigureAwait(false);
             throw new InvalidOperationException($"{E_PROXY_INTERNALERROR:x}: PAA cookie rejected, wrong state");
         }
+        // MS-TSGU section 2.2 tunnel create can carry the PAA cookie selected during handshake negotiation.
         var (_, cookie) = TunnelRequest(data);
         if (_gw.CheckPAACookie is not null && !await _gw.CheckPAACookie(_tunnel.Context!, cookie).ConfigureAwait(false))
         {
@@ -136,6 +155,7 @@ public sealed class Processor
             await _tunnel.WriteAsync(TunnelAuthResponse(E_PROXY_INTERNALERROR)).ConfigureAwait(false);
             throw new InvalidOperationException($"{E_PROXY_INTERNALERROR:x}: Tunnel auth rejected, wrong state");
         }
+        // MS-TSGU section 2.2 tunnel authorization supplies the client computer name as a UTF-16LE string.
         var client = TunnelAuthRequest(data);
         if (_gw.CheckClientName is not null && !await _gw.CheckClientName(_tunnel.Context!, client).ConfigureAwait(false))
         {
@@ -154,6 +174,7 @@ public sealed class Processor
             await _tunnel.WriteAsync(ChannelResponse(E_PROXY_INTERNALERROR)).ConfigureAwait(false);
             throw new InvalidOperationException($"{E_PROXY_INTERNALERROR:x}: Channel create rejected, wrong state");
         }
+        // MS-TSGU section 2.2 channel create names the final RDP target and TCP port to connect through the gateway.
         var (server, port) = ChannelRequest(data);
         var host = $"{server}:{port}";
         if (_gw.CheckHost is not null && !await _gw.CheckHost(_tunnel.Context!, host).ConfigureAwait(false))
@@ -165,6 +186,7 @@ public sealed class Processor
         var tcp = new TcpClient();
         try
         {
+            // Bound target connection attempts so a stalled TCP connect does not pin the tunnel.
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
             timeout.CancelAfter(TimeSpan.FromSeconds(15));
             await tcp.ConnectAsync(server, port, timeout.Token).ConfigureAwait(false);
@@ -187,6 +209,7 @@ public sealed class Processor
 
     private static byte[] HandshakeResponse(byte major, byte minor, ushort caps, uint errorCode)
     {
+        // Handshake response layout: error(4), major(1), minor(1), reserved(2), extendedAuth(2).
         var buf = new byte[10];
         BinaryPrimitives.WriteUInt32LittleEndian(buf.AsSpan(0, 4), errorCode);
         buf[4] = major;
@@ -198,6 +221,7 @@ public sealed class Processor
 
     private static (byte Major, byte Minor, ushort Version, ushort ExtAuth) HandshakeRequest(byte[] data)
     {
+        // Handshake request layout: major(1), minor(1), version(2), extendedAuth(2).
         var major = data.Length > 0 ? data[0] : (byte)0;
         var minor = data.Length > 1 ? data[1] : (byte)0;
         var version = data.Length >= 4 ? BinaryPrimitives.ReadUInt16LittleEndian(data.AsSpan(2, 2)) : (ushort)0;
@@ -224,12 +248,14 @@ public sealed class Processor
 
     private static (uint Caps, string Cookie) TunnelRequest(byte[] data)
     {
+        // Tunnel create begins with capabilities(4), field mask(2), reserved(2).
         if (data.Length < 8) return (0, string.Empty);
         var caps = BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(0, 4));
         var fields = BinaryPrimitives.ReadUInt16LittleEndian(data.AsSpan(4, 2));
         var cookie = string.Empty;
         if (fields == HTTP_TUNNEL_PACKET_FIELD_PAA_COOKIE && data.Length >= 10)
         {
+            // PAA cookie field stores byte length at offset 8 followed by UTF-16LE cookie bytes.
             var size = BinaryPrimitives.ReadUInt16LittleEndian(data.AsSpan(8, 2));
             if (data.Length >= 10 + size)
             {
@@ -241,6 +267,7 @@ public sealed class Processor
 
     private static byte[] TunnelResponse(uint errorCode)
     {
+        // Tunnel response layout: reserved(2), error(4), fields(2), reserved(2), tunnelId(4), caps(4).
         var buf = new byte[18];
         BinaryPrimitives.WriteUInt16LittleEndian(buf.AsSpan(0, 2), 0);
         BinaryPrimitives.WriteUInt32LittleEndian(buf.AsSpan(2, 4), errorCode);
@@ -254,12 +281,14 @@ public sealed class Processor
     private static string TunnelAuthRequest(byte[] data)
     {
         if (data.Length < 2) return string.Empty;
+        // Tunnel auth request starts with the byte length of the UTF-16LE client name.
         var size = BinaryPrimitives.ReadUInt16LittleEndian(data.AsSpan(0, 2));
         return data.Length >= 2 + size ? Utf16.DecodeUtf16(data.AsSpan(2, size).ToArray()) : string.Empty;
     }
 
     private byte[] TunnelAuthResponse(uint errorCode)
     {
+        // Tunnel auth response layout: error(4), fields(2), reserved(2), redirectFlags(4), idleTimeout(4).
         var buf = new byte[16];
         BinaryPrimitives.WriteUInt32LittleEndian(buf.AsSpan(0, 4), errorCode);
         BinaryPrimitives.WriteUInt16LittleEndian(buf.AsSpan(4, 2), HTTP_TUNNEL_AUTH_RESPONSE_FIELD_REDIR_FLAGS | HTTP_TUNNEL_AUTH_RESPONSE_FIELD_IDLE_TIMEOUT);
@@ -273,6 +302,7 @@ public sealed class Processor
     private static (string Server, int Port) ChannelRequest(byte[] data)
     {
         if (data.Length < 8) return (string.Empty, 0);
+        // Channel create carries the target port at offset 2 and UTF-16LE server-name length at offset 6.
         var port = BinaryPrimitives.ReadUInt16LittleEndian(data.AsSpan(2, 2));
         var nameSize = BinaryPrimitives.ReadUInt16LittleEndian(data.AsSpan(6, 2));
         var server = data.Length >= 8 + nameSize ? Utf16.DecodeUtf16(data.AsSpan(8, nameSize).ToArray()) : string.Empty;
@@ -285,6 +315,7 @@ public sealed class Processor
 
     private static byte[] ChannelLikeResponse(int packetType, uint errorCode)
     {
+        // Channel and close-channel responses share error(4), fields(2), reserved(2), channelId(4).
         var buf = new byte[12];
         BinaryPrimitives.WriteUInt32LittleEndian(buf.AsSpan(0, 4), errorCode);
         BinaryPrimitives.WriteUInt16LittleEndian(buf.AsSpan(4, 2), HTTP_CHANNEL_RESPONSE_FIELD_CHANNELID);
@@ -296,6 +327,7 @@ public sealed class Processor
     private static uint MakeRedirectFlags(RedirectFlags flags)
     {
         uint redir = 0;
+        // MS-TSGU section 2.2 redirection flags treat DisableAll and EnableAll as sentinel masks overriding individual bits.
         if (flags.DisableAll) return HTTP_TUNNEL_REDIR_DISABLE_ALL;
         if (flags.EnableAll) return HTTP_TUNNEL_REDIR_ENABLE_ALL;
         if (!flags.Port) redir |= HTTP_TUNNEL_REDIR_DISABLE_PORT;

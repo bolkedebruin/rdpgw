@@ -4,6 +4,8 @@ using Rdpgw.Auth.Config;
 using Rdpgw.Auth.Database;
 using Rdpgw.Auth.Ntlm;
 
+// Parse CLI options before creating the web host so invalid invocations fail
+// without starting the Unix socket listener.
 CommandLineOptions options;
 try
 {
@@ -25,6 +27,8 @@ if (options.Help)
 using var bootstrapLoggerFactory = LoggerFactory.Create(logging => logging.AddSimpleConsole());
 var bootstrapLogger = bootstrapLoggerFactory.CreateLogger("Rdpgw.Auth.Startup");
 
+// Resolve and replace the socket path up front because Kestrel cannot bind over
+// a stale Unix domain socket file left by a previous process.
 var socketPath = Path.GetFullPath(options.SocketAddr);
 var configuration = Configuration.Load(options.ConfigFile, bootstrapLogger);
 if (File.Exists(socketPath))
@@ -37,6 +41,8 @@ if (options.AllowUid.Count > 0 || options.AllowGid.Count > 0)
     bootstrapLogger.LogWarning("rdpgw-auth: --allow-uid/--allow-gid are accepted for CLI compatibility; ASP.NET Core transport relies on socket file permissions.");
 }
 
+// Register the gRPC service and its authenticators as singletons; NTLM keeps
+// short-lived per-session state, while PAM and config lookups are stateless.
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions { Args = [] });
 builder.Services.AddGrpc();
 builder.Services.AddSingleton(configuration);
@@ -60,6 +66,8 @@ uint oldUmask = 0;
 var changedUmask = OperatingSystem.IsLinux();
 if (changedUmask)
 {
+    // Limit the initial socket mode while Kestrel creates the file; chmod below
+    // then applies the intended group-readable/group-writable mode explicitly.
     oldUmask = NativeUnix.umask(Convert.ToUInt32("117", 8));
 }
 
@@ -77,6 +85,8 @@ finally
 
 if (OperatingSystem.IsLinux() && File.Exists(socketPath))
 {
+    // The auth sidecar communicates over a Unix socket, so filesystem mode bits
+    // are the access-control mechanism for gateway processes in the same group.
     var rc = NativeUnix.chmod(socketPath, Convert.ToUInt32("660", 8));
     if (rc != 0)
     {

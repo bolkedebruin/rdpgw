@@ -10,50 +10,138 @@ using Rdpgw.Rdp;
 
 namespace Rdpgw.Web;
 
+/// <summary>Generates a gateway PAA token for a selected user and destination server.</summary>
+/// <param name="context">Current HTTP context.</param>
+/// <param name="username">Authenticated username.</param>
+/// <param name="server">Selected RDP destination server.</param>
+/// <returns>A token string for the generated RDP file.</returns>
 public delegate Task<string> TokenGeneratorFunc(HttpContext context, string username, string server);
+/// <summary>Generates an optional user token for username templating.</summary>
+/// <param name="context">Current HTTP context.</param>
+/// <param name="username">Authenticated username.</param>
+/// <returns>A token string for the generated username.</returns>
 public delegate Task<string> UserTokenGeneratorFunc(HttpContext context, string username);
+/// <summary>Validates a signed query token and returns the embedded host/query subject.</summary>
+/// <param name="context">Current HTTP context.</param>
+/// <param name="token">Signed query token.</param>
+/// <param name="issuer">Expected issuer.</param>
+/// <returns>The token subject.</returns>
 public delegate Task<string> QueryInfoFunc(HttpContext context, string token, string issuer);
 
+/// <summary>
+/// Configuration object used to construct the web handler outside the ASP.NET options binder.
+/// </summary>
 public sealed class WebHandlerConfig
 {
+    /// <summary>Gets or sets the PAA token generator required for downloadable RDP files.</summary>
     public TokenGeneratorFunc? PAATokenGenerator { get; set; }
+    /// <summary>Gets or sets the optional encrypted user-token generator.</summary>
     public UserTokenGeneratorFunc? UserTokenGenerator { get; set; }
+    /// <summary>Gets or sets the signed query-token validator for signed host selection.</summary>
     public QueryInfoFunc? QueryInfo { get; set; }
+    /// <summary>Gets or sets the expected issuer for signed host-selection query tokens.</summary>
     public string QueryTokenIssuer { get; set; } = string.Empty;
+    /// <summary>Gets or sets whether username templates may contain generated user tokens.</summary>
     public bool EnableUserToken { get; set; }
+    /// <summary>Gets or sets the host store used to list and validate destinations.</summary>
     public HostStore? HostStore { get; set; }
+    /// <summary>Gets or sets the host-selection mode.</summary>
     public string HostSelection { get; set; } = string.Empty;
+    /// <summary>Gets or sets the default gateway address for generated RDP files.</summary>
     public Uri GatewayAddress { get; set; } = new("https://localhost");
+    /// <summary>Gets or sets RDP rendering options.</summary>
     public RdpOpts RdpOpts { get; set; } = new();
+    /// <summary>Gets or sets the RDP template file path.</summary>
     public string TemplateFile { get; set; } = string.Empty;
+    /// <summary>Gets or sets the RDP signing certificate path.</summary>
     public string RdpSigningCert { get; set; } = string.Empty;
+    /// <summary>Gets or sets the RDP signing private-key path.</summary>
     public string RdpSigningKey { get; set; } = string.Empty;
+    /// <summary>Gets or sets the templates/assets root path used for asset lookup.</summary>
     public string TemplatesPath { get; set; } = string.Empty;
+    /// <summary>Gets or sets destination ports allowed in arbitrary-host mode.</summary>
     public List<int> AllowedDestinationPorts { get; set; } = [];
+    /// <summary>Gets or sets whether arbitrary-host mode may connect to private addresses.</summary>
     public bool AllowPrivateDestinations { get; set; }
+    /// <summary>Creates the request handler using a supplied logger.</summary>
+    /// <param name="logger">Logger for request handling diagnostics.</param>
+    /// <returns>A configured <see cref="Handler"/>.</returns>
     public Handler NewHandler(ILogger<Handler> logger) => new(this, logger);
 }
 
+/// <summary>
+/// Options controlling username rendering and permitted RDP query-string overrides.
+/// </summary>
 public sealed class RdpOpts
 {
+    /// <summary>Gets or sets the username template written into generated RDP files.</summary>
     public string UsernameTemplate { get; set; } = string.Empty;
+    /// <summary>Gets or sets whether user@domain names are split into username and domain fields.</summary>
     public bool SplitUserDomain { get; set; }
+    /// <summary>Gets or sets whether generated RDP files omit username and domain fields.</summary>
     public bool NoUsername { get; set; }
+    /// <summary>Gets or sets RDP setting keys users may override via query string.</summary>
     public List<string> OverridableRdpKeys { get; set; } = [];
 }
 
+/// <summary>
+/// UI text, branding, and theme defaults exposed to the Blazor web application.
+/// </summary>
 public sealed class WebConfig
 {
+    /// <summary>Gets or sets web branding strings.</summary>
     public BrandingConfig Branding { get; set; } = new();
+    /// <summary>Gets or sets user-facing status and instruction messages.</summary>
     public MessagesConfig Messages { get; set; } = new();
+    /// <summary>Gets or sets user-interface behavior flags.</summary>
     public UiConfig UI { get; set; } = new();
+    /// <summary>Gets or sets theme color values.</summary>
     public ThemeConfig Theme { get; set; } = new();
-    public sealed class BrandingConfig { public string Title { get; set; } = "RDP Gateway"; public string Logo { get; set; } = "RDP Gateway"; public string PageTitle { get; set; } = "Select a Server to Connect"; }
-    public sealed class MessagesConfig { public string SelectServer { get; set; } = "Select a server to connect"; public string Preparing { get; set; } = "Preparing your connection..."; }
-    public sealed class UiConfig { public int ProgressAnimationDurationMs { get; set; } = 2000; public bool AutoSelectDefault { get; set; } = true; public bool ShowUserAvatar { get; set; } = true; }
-    public sealed class ThemeConfig { public string PrimaryColor { get; set; } = "#667eea"; public string SecondaryColor { get; set; } = "#764ba2"; public string SuccessColor { get; set; } = "#38b2ac"; public string ErrorColor { get; set; } = "#c53030"; }
+    /// <summary>Branding strings displayed by the web UI.</summary>
+    public sealed class BrandingConfig
+    {
+        /// <summary>Gets or sets the application title.</summary>
+        public string Title { get; set; } = "RDP Gateway";
+        /// <summary>Gets or sets the logo text or asset reference.</summary>
+        public string Logo { get; set; } = "RDP Gateway";
+        /// <summary>Gets or sets the host-selection page title.</summary>
+        public string PageTitle { get; set; } = "Select a Server to Connect";
+    }
+    /// <summary>User-facing messages displayed during host selection and download preparation.</summary>
+    public sealed class MessagesConfig
+    {
+        /// <summary>Gets or sets the select-server prompt.</summary>
+        public string SelectServer { get; set; } = "Select a server to connect";
+        /// <summary>Gets or sets the preparation status message.</summary>
+        public string Preparing { get; set; } = "Preparing your connection...";
+    }
+    /// <summary>Behavior flags for the web UI.</summary>
+    public sealed class UiConfig
+    {
+        /// <summary>Gets or sets progress animation duration in milliseconds.</summary>
+        public int ProgressAnimationDurationMs { get; set; } = 2000;
+        /// <summary>Gets or sets whether the default host is selected automatically.</summary>
+        public bool AutoSelectDefault { get; set; } = true;
+        /// <summary>Gets or sets whether the user avatar is displayed.</summary>
+        public bool ShowUserAvatar { get; set; } = true;
+    }
+    /// <summary>Theme colors used by the web UI.</summary>
+    public sealed class ThemeConfig
+    {
+        /// <summary>Gets or sets the primary theme color.</summary>
+        public string PrimaryColor { get; set; } = "#667eea";
+        /// <summary>Gets or sets the secondary theme color.</summary>
+        public string SecondaryColor { get; set; } = "#764ba2";
+        /// <summary>Gets or sets the success color.</summary>
+        public string SuccessColor { get; set; } = "#38b2ac";
+        /// <summary>Gets or sets the error color.</summary>
+        public string ErrorColor { get; set; } = "#c53030";
+    }
 }
 
+/// <summary>
+/// Handles web endpoints that list hosts, expose user info, serve assets, and generate RDP files.
+/// </summary>
 public sealed class Handler
 {
     private readonly TokenGeneratorFunc? _paaTokenGenerator;
@@ -73,8 +161,12 @@ public sealed class Handler
     private readonly WebConfig _webConfig = new();
     private readonly ILogger<Handler> _logger;
 
+    /// <summary>Gets the UI configuration object consumed by Razor components.</summary>
     public WebConfig WebConfig => _webConfig;
 
+    /// <summary>Initializes a new web handler from validated startup configuration.</summary>
+    /// <param name="c">Handler configuration.</param>
+    /// <param name="logger">Logger for request diagnostics.</param>
     public Handler(WebHandlerConfig c, ILogger<Handler> logger)
     {
         if (c.HostStore is null) throw new InvalidOperationException("No host store specified");
@@ -96,6 +188,8 @@ public sealed class Handler
         if (!string.IsNullOrEmpty(_rdpSigningCert) || !string.IsNullOrEmpty(_rdpSigningKey)) _logger.LogWarning("RDP file signing is configured but not implemented in the .NET port; unsigned RDP files will be returned");
     }
 
+    /// <summary>Builds and returns a personalized RDP file for the authenticated user.</summary>
+    /// <param name="ctx">Current HTTP context.</param>
     public async Task HandleDownload(HttpContext ctx)
     {
         var id = IdentityContext.FromContext(ctx) ?? new User();
@@ -121,6 +215,7 @@ public sealed class Handler
         catch (Exception ex) { _logger.LogError(ex, "Cannot generate PAA token for user {User}", user); ctx.Response.StatusCode = 500; await ctx.Response.WriteAsync("unable to generate gateway credentials"); return; }
         if (_enableUserToken && _userTokenGenerator is not null)
         {
+            // User tokens can be substituted into the username template for downstream credential brokers.
             try { render = render.Replace("{{ token }}", await _userTokenGenerator(ctx, user), StringComparison.Ordinal); }
             catch (Exception ex) { _logger.LogError(ex, "Cannot generate token for user {User}", user); ctx.Response.StatusCode = 500; await ctx.Response.WriteAsync("unable to generate gateway credentials"); return; }
         }
@@ -143,6 +238,9 @@ public sealed class Handler
         await ctx.Response.WriteAsync(b.ToString());
     }
 
+    /// <summary>Returns the host-picker model for a user.</summary>
+    /// <param name="userName">Authenticated username.</param>
+    /// <returns>Visible host options with exactly one default when possible.</returns>
     public List<Host> GetHosts(string userName)
     {
         if (_hostSelection == "roundrobin")
@@ -152,6 +250,8 @@ public sealed class Handler
         return entries.Select((h, i) => new Host($"host_{h.Id}", h.Name, h.Address, h.Description, hasDefault ? h.IsDefault : i == 0)).ToList();
     }
 
+    /// <summary>Writes the authenticated user's host list as JSON.</summary>
+    /// <param name="ctx">Current HTTP context.</param>
     public async Task HandleHostList(HttpContext ctx)
     {
         var id = IdentityContext.FromContext(ctx) ?? new User();
@@ -160,6 +260,8 @@ public sealed class Handler
         await JsonSerializer.SerializeAsync(ctx.Response.Body, GetHosts(id.UserName), JsonOptions);
     }
 
+    /// <summary>Writes basic information about the authenticated user as JSON.</summary>
+    /// <param name="ctx">Current HTTP context.</param>
     public async Task HandleUserInfo(HttpContext ctx)
     {
         var id = IdentityContext.FromContext(ctx) ?? new User();
@@ -168,6 +270,9 @@ public sealed class Handler
         await JsonSerializer.SerializeAsync(ctx.Response.Body, new { username = id.UserName, authenticated = id.Authenticated, authTime = id.AuthTime });
     }
 
+    /// <summary>Serves a static asset from known deployment-relative locations.</summary>
+    /// <param name="ctx">Current HTTP context.</param>
+    /// <param name="filename">Asset filename to serve.</param>
     public async Task ServeAssetFile(HttpContext ctx, string filename)
     {
         var candidates = new List<string> { "./assets/" + filename, "/app/assets/" + filename, "/opt/rdpgw/assets/" + filename, Path.Combine("assets", filename) };
@@ -228,10 +333,18 @@ public sealed class Handler
     }
 
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+    /// <summary>Host option returned to the web UI.</summary>
+    /// <param name="Id">Stable UI identifier.</param>
+    /// <param name="Name">Display name.</param>
+    /// <param name="Address">RDP destination address.</param>
+    /// <param name="Description">Descriptive text.</param>
+    /// <param name="IsDefault">Whether this host should be selected by default.</param>
     public sealed record Host(string Id, string Name, string Address, string Description, bool IsDefault);
     private sealed class DestinationPolicy(List<int> allowedPorts, bool allowPrivate)
     {
         private readonly HashSet<int> _allowedPorts = allowedPorts.Count == 0 ? [3389] : allowedPorts.ToHashSet();
+        /// <summary>Validates that an arbitrary destination is allowed by port and address-range policy.</summary>
+        /// <param name="hostport">Host or host:port destination requested by the user.</param>
         public async Task Allow(string hostport)
         {
             var host = hostport; var port = 3389;
@@ -240,6 +353,7 @@ public sealed class Handler
             if (!_allowedPorts.Contains(port)) throw new InvalidOperationException($"destination not allowed: port {port} not in allow-list");
             if (allowPrivate) return;
             IPAddress[] addrs = IPAddress.TryParse(host, out var ip) ? [ip] : await Dns.GetHostAddressesAsync(host);
+            // Resolve hostnames before private-range checks so DNS rebinding to internal networks is blocked.
             foreach (var a in addrs) if (!IsPublic(a)) throw new InvalidOperationException($"destination not allowed: destination {host} ({a}) is in a private or non-routable range");
         }
         private static bool IsPublic(IPAddress ip) => !IPAddress.IsLoopback(ip) && !ip.IsIPv6LinkLocal && !ip.IsIPv6Multicast && !ip.Equals(IPAddress.Any) && !ip.Equals(IPAddress.IPv6Any) && !IsPrivate(ip);

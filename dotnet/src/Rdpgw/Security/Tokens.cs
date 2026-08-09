@@ -6,17 +6,35 @@ using Rdpgw.Identity;
 
 namespace Rdpgw.Security;
 
+/// <summary>
+/// Describes the normalized claims returned after validating an rdpgw JWT.
+/// </summary>
+/// <param name="Subject">Token subject, usually a username or selected host.</param>
+/// <param name="Issuer">Issuer that signed or encrypted the token.</param>
+/// <param name="ExpiresAt">Expiration time parsed from the token, when present.</param>
+/// <param name="Claims">All claims keyed by claim type.</param>
 public sealed record TokenClaims(string Subject, string Issuer, DateTimeOffset? ExpiresAt, IReadOnlyDictionary<string, object?> Claims);
 
+/// <summary>
+/// Creates and validates rdpgw JWTs used for gateway access, user tokens, and signed host-selection queries.
+/// </summary>
 public static class Tokens
 {
     private const string PaaAudience = "rdpgw-paa";
 
+    /// <summary>
+    /// Generates a signed Protected Application Access token for an RDP gateway connection.
+    /// </summary>
+    /// <param name="context">HTTP request context that may contain client IP metadata.</param>
+    /// <param name="username">Authenticated username to place in the subject claim.</param>
+    /// <param name="server">Target RDP server authorized by the token.</param>
+    /// <returns>A signed compact JWT.</returns>
     public static Task<string> GeneratePAAToken(HttpContext context, string username, string server)
     {
         if (SecurityOptions.SigningKey.Length < 32) throw new InvalidOperationException("token signing key not long enough or not specified");
         var identity = IdentityContext.FromContext(context);
         var clientIp = identity?.GetAttribute(IdentityContext.AttrClientIp)?.ToString() ?? string.Empty;
+        // PAA tokens authorize exactly one tunnel target and optionally bind it to the observed client IP.
         var claims = new Dictionary<string, object>
         {
             [JwtRegisteredClaimNames.Iss] = "rdpgw",
@@ -28,6 +46,12 @@ public static class Tokens
         return Task.FromResult(CreateSignedToken(claims, SecurityOptions.SigningKey, SecurityOptions.ExpiryTime));
     }
 
+    /// <summary>
+    /// Generates a signed Protected Application Access token without request-specific client IP binding.
+    /// </summary>
+    /// <param name="username">Authenticated username to place in the subject claim.</param>
+    /// <param name="server">Target RDP server authorized by the token.</param>
+    /// <returns>A signed compact JWT.</returns>
     public static Task<string> GeneratePAAToken(string username, string server)
     {
         if (SecurityOptions.SigningKey.Length < 32) throw new InvalidOperationException("token signing key not long enough or not specified");
@@ -42,8 +66,19 @@ public static class Tokens
         return Task.FromResult(CreateSignedToken(claims, SecurityOptions.SigningKey, SecurityOptions.ExpiryTime));
     }
 
+    /// <summary>
+    /// Generates an encrypted user token for embedding in a generated RDP username template.
+    /// </summary>
+    /// <param name="context">HTTP request context; currently unused but kept for delegate compatibility.</param>
+    /// <param name="userName">Username to place in the token subject.</param>
+    /// <returns>An encrypted compact JWT.</returns>
     public static Task<string> GenerateUserToken(HttpContext context, string userName) => GenerateUserToken(userName);
 
+    /// <summary>
+    /// Generates an encrypted user token for embedding in a generated RDP username template.
+    /// </summary>
+    /// <param name="userName">Username to place in the token subject.</param>
+    /// <returns>An encrypted compact JWT.</returns>
     public static Task<string> GenerateUserToken(string userName)
     {
         if (SecurityOptions.UserEncryptionKey.Length < 32) throw new InvalidOperationException("user token encryption key not long enough or not specified");
@@ -59,12 +94,25 @@ public static class Tokens
             descriptor.SigningCredentials = SigningCredentials(SecurityOptions.UserSigningKey);
         }
         var token = new JsonWebTokenHandler().CreateToken(descriptor);
+        // Windows username fields are small; warn when a tokenized username may exceed RDP client limits.
         if (token.Length > 511) Rdpgw.Logging.Log.For(typeof(Tokens)).LogWarning("token too long: len {Length} > 511", token.Length);
         return Task.FromResult(token);
     }
 
+    /// <summary>
+    /// Validates a user token and returns normalized claims.
+    /// </summary>
+    /// <param name="context">HTTP request context; currently unused but kept for delegate compatibility.</param>
+    /// <param name="token">Encrypted user token.</param>
+    /// <returns>Validated token claims.</returns>
     public static Task<TokenClaims> UserInfo(HttpContext context, string token) => UserInfo(token);
 
+    /// <summary>
+    /// Validates a user token and returns normalized claims.
+    /// </summary>
+    /// <param name="token">Encrypted user token.</param>
+    /// <returns>Validated token claims.</returns>
+    /// <exception cref="SecurityTokenException">Thrown when token validation fails.</exception>
     public static Task<TokenClaims> UserInfo(string token)
     {
         var parameters = ValidationParameters(SecurityOptions.UserSigningKey.Length > 0 ? SecurityOptions.UserSigningKey : null, SecurityOptions.UserEncryptionKey, "rdpgw", null);
@@ -73,12 +121,21 @@ public static class Tokens
         return Task.FromResult(ToTokenClaims(result.ClaimsIdentity.Claims));
     }
 
+    /// <summary>
+    /// Claims extracted from a validated Protected Application Access token.
+    /// </summary>
+    /// <param name="Username">Authenticated username from the token subject.</param>
+    /// <param name="RemoteServer">Target server authorized by the token.</param>
+    /// <param name="ClientIp">Client IP bound into the token, or an empty string.</param>
     public sealed record PaaTokenInfo(string Username, string RemoteServer, string ClientIp);
 
     /// <summary>
     /// Validates a PAA token and returns its claims. Shared by the local gateway
     /// cookie check and the gateway federation validation endpoint.
     /// </summary>
+    /// <param name="tokenString">Signed PAA token string.</param>
+    /// <returns>The token claims required by the gateway protocol checks.</returns>
+    /// <exception cref="SecurityTokenException">Thrown when token validation fails.</exception>
     public static async Task<PaaTokenInfo> ValidatePAAToken(string tokenString)
     {
         if (string.IsNullOrEmpty(tokenString)) throw new InvalidOperationException("no token to parse");
@@ -86,9 +143,16 @@ public static class Tokens
         var result = await new JsonWebTokenHandler().ValidateTokenAsync(tokenString, parameters);
         if (!result.IsValid) throw new SecurityTokenException($"token validation failed due to {result.Exception?.Message}", result.Exception);
         var claims = result.ClaimsIdentity.Claims.ToDictionary(c => c.Type, c => c.Value);
+        // Different token handlers may expose JWT registered names or claim-type URIs; accept both forms.
         return new PaaTokenInfo(Claim(claims, JwtRegisteredClaimNames.Sub, ClaimTypes.NameIdentifier, "sub"), Claim(claims, "remoteServer"), Claim(claims, "clientIp"));
     }
 
+    /// <summary>
+    /// Validates a PAA cookie value and stores its authorization claims on the current request.
+    /// </summary>
+    /// <param name="context">Gateway request context.</param>
+    /// <param name="tokenString">PAA token string from the gateway cookie.</param>
+    /// <returns><see langword="true"/> when validation succeeds.</returns>
     public static async Task<bool> CheckPAACookie(HttpContext context, string tokenString)
     {
         var info = await ValidatePAAToken(tokenString);
@@ -100,6 +164,8 @@ public static class Tokens
     /// Stores the validated token claims in the request context so that the tunnel
     /// can later verify the target host and client IP.
     /// </summary>
+    /// <param name="context">Request context to update.</param>
+    /// <param name="info">Validated PAA token claims.</param>
     public static void ApplyPaaTokenInfo(HttpContext context, PaaTokenInfo info)
     {
         context.Items[SecurityOptions.TunnelTargetServerKey] = info.RemoteServer;
@@ -108,6 +174,11 @@ public static class Tokens
         if (id is not null) id.UserName = info.Username;
     }
 
+    /// <summary>
+    /// Composes host authorization with PAA tunnel-target and optional client-IP verification.
+    /// </summary>
+    /// <param name="next">Host checker to invoke after session-token claims are verified.</param>
+    /// <returns>A host checker that rejects mismatched token targets or client IPs.</returns>
     public static Func<HttpContext, string, Task<bool>> CheckSession(Func<HttpContext, string, Task<bool>> next) => async (context, host) =>
     {
         var tokenHost = context.Items[SecurityOptions.TunnelTargetServerKey]?.ToString();
@@ -118,11 +189,18 @@ public static class Tokens
         {
             var current = id.GetAttribute(IdentityContext.AttrClientIp)?.ToString();
             var tokenIp = context.Items[SecurityOptions.TunnelRemoteAddrKey]?.ToString();
+            // Binding the PAA token to the client IP makes stolen gateway cookies less useful.
             if (current != tokenIp) return false;
         }
         return await next(context, host);
     };
 
+    /// <summary>
+    /// Checks whether the selected host is allowed by the configured host-selection mode.
+    /// </summary>
+    /// <param name="context">Request context containing the current identity.</param>
+    /// <param name="host">Requested RDP destination host.</param>
+    /// <returns><see langword="true"/> when the host is permitted.</returns>
     public static Task<bool> CheckHost(HttpContext context, string host)
     {
         switch (SecurityOptions.HostSelection)
@@ -139,8 +217,21 @@ public static class Tokens
         }
     }
 
+    /// <summary>
+    /// Validates a signed query token and returns the subject claim.
+    /// </summary>
+    /// <param name="context">HTTP request context; currently unused but kept for delegate compatibility.</param>
+    /// <param name="tokenString">Signed query token.</param>
+    /// <param name="issuer">Expected issuer.</param>
+    /// <returns>The query token subject.</returns>
     public static Task<string> QueryInfo(HttpContext context, string tokenString, string issuer) => QueryInfo(tokenString, issuer);
 
+    /// <summary>
+    /// Validates a signed query token and returns the subject claim.
+    /// </summary>
+    /// <param name="tokenString">Signed query token.</param>
+    /// <param name="issuer">Expected issuer.</param>
+    /// <returns>The query token subject.</returns>
     public static Task<string> QueryInfo(string tokenString, string issuer)
     {
         var parameters = ValidationParameters(SecurityOptions.QuerySigningKey, null, issuer, null);
@@ -149,6 +240,12 @@ public static class Tokens
         return Task.FromResult(result.ClaimsIdentity.FindFirst(JwtRegisteredClaimNames.Sub)?.Value ?? result.ClaimsIdentity.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? string.Empty);
     }
 
+    /// <summary>
+    /// Generates a signed query token used by signed host-selection links.
+    /// </summary>
+    /// <param name="query">Value to place in the subject claim.</param>
+    /// <param name="issuer">Issuer to place in the token.</param>
+    /// <returns>A signed compact JWT.</returns>
     public static Task<string> GenerateQueryToken(string query, string issuer)
     {
         if (SecurityOptions.QuerySigningKey.Length < 32) throw new InvalidOperationException("query token encryption key not long enough or not specified");
