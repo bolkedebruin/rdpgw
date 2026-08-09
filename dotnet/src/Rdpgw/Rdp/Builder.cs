@@ -119,7 +119,7 @@ public sealed class Builder
     private static string SanitizeRdpValue(string field, string value)
     {
         if (value.All(c => c >= 0x20 && c != 0x7f)) return value;
-        Console.Error.WriteLine($"rdp: stripped control bytes from field {field}");
+        Rdpgw.Logging.Log.For(typeof(Builder)).LogWarning("rdp: stripped control bytes from field {Field}", field);
         return new string(value.Where(c => c >= 0x20 && c != 0x7f).ToArray());
     }
 }

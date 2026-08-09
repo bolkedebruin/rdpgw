@@ -2,6 +2,7 @@ using System.Net.Sockets;
 using Grpc.Net.Client;
 using Microsoft.AspNetCore.Http;
 using Rdpgw.Identity;
+using Rdpgw.Logging;
 using Rdpgw.Shared.Auth;
 
 namespace Rdpgw.Web;
@@ -25,6 +26,7 @@ internal static class GrpcAuth
 
 public sealed class BasicAuthHandler
 {
+    private readonly ILogger _logger = Log.For<BasicAuthHandler>();
     public string SocketAddress { get; set; } = string.Empty;
     public int Timeout { get; set; }
 
@@ -39,15 +41,15 @@ public sealed class BasicAuthHandler
                 var parts = decoded.Split(':', 2);
                 if (parts.Length == 2 && await Authenticate(parts[0], parts[1]))
                 {
-                    Console.WriteLine($"User {parts[0]} authenticated");
+                    _logger.LogInformation("User {User} authenticated", parts[0]);
                     var id = IdentityContext.FromContext(ctx) ?? new User();
                     id.UserName = parts[0]; id.Authenticated = true; id.AuthTime = DateTimeOffset.UtcNow;
                     IdentityContext.AddToContext(ctx, id);
                     await next(); return;
                 }
-                Console.WriteLine($"User {parts[0]} is not authenticated for this service");
+                _logger.LogWarning("User {User} is not authenticated for this service", parts[0]);
             }
-            catch (Exception ex) { Console.WriteLine($"Basic auth failed: {ex.Message}"); }
+            catch (Exception ex) { _logger.LogError(ex, "Basic auth failed"); }
         }
         ctx.Response.Headers.Append("WWW-Authenticate", "Basic realm=\"restricted\", charset=\"UTF-8\"");
         ctx.Response.StatusCode = 401;
@@ -67,6 +69,7 @@ public sealed class BasicAuthHandler
 
 public sealed class NTLMAuthHandler
 {
+    private readonly ILogger _logger = Log.For<NTLMAuthHandler>();
     public string SocketAddress { get; set; } = string.Empty;
     public int Timeout { get; set; }
 
@@ -77,7 +80,7 @@ public sealed class NTLMAuthHandler
         var (authenticated, username, challenge) = await Authenticate(ctx, payload, mode);
         if (!string.IsNullOrEmpty(challenge))
         {
-            Console.WriteLine("Sending NTLM challenge");
+            _logger.LogDebug("Sending NTLM challenge");
             ctx.Response.Headers.Append("WWW-Authenticate", Prefix(mode) + challenge);
             ctx.Response.StatusCode = 401;
             await ctx.Response.WriteAsync("Unauthorized");
@@ -85,7 +88,7 @@ public sealed class NTLMAuthHandler
         }
         if (authenticated)
         {
-            Console.WriteLine($"NTLM: User {username} authenticated");
+            _logger.LogInformation("NTLM: User {User} authenticated", username);
             var id = IdentityContext.FromContext(ctx) ?? new User();
             id.UserName = username; id.Authenticated = true; id.AuthTime = DateTimeOffset.UtcNow;
             IdentityContext.AddToContext(ctx, id);

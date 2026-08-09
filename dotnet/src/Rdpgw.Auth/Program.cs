@@ -22,8 +22,11 @@ if (options.Help)
     return 0;
 }
 
+using var bootstrapLoggerFactory = LoggerFactory.Create(logging => logging.AddSimpleConsole());
+var bootstrapLogger = bootstrapLoggerFactory.CreateLogger("Rdpgw.Auth.Startup");
+
 var socketPath = Path.GetFullPath(options.SocketAddr);
-var configuration = Configuration.Load(options.ConfigFile);
+var configuration = Configuration.Load(options.ConfigFile, bootstrapLogger);
 if (File.Exists(socketPath))
 {
     File.Delete(socketPath);
@@ -31,7 +34,7 @@ if (File.Exists(socketPath))
 
 if (options.AllowUid.Count > 0 || options.AllowGid.Count > 0)
 {
-    Console.Error.WriteLine("rdpgw-auth: --allow-uid/--allow-gid are accepted for CLI compatibility; ASP.NET Core transport relies on socket file permissions.");
+    bootstrapLogger.LogWarning("rdpgw-auth: --allow-uid/--allow-gid are accepted for CLI compatibility; ASP.NET Core transport relies on socket file permissions.");
 }
 
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions { Args = [] });
@@ -52,7 +55,7 @@ builder.WebHost.ConfigureKestrel(kestrel =>
 var app = builder.Build();
 app.MapGrpcService<AuthService>();
 
-Console.Error.WriteLine($"Starting auth server on {options.SocketAddr}");
+app.Logger.LogInformation("Starting auth server on {SocketAddr}", options.SocketAddr);
 uint oldUmask = 0;
 var changedUmask = OperatingSystem.IsLinux();
 if (changedUmask)
@@ -77,7 +80,7 @@ if (OperatingSystem.IsLinux() && File.Exists(socketPath))
     var rc = NativeUnix.chmod(socketPath, Convert.ToUInt32("660", 8));
     if (rc != 0)
     {
-        Console.Error.WriteLine($"Failed to chmod socket {socketPath}: errno {System.Runtime.InteropServices.Marshal.GetLastPInvokeError()}");
+        app.Logger.LogError("Failed to chmod socket {SocketPath}: errno {Errno}", socketPath, System.Runtime.InteropServices.Marshal.GetLastPInvokeError());
     }
 }
 

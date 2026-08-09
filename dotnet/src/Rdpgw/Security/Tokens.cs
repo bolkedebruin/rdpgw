@@ -59,7 +59,7 @@ public static class Tokens
             descriptor.SigningCredentials = SigningCredentials(SecurityOptions.UserSigningKey);
         }
         var token = new JsonWebTokenHandler().CreateToken(descriptor);
-        if (token.Length > 511) Console.Error.WriteLine($"WARNING: token too long: len {token.Length} > 511");
+        if (token.Length > 511) Rdpgw.Logging.Log.For(typeof(Tokens)).LogWarning("token too long: len {Length} > 511", token.Length);
         return Task.FromResult(token);
     }
 

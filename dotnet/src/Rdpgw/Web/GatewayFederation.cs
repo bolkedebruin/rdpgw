@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
+using Rdpgw.Logging;
 using Rdpgw.Security;
 
 namespace Rdpgw.Web;
@@ -49,7 +50,7 @@ public static class GatewayFederation
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"gateway federation: token validation failed: {ex.Message}");
+            Log.For(typeof(GatewayFederation)).LogWarning(ex, "gateway federation: token validation failed");
             await JsonSerializer.SerializeAsync(ctx.Response.Body, new ValidateResponse(false, null, null, null, "token validation failed"), JsonOptions);
         }
     }
@@ -72,6 +73,7 @@ public static class GatewayFederation
     {
         private readonly HttpClient _http;
         private readonly Uri _validateUri;
+        private readonly ILogger _logger = Log.For<RemoteTokenValidator>();
 
         public RemoteTokenValidator(Uri primaryGateway, string sharedKey)
         {
@@ -87,7 +89,7 @@ public static class GatewayFederation
             using var response = await _http.PostAsync(_validateUri, content);
             if (!response.IsSuccessStatusCode)
             {
-                Console.WriteLine($"gateway federation: primary gateway returned {(int)response.StatusCode} for token validation");
+                _logger.LogWarning("gateway federation: primary gateway returned {StatusCode} for token validation", (int)response.StatusCode);
                 return false;
             }
             var result = await JsonSerializer.DeserializeAsync<ValidateResponse>(await response.Content.ReadAsStreamAsync(), JsonOptions);

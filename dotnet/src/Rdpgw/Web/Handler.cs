@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
 using Rdpgw.Data;
 using Rdpgw.Identity;
 using Rdpgw.Rdp;
@@ -30,7 +31,7 @@ public sealed class WebHandlerConfig
     public string TemplatesPath { get; set; } = string.Empty;
     public List<int> AllowedDestinationPorts { get; set; } = [];
     public bool AllowPrivateDestinations { get; set; }
-    public Handler NewHandler() => new(this);
+    public Handler NewHandler(ILogger<Handler> logger) => new(this, logger);
 }
 
 public sealed class RdpOpts
@@ -70,12 +71,14 @@ public sealed class Handler
     private readonly string _templatesPath;
     private readonly DestinationPolicy _destPolicy;
     private readonly WebConfig _webConfig = new();
+    private readonly ILogger<Handler> _logger;
 
     public WebConfig WebConfig => _webConfig;
 
-    public Handler(WebHandlerConfig c)
+    public Handler(WebHandlerConfig c, ILogger<Handler> logger)
     {
         if (c.HostStore is null) throw new InvalidOperationException("No host store specified");
+        _logger = logger;
         _paaTokenGenerator = c.PAATokenGenerator;
         _enableUserToken = c.EnableUserToken;
         _userTokenGenerator = c.UserTokenGenerator;
@@ -90,13 +93,13 @@ public sealed class Handler
         _rdpSigningKey = c.RdpSigningKey;
         _templatesPath = string.IsNullOrEmpty(c.TemplatesPath) ? "./templates" : c.TemplatesPath;
         _destPolicy = new DestinationPolicy(c.AllowedDestinationPorts, c.AllowPrivateDestinations);
-        if (!string.IsNullOrEmpty(_rdpSigningCert) || !string.IsNullOrEmpty(_rdpSigningKey)) Console.WriteLine("RDP file signing is configured but not implemented in the .NET port; unsigned RDP files will be returned");
+        if (!string.IsNullOrEmpty(_rdpSigningCert) || !string.IsNullOrEmpty(_rdpSigningKey)) _logger.LogWarning("RDP file signing is configured but not implemented in the .NET port; unsigned RDP files will be returned");
     }
 
     public async Task HandleDownload(HttpContext ctx)
     {
         var id = IdentityContext.FromContext(ctx) ?? new User();
-        if (!id.Authenticated) { Console.WriteLine($"unauthenticated user {id.UserName}"); ctx.Response.StatusCode = 500; await ctx.Response.WriteAsync("cannot find session or user"); return; }
+        if (!id.Authenticated) { _logger.LogWarning("unauthenticated user {UserName}", id.UserName); ctx.Response.StatusCode = 500; await ctx.Response.WriteAsync("cannot find session or user"); return; }
         string host;
         try { host = await GetHost(ctx); }
         catch (Exception ex) { ctx.Response.StatusCode = 400; await ctx.Response.WriteAsync(ex.Message); return; }
@@ -115,20 +118,20 @@ public sealed class Handler
         if (_paaTokenGenerator is null) { ctx.Response.StatusCode = 500; await ctx.Response.WriteAsync("unable to generate gateway credentials"); return; }
         string token;
         try { token = await _paaTokenGenerator(ctx, user, host); }
-        catch (Exception ex) { Console.WriteLine($"Cannot generate PAA token for user {user} due to {ex}"); ctx.Response.StatusCode = 500; await ctx.Response.WriteAsync("unable to generate gateway credentials"); return; }
+        catch (Exception ex) { _logger.LogError(ex, "Cannot generate PAA token for user {User}", user); ctx.Response.StatusCode = 500; await ctx.Response.WriteAsync("unable to generate gateway credentials"); return; }
         if (_enableUserToken && _userTokenGenerator is not null)
         {
             try { render = render.Replace("{{ token }}", await _userTokenGenerator(ctx, user), StringComparison.Ordinal); }
-            catch (Exception ex) { Console.WriteLine($"Cannot generate token for user {user} due to {ex}"); ctx.Response.StatusCode = 500; await ctx.Response.WriteAsync("unable to generate gateway credentials"); return; }
+            catch (Exception ex) { _logger.LogError(ex, "Cannot generate token for user {User}", user); ctx.Response.StatusCode = 500; await ctx.Response.WriteAsync("unable to generate gateway credentials"); return; }
         }
         var fn = Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant() + ".rdp";
         ctx.Response.Headers.ContentDisposition = "attachment; filename=" + fn;
         ctx.Response.ContentType = "application/x-rdp";
         Builder b;
         try { b = string.IsNullOrEmpty(_rdpDefaults) ? Builder.NewBuilder() : Builder.NewBuilderFromFile(_rdpDefaults); }
-        catch (Exception ex) { Console.WriteLine($"Cannot load RDP template file {_rdpDefaults} due to {ex}"); ctx.Response.StatusCode = 500; await ctx.Response.WriteAsync("unable to load RDP template"); return; }
+        catch (Exception ex) { _logger.LogError(ex, "Cannot load RDP template file {TemplateFile}", _rdpDefaults); ctx.Response.StatusCode = 500; await ctx.Response.WriteAsync("unable to load RDP template"); return; }
         try { b.ApplyOverrides(ctx.Request.Query, _rdpOpts.OverridableRdpKeys); }
-        catch (Exception ex) { Console.WriteLine($"rejected rdp override for user {id.UserName}: {ex.Message}"); ctx.Response.StatusCode = 400; await ctx.Response.WriteAsync(ex.Message); return; }
+        catch (Exception ex) { _logger.LogWarning("rejected rdp override for user {UserName}: {Reason}", id.UserName, ex.Message); ctx.Response.StatusCode = 400; await ctx.Response.WriteAsync(ex.Message); return; }
         if (!_rdpOpts.NoUsername) { b.Settings.Username = render; if (!string.IsNullOrEmpty(domain)) b.Settings.Domain = domain; }
         b.Settings.FullAddress = host;
         var gatewayHost = _hostStore.GetGatewayAddressForHost(id.UserName, host);
@@ -174,7 +177,7 @@ public sealed class Handler
             for (var i = 0; i < 5; i++) { current = Directory.GetParent(current)?.FullName ?? current; candidates.Add(Path.Combine(current, "assets", filename)); }
         }
         var found = candidates.FirstOrDefault(File.Exists);
-        if (found is null) { Console.WriteLine($"Asset file not found: {filename}. Tried paths: {string.Join(',', candidates)}"); ctx.Response.StatusCode = 404; return; }
+        if (found is null) { _logger.LogWarning("Asset file not found: {FileName}. Tried paths: {Paths}", filename, string.Join(',', candidates)); ctx.Response.StatusCode = 404; return; }
         await ServeFile(ctx, found, filename);
     }
 

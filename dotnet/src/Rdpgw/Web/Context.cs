@@ -1,12 +1,14 @@
 using System.Net;
 using Microsoft.AspNetCore.Http;
 using Rdpgw.Identity;
+using Rdpgw.Logging;
 
 namespace Rdpgw.Web;
 
 public static class ContextMiddleware
 {
     private static readonly List<IPNetwork> Trusted = [];
+    private static readonly ILogger Logger = Log.For(typeof(ContextMiddleware));
 
     public static void InitTrustedProxies(IEnumerable<string> cidrs)
     {
@@ -22,7 +24,7 @@ public static class ContextMiddleware
     {
         var id = Sessions.GetSessionIdentity(ctx) ?? new User();
         if (IdentityContext.FromContext(ctx) is null) IdentityContext.AddToContext(ctx, id);
-        Console.WriteLine($"Identity SessionId: {id.SessionId}, UserName: {id.UserName}: Authenticated: {id.Authenticated}");
+        Logger.LogDebug("Identity SessionId: {SessionId}, UserName: {UserName}: Authenticated: {Authenticated}", id.SessionId, id.UserName, id.Authenticated);
         var remoteAddr = RemoteAddr(ctx);
         id.SetAttribute(IdentityContext.AttrRemoteAddr, remoteAddr);
         var remoteHost = HostOnly(remoteAddr);

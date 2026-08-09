@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
@@ -7,11 +8,11 @@ public sealed class Configuration
 {
     public List<UserConfig> Users { get; set; } = [];
 
-    public static Configuration Load(string configFile)
+    public static Configuration Load(string configFile, ILogger logger)
     {
         if (!File.Exists(configFile))
         {
-            Console.Error.WriteLine($"Config file {configFile} not found, skipping config file");
+            logger.LogWarning("Config file {ConfigFile} not found, skipping config file", configFile);
             return new Configuration();
         }
 

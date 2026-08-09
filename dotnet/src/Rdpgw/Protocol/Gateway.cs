@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Caching.Memory;
 using Rdpgw.Identity;
+using Rdpgw.Logging;
 using Rdpgw.Transport;
 
 namespace Rdpgw.Protocol;
@@ -10,6 +11,7 @@ public sealed class Gateway
     private const string MethodRDGIN = "RDG_IN_DATA";
     private const string MethodRDGOUT = "RDG_OUT_DATA";
     private static readonly MemoryCache Cache = new(new MemoryCacheOptions());
+    private readonly ILogger _logger = Log.For<Gateway>();
 
     public Func<HttpContext, string, Task<bool>>? CheckPAACookie { get; set; }
     public Func<HttpContext, string, Task<bool>>? CheckClientName { get; set; }
@@ -39,7 +41,7 @@ public sealed class Gateway
         }
         else if (!TunnelOwnerMatches(tunnel, id))
         {
-            Console.WriteLine($"rejecting reuse of Rdg-Connection-Id {connId} from a different identity");
+            _logger.LogWarning("rejecting reuse of Rdg-Connection-Id {ConnectionId} from a different identity", connId);
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
             await context.Response.WriteAsync("Tunnel is owned by a different session", context.RequestAborted).ConfigureAwait(false);
             return;
@@ -136,12 +138,12 @@ public sealed class Gateway
 
     private async Task HandleLegacyProtocol(HttpContext context, Tunnel tunnel)
     {
-        Console.WriteLine($"Session {tunnel.RDGId}, {tunnel.TransportOut is not null}, {tunnel.TransportIn is not null}");
+        _logger.LogDebug("Session {SessionId}, out: {HasTransportOut}, in: {HasTransportIn}", tunnel.RDGId, tunnel.TransportOut is not null, tunnel.TransportIn is not null);
         var id = IdentityContext.FromContext(context) ?? tunnel.User;
         if (string.Equals(context.Request.Method, MethodRDGOUT, StringComparison.OrdinalIgnoreCase))
         {
             var output = await LegacyTransport.CreateAsync(context).ConfigureAwait(false);
-            Console.WriteLine($"Opening RDGOUT for client {id.GetAttribute(IdentityContext.AttrClientIp)}");
+            _logger.LogInformation("Opening RDGOUT for client {ClientIp}", id.GetAttribute(IdentityContext.AttrClientIp));
             tunnel.TransportOut = output;
             await output.SendAcceptAsync(true).ConfigureAwait(false);
             Cache.Set(tunnel.RDGId, tunnel, TimeSpan.FromMinutes(5));
@@ -165,10 +167,10 @@ public sealed class Gateway
                         Cache.Set(tunnel.RDGId, tunnel, TimeSpan.FromMinutes(5));
                         ProtocolMetrics.ConnectionCache.Set(Cache.Count);
 
-                        Console.WriteLine($"Opening RDGIN for client {id.GetAttribute(IdentityContext.AttrClientIp)}");
+                        _logger.LogInformation("Opening RDGIN for client {ClientIp}", id.GetAttribute(IdentityContext.AttrClientIp));
                         await input.SendAcceptAsync(false).ConfigureAwait(false);
                         await input.DrainAsync().ConfigureAwait(false);
-                        Console.WriteLine($"Legacy handshakeRequest done for client {id.GetAttribute(IdentityContext.AttrClientIp)}");
+                        _logger.LogInformation("Legacy handshakeRequest done for client {ClientIp}", id.GetAttribute(IdentityContext.AttrClientIp));
 
                         var processor = new Processor(this, tunnel);
                         ConnectionTracker.RegisterTunnel(tunnel, processor);
