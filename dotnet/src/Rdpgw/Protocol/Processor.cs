@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Net.Sockets;
 using Rdpgw.Identity;
+using Rdpgw.Logging;
 using static Rdpgw.Protocol.Caps;
 using static Rdpgw.Protocol.Fields;
 using static Rdpgw.Protocol.PacketType;
@@ -14,6 +15,7 @@ public sealed class Processor
     private readonly Gateway _gw;
     private readonly Tunnel _tunnel;
     private readonly CancellationTokenSource _disconnect = new();
+    private static readonly ILogger Logger = Log.For<Processor>();
     private int _state = SERVER_STATE_INITIALIZED;
 
     public Processor(Gateway gw, Tunnel tunnel)
@@ -33,7 +35,7 @@ public sealed class Processor
             {
                 if (message.Error is not null)
                 {
-                    Console.WriteLine($"Cannot read message from stream {message.Error}");
+                    Logger.LogWarning("Cannot read message from stream {Error}", message.Error);
                     continue;
                 }
                 switch (message.PacketType)
@@ -67,7 +69,7 @@ public sealed class Processor
                         _state = SERVER_STATE_CLOSED;
                         return;
                     default:
-                        Console.WriteLine($"Unknown packet (size {message.Length}): {Convert.ToHexString(message.Msg)}");
+                        Logger.LogWarning("Unknown packet (size {Size}): {Payload}", message.Length, Convert.ToHexString(message.Msg));
                         break;
                 }
             }
@@ -87,7 +89,7 @@ public sealed class Processor
 
     private async Task HandleHandshakeAsync(byte[] data)
     {
-        Console.WriteLine($"Client handshakeRequest from {_tunnel.User.GetAttribute(IdentityContext.AttrClientIp)}");
+        Logger.LogInformation("Client handshakeRequest from {ClientIp}", _tunnel.User.GetAttribute(IdentityContext.AttrClientIp));
         if (_state != SERVER_STATE_INITIALIZED)
         {
             await _tunnel.WriteAsync(HandshakeResponse(0, 0, 0, E_PROXY_INTERNALERROR)).ConfigureAwait(false);
@@ -110,7 +112,7 @@ public sealed class Processor
 
     private async Task HandleTunnelCreateAsync(byte[] data)
     {
-        Console.WriteLine("Tunnel create");
+        Logger.LogDebug("Tunnel create");
         if (_state != SERVER_STATE_HANDSHAKE)
         {
             await _tunnel.WriteAsync(TunnelResponse(E_PROXY_INTERNALERROR)).ConfigureAwait(false);
@@ -128,7 +130,7 @@ public sealed class Processor
 
     private async Task HandleTunnelAuthAsync(byte[] data)
     {
-        Console.WriteLine("Tunnel auth");
+        Logger.LogDebug("Tunnel auth");
         if (_state != SERVER_STATE_TUNNEL_CREATE)
         {
             await _tunnel.WriteAsync(TunnelAuthResponse(E_PROXY_INTERNALERROR)).ConfigureAwait(false);
@@ -146,7 +148,7 @@ public sealed class Processor
 
     private async Task HandleChannelCreateAsync(byte[] data, CancellationToken ct)
     {
-        Console.WriteLine("Channel create");
+        Logger.LogDebug("Channel create");
         if (_state != SERVER_STATE_TUNNEL_AUTHORIZE)
         {
             await _tunnel.WriteAsync(ChannelResponse(E_PROXY_INTERNALERROR)).ConfigureAwait(false);
@@ -200,7 +202,7 @@ public sealed class Processor
         var minor = data.Length > 1 ? data[1] : (byte)0;
         var version = data.Length >= 4 ? BinaryPrimitives.ReadUInt16LittleEndian(data.AsSpan(2, 2)) : (ushort)0;
         var extAuth = data.Length >= 6 ? BinaryPrimitives.ReadUInt16LittleEndian(data.AsSpan(4, 2)) : (ushort)0;
-        Console.WriteLine($"major: {major}, minor: {minor}, version: {version}, ext auth: {extAuth}");
+        Logger.LogDebug("major: {Major}, minor: {Minor}, version: {Version}, ext auth: {ExtAuth}", major, minor, version, extAuth);
         return (major, minor, version, extAuth);
     }
 

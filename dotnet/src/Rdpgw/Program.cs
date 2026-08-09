@@ -10,6 +10,7 @@ using Rdpgw.Components;
 using Rdpgw.Config;
 using Rdpgw.Data;
 using Rdpgw.KdcProxy;
+using Rdpgw.Logging;
 using Rdpgw.Protocol;
 using Rdpgw.Security;
 using Rdpgw.Web;
@@ -53,9 +54,6 @@ SecurityOptions.QuerySigningKey = System.Text.Encoding.UTF8.GetBytes(conf.Securi
 SecurityOptions.HostSelection = conf.Server.HostSelection;
 SecurityOptions.HostsProvider = hostStore.GetHostAddresses;
 
-Sessions.InitStore(System.Text.Encoding.UTF8.GetBytes(conf.Server.SessionKey), System.Text.Encoding.UTF8.GetBytes(conf.Server.SessionEncryptionKey), conf.Server.SessionStore, conf.Server.MaxSessionLength);
-ContextMiddleware.InitTrustedProxies(conf.Server.TrustedProxies);
-
 var webConfig = new WebHandlerConfig
 {
     QueryInfo = Security.QueryInfo,
@@ -73,13 +71,11 @@ var webConfig = new WebHandlerConfig
 };
 if (conf.Caps.TokenAuth) webConfig.PAATokenGenerator = Security.GeneratePAAToken;
 if (conf.Security.EnableUserToken) webConfig.UserTokenGenerator = Security.GenerateUserToken;
-var web = webConfig.NewHandler();
 
-Console.WriteLine("Starting remote desktop gateway server");
 builder.Services.AddAuthentication(NegotiateDefaults.AuthenticationScheme).AddNegotiate();
 builder.Services.AddAuthorization();
 builder.Services.AddMetricServer(options => { });
-builder.Services.AddSingleton(web);
+builder.Services.AddSingleton(sp => webConfig.NewHandler(sp.GetRequiredService<ILogger<Handler>>()));
 builder.Services.AddSingleton(hostStore);
 builder.Services.AddSingleton(gatewayStore);
 builder.Services.AddHttpContextAccessor();
@@ -92,7 +88,7 @@ builder.WebHost.ConfigureKestrel(options =>
         listen.Protocols = HttpProtocols.Http1;
         if (conf.Server.Tls == Configuration.TlsDisable)
         {
-            Console.WriteLine("TLS disabled - rdp gw connections require tls, make sure to have a terminator");
+            Log.For("Rdpgw.Startup").LogWarning("TLS disabled - rdp gw connections require tls, make sure to have a terminator");
         }
         else if (!string.IsNullOrEmpty(conf.Server.CertFile) && !string.IsNullOrEmpty(conf.Server.KeyFile))
         {
@@ -101,13 +97,21 @@ builder.WebHost.ConfigureKestrel(options =>
         }
         else
         {
-            Console.WriteLine("ACME/autocert is unsupported in the .NET port; configure certfile/keyfile or set tls: disable");
+            Log.For("Rdpgw.Startup").LogError("ACME/autocert is unsupported in the .NET port; configure certfile/keyfile or set tls: disable");
             throw new InvalidOperationException("TLS requires certfile/keyfile in the .NET port");
         }
     });
 });
 
 var app = builder.Build();
+Log.Factory = app.Services.GetRequiredService<ILoggerFactory>();
+var log = app.Logger;
+log.LogInformation("Starting remote desktop gateway server");
+
+Sessions.InitStore(System.Text.Encoding.UTF8.GetBytes(conf.Server.SessionKey), System.Text.Encoding.UTF8.GetBytes(conf.Server.SessionEncryptionKey), conf.Server.SessionStore, conf.Server.MaxSessionLength);
+ContextMiddleware.InitTrustedProxies(conf.Server.TrustedProxies);
+var web = app.Services.GetRequiredService<Handler>();
+
 app.UseWebSockets();
 app.UseAuthentication();
 app.UseAuthorization();
@@ -136,7 +140,7 @@ if (!string.IsNullOrEmpty(conf.Server.PrimaryGateway))
     // Subservient gateway: PAA tokens are issued by the primary, so validate them
     // against the primary's federation endpoint using the shared key. The token's
     // remoteServer claim (checked by CheckSession) authorizes the target host.
-    Console.WriteLine($"running as subservient gateway; validating tokens against primary at {conf.Server.PrimaryGateway}");
+    log.LogInformation("running as subservient gateway; validating tokens against primary at {PrimaryGateway}", conf.Server.PrimaryGateway);
     var remoteValidator = new GatewayFederation.RemoteTokenValidator(new Uri(conf.Server.PrimaryGateway), conf.Security.GatewaySharedKey);
     gw.CheckPAACookie = remoteValidator.CheckPAACookie;
     gw.CheckHost = Security.CheckSession((_, _) => Task.FromResult(true));
@@ -164,21 +168,21 @@ app.Map("/tokeninfo", TokenInfoEndpoint.TokenInfo);
 
 if (string.IsNullOrEmpty(conf.Server.PrimaryGateway) && !string.IsNullOrEmpty(conf.Security.GatewaySharedKey))
 {
-    Console.WriteLine("enabling gateway federation token validation endpoint");
+    log.LogInformation("enabling gateway federation token validation endpoint");
     var federationKey = System.Text.Encoding.UTF8.GetBytes(conf.Security.GatewaySharedKey);
     app.MapPost(GatewayFederation.ValidateEndpoint, ctx => GatewayFederation.HandleValidate(ctx, federationKey));
 }
 
 if (conf.Server.OpenIDEnabled())
 {
-    Console.WriteLine("enabling openid extended authentication");
+    log.LogInformation("enabling openid extended authentication");
     oidc = new OidcConfig { ProviderUrl = conf.OpenId.ProviderUrl, ClientId = conf.OpenId.ClientId, ClientSecret = conf.OpenId.ClientSecret, RedirectUrl = cb.ToString() }.New();
     app.Map("/callback", oidc.HandleCallback);
 }
 if (conf.Server.HeaderEnabled())
 {
     if (conf.Header.TrustedProxies.Count == 0) throw new InvalidOperationException("header authentication is enabled but `header.trustedproxies` is empty; refusing to start in an exploitable configuration");
-    Console.WriteLine($"enabling header authentication with user header: {conf.Header.UserHeader} (trusted proxies: {string.Join(',', conf.Header.TrustedProxies)})");
+    log.LogInformation("enabling header authentication with user header: {UserHeader} (trusted proxies: {TrustedProxies})", conf.Header.UserHeader, string.Join(',', conf.Header.TrustedProxies));
     headerAuth = new HeaderAuthConfig { UserHeader = conf.Header.UserHeader, UserIdHeader = conf.Header.UserIdHeader, EmailHeader = conf.Header.EmailHeader, DisplayNameHeader = conf.Header.DisplayNameHeader, TrustedProxies = conf.Header.TrustedProxies }.New();
 }
 
@@ -196,19 +200,19 @@ app.Map("/assets/icon.svg", ctx => web.ServeAssetFile(ctx, "icon.svg"));
 
 if (conf.Server.NtlmEnabled())
 {
-    Console.WriteLine("enabling NTLM authentication");
+    log.LogInformation("enabling NTLM authentication");
     ntlmAuth = new NTLMAuthHandler { SocketAddress = conf.Server.AuthSocket, Timeout = conf.Server.BasicAuthTimeout };
     authMux.Register(["NTLM", "Negotiate"], ctx => ctx.Request.Headers["Sec-WebSocket-Protocol"] != "binary");
 }
 if (conf.Server.BasicAuthEnabled())
 {
-    Console.WriteLine("enabling basic authentication");
+    log.LogInformation("enabling basic authentication");
     basicAuth = new BasicAuthHandler { SocketAddress = conf.Server.AuthSocket, Timeout = conf.Server.BasicAuthTimeout };
     authMux.Register(["Basic realm=\"restricted\", charset=\"UTF-8\""], null);
 }
 if (conf.Server.KerberosEnabled())
 {
-    Console.WriteLine("enabling kerberos authentication");
+    log.LogInformation("enabling kerberos authentication");
     kerberosEnabled = true;
     authMux.Register(["Negotiate"], null);
     var kdc = KerberosProxy.InitKdcProxy(conf.Kerberos.Krb5Conf);

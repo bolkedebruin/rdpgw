@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using Rdpgw.Identity;
+using Rdpgw.Logging;
 
 namespace Rdpgw.Web;
 
@@ -25,6 +26,7 @@ public sealed class OIDC
     private readonly string _issuer;
     private readonly ICollection<SecurityKey> _signingKeys;
     private static readonly HttpClient Http = new();
+    private readonly ILogger _logger = Log.For<OIDC>();
 
     private OIDC(OidcConfig config, string authorizationEndpoint, string tokenEndpoint, string issuer, ICollection<SecurityKey> keys)
     { _config = config; _authorizationEndpoint = authorizationEndpoint; _tokenEndpoint = tokenEndpoint; _issuer = issuer; _signingKeys = keys; }
@@ -43,7 +45,7 @@ public sealed class OIDC
     public async Task HandleCallback(HttpContext ctx)
     {
         var state = ctx.Request.Query["state"].FirstOrDefault() ?? string.Empty;
-        if (!GetOidcState(ctx, state, out var redirect)) { Console.WriteLine($"OIDC HandleCallback: unknown state '{state}'"); ctx.Response.StatusCode = 400; await ctx.Response.WriteAsync("unknown state"); return; }
+        if (!GetOidcState(ctx, state, out var redirect)) { _logger.LogWarning("OIDC HandleCallback: unknown state '{State}'", state); ctx.Response.StatusCode = 400; await ctx.Response.WriteAsync("unknown state"); return; }
         var code = ctx.Request.Query["code"].FirstOrDefault() ?? string.Empty;
         var form = new Dictionary<string, string>
         {
@@ -83,7 +85,7 @@ public sealed class OIDC
         if (!id.Authenticated)
         {
             var state = Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
-            Console.WriteLine($"OIDC Authenticated: storing state '{state}' for redirect to '{ctx.Request.Path + ctx.Request.QueryString}'");
+            _logger.LogDebug("OIDC Authenticated: storing state '{State}' for redirect to '{Redirect}'", state, ctx.Request.Path + ctx.Request.QueryString);
             Sessions.SetValue(ctx, OidcStateKey, state + "|" + ctx.Request.Path + ctx.Request.QueryString, TimeSpan.FromMinutes(2));
             var url = _authorizationEndpoint + "?" + QueryString.Create(new Dictionary<string, string?>
             {

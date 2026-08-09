@@ -11,6 +11,7 @@ public sealed class NtlmAuth
     private static readonly TimeSpan CacheExpiration = TimeSpan.FromMinutes(1);
     private readonly ConcurrentDictionary<string, NtlmContext> contexts = new(StringComparer.Ordinal);
     private readonly IUserDatabase database;
+    private readonly ILogger<NtlmAuth> logger;
 
     public string ServerName { get; init; } = string.Empty;
     public string DomainName { get; init; } = string.Empty;
@@ -18,9 +19,10 @@ public sealed class NtlmAuth
     public string DnsDomainName { get; init; } = string.Empty;
     public string DnsTreeName { get; init; } = string.Empty;
 
-    public NtlmAuth(IUserDatabase database)
+    public NtlmAuth(IUserDatabase database, ILogger<NtlmAuth> logger)
     {
         this.database = database;
+        this.logger = logger;
     }
 
     public AuthMessages.NtlmResponse Authenticate(AuthMessages.NtlmRequest message)
@@ -132,7 +134,7 @@ public sealed class NtlmAuth
             var password = owner.database.GetPassword(username);
             if (string.IsNullOrEmpty(password))
             {
-                Console.Error.WriteLine($"NTLM: unknown username specified: {username}");
+                owner.logger.LogWarning("NTLM: unknown username specified: {User}", username);
                 return;
             }
             if (ntResponse.Length < 24)
@@ -146,7 +148,7 @@ public sealed class NtlmAuth
             var expected = NtlmCrypto.HmacMd5(ntowfv2, challenge!.Concat(blob).ToArray());
             if (!CryptographicOperations.FixedTimeEquals(proof, expected))
             {
-                Console.Error.WriteLine("Failed to process NTLM authenticate message: invalid NTLMv2 response");
+                owner.logger.LogWarning("Failed to process NTLM authenticate message: invalid NTLMv2 response");
                 return;
             }
 
