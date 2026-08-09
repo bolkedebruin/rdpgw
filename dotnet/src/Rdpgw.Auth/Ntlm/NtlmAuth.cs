@@ -161,7 +161,7 @@ public sealed class NtlmAuth
                 case 3:
                     if (challenge is null || targetInfo is null)
                     {
-                        throw new InvalidOperationException("NTLM Authenticate requires active session: first call negotioate");
+                        throw new InvalidOperationException("NTLM Authenticate requires active session: first call negotiate");
                     }
                     // Type 3 is the client AUTHENTICATE_MESSAGE (MS-NLMP 2.2.1.3).
                     AuthenticateType3(message, response);
@@ -169,7 +169,7 @@ public sealed class NtlmAuth
                 default:
                     if (challenge is null)
                     {
-                        throw new InvalidOperationException("New NTLM auth sequence should start with negotioate request");
+                        throw new InvalidOperationException("New NTLM auth sequence should start with negotiate request");
                     }
                     throw new InvalidOperationException("Failed to parse NTLM Authorisation header: unsupported NTLM message type");
             }
