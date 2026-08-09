@@ -20,6 +20,9 @@ const string KdcProxyEndPoint = "/KdcProxy";
 var builder = WebApplication.CreateBuilder(args);
 builder.Configuration.AddEnvironmentVariables("RDPGW_");
 var conf = Configuration.Load(builder.Configuration);
+// The validated instance is registered directly (rather than via Configure<T>(section))
+// because Load() fixes up the bound values, e.g. generating random session/signing keys;
+// re-binding from configuration in DI would yield instances with different keys.
 builder.Services.AddSingleton<IOptions<Configuration>>(Options.Create(conf));
 builder.Services.AddSingleton<IOptions<ServerConfig>>(Options.Create(conf.Server));
 builder.Services.AddSingleton<IOptions<OpenIDConfig>>(Options.Create(conf.OpenId));
