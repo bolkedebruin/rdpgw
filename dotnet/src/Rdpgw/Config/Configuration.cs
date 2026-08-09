@@ -1,6 +1,5 @@
-using System.Collections;
 using System.Security.Cryptography;
-using YamlDotNet.Serialization;
+using Microsoft.Extensions.Options;
 
 namespace Rdpgw.Config;
 
@@ -34,182 +33,11 @@ public sealed class Configuration
     public SecurityConfig Security { get; set; } = new();
     public ClientConfig Client { get; set; } = new();
 
-    public static Configuration Load(string path)
+    public static Configuration Load(IConfiguration configuration)
     {
-        var config = WithDefaults();
-        if (File.Exists(path))
-        {
-            using var reader = File.OpenText(path);
-            var yaml = new DeserializerBuilder().Build().Deserialize<object?>(reader);
-            if (yaml is not null)
-            {
-                ApplyMap(config, FlattenYaml(yaml));
-            }
-        }
-        else
-        {
-            Console.Error.WriteLine($"Config file {path} not found, using defaults and environment");
-        }
-
-        ApplyMap(config, EnvironmentOverrides());
+        var config = configuration.Get<Configuration>() ?? new Configuration();
         ValidateAndFixup(config);
         return config;
-    }
-
-    public static string ToCamel(string s)
-    {
-        s = s.Trim();
-        var chars = new List<char>(s.Length);
-        var capNext = true;
-        for (var i = 0; i < s.Length; i++)
-        {
-            var ch = s[i];
-            var isCap = ch is >= 'A' and <= 'Z';
-            var isLow = ch is >= 'a' and <= 'z';
-            if (capNext && isLow) ch = (char)(ch - 'a' + 'A');
-            else if (i == 0 && isCap) ch = (char)(ch - 'A' + 'a');
-
-            if (isCap || isLow)
-            {
-                chars.Add(ch);
-                capNext = false;
-            }
-            else if (ch is >= '0' and <= '9')
-            {
-                chars.Add(ch);
-                capNext = true;
-            }
-            else
-            {
-                capNext = ch is '_' or ' ' or '-' or '.';
-                if (ch == '.') chars.Add(ch);
-            }
-        }
-        return new string(chars.ToArray());
-    }
-
-    private static Configuration WithDefaults() => new()
-    {
-        Server = new ServerConfig
-        {
-            Tls = TlsAuto,
-            Port = 443,
-            SessionStore = SessionStoreCookie,
-            HostSelection = HostSelectionRoundRobin,
-            DatabaseFile = "rdpgw.db",
-            Authentication = [AuthenticationOpenId],
-            AuthSocket = "/tmp/rdpgw-auth.sock",
-            BasicAuthTimeout = 5,
-        },
-        Security = new SecurityConfig { VerifyClientIp = true },
-        Caps = new CapsConfig { TokenAuth = true },
-    };
-
-    private static Dictionary<string, object?> EnvironmentOverrides()
-    {
-        var result = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
-        foreach (DictionaryEntry entry in Environment.GetEnvironmentVariables())
-        {
-            var name = entry.Key?.ToString();
-            if (name is null || !name.StartsWith("RDPGW_", StringComparison.OrdinalIgnoreCase)) continue;
-            var key = name[6..].ToLowerInvariant().Replace("__", ".");
-            key = ToCamel(key);
-            var value = entry.Value?.ToString()?.Trim(' ') ?? string.Empty;
-            result[key] = value.Contains(' ', StringComparison.Ordinal) ? value.Split(' ', StringSplitOptions.None) : value;
-        }
-        return result;
-    }
-
-    private static Dictionary<string, object?> FlattenYaml(object yaml)
-    {
-        var result = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
-        void Walk(string prefix, object? value)
-        {
-            if (value is IDictionary<object, object?> map)
-            {
-                foreach (var (k, v) in map)
-                {
-                    var key = NormalizeYamlKey(k.ToString() ?? string.Empty);
-                    Walk(string.IsNullOrEmpty(prefix) ? key : $"{prefix}.{key}", v);
-                }
-            }
-            else
-            {
-                result[prefix] = value;
-            }
-        }
-        Walk(string.Empty, yaml);
-        return result;
-    }
-
-    private static string NormalizeYamlKey(string key) => key.Trim().ToLowerInvariant().Replace("_", string.Empty).Replace("-", string.Empty);
-
-    private static void ApplyMap(Configuration c, IReadOnlyDictionary<string, object?> values)
-    {
-        foreach (var (rawKey, value) in values)
-        {
-            var key = rawKey.ToLowerInvariant();
-            switch (key)
-            {
-                case "server.gatewayaddress": c.Server.GatewayAddress = AsString(value); break;
-                case "server.port": c.Server.Port = AsInt(value); break;
-                case "server.certfile": c.Server.CertFile = AsString(value); break;
-                case "server.keyfile": c.Server.KeyFile = AsString(value); break;
-                case "server.hosts": c.Server.Hosts = AsStringList(value); break;
-                case "server.hostselection": c.Server.HostSelection = AsString(value); break;
-                case "server.databasefile": c.Server.DatabaseFile = AsString(value); break;
-                case "server.sessionkey": c.Server.SessionKey = AsString(value); break;
-                case "server.sessionencryptionkey": c.Server.SessionEncryptionKey = AsString(value); break;
-                case "server.sessionstore": c.Server.SessionStore = AsString(value); break;
-                case "server.maxsessionlength": c.Server.MaxSessionLength = AsInt(value); break;
-                case "server.sendbuf": c.Server.SendBuf = AsInt(value); break;
-                case "server.receivebuf": c.Server.ReceiveBuf = AsInt(value); break;
-                case "server.tls": c.Server.Tls = AsString(value); break;
-                case "server.authentication": c.Server.Authentication = AsStringList(value); break;
-                case "server.authsocket": c.Server.AuthSocket = AsString(value); break;
-                case "server.basicauthtimeout": c.Server.BasicAuthTimeout = AsInt(value); break;
-                case "server.alloweddestinationports": c.Server.AllowedDestinationPorts = AsIntList(value); break;
-                case "server.allowprivatedestinations": c.Server.AllowPrivateDestinations = AsBool(value); break;
-                case "server.trustedproxies": c.Server.TrustedProxies = AsStringList(value); break;
-                case "server.primarygateway": c.Server.PrimaryGateway = AsString(value); break;
-                case "openid.providerurl": c.OpenId.ProviderUrl = AsString(value); break;
-                case "openid.clientid": c.OpenId.ClientId = AsString(value); break;
-                case "openid.clientsecret": c.OpenId.ClientSecret = AsString(value); break;
-                case "kerberos.keytab": c.Kerberos.Keytab = AsString(value); break;
-                case "kerberos.krb5conf": c.Kerberos.Krb5Conf = AsString(value); break;
-                case "header.userheader": c.Header.UserHeader = AsString(value); break;
-                case "header.useridheader": c.Header.UserIdHeader = AsString(value); break;
-                case "header.emailheader": c.Header.EmailHeader = AsString(value); break;
-                case "header.displaynameheader": c.Header.DisplayNameHeader = AsString(value); break;
-                case "header.trustedproxies": c.Header.TrustedProxies = AsStringList(value); break;
-                case "caps.smartcardauth": c.Caps.SmartCardAuth = AsBool(value); break;
-                case "caps.tokenauth": c.Caps.TokenAuth = AsBool(value); break;
-                case "caps.idletimeout": c.Caps.IdleTimeout = AsInt(value); break;
-                case "caps.redirectall": c.Caps.RedirectAll = AsBool(value); break;
-                case "caps.disableredirect": c.Caps.DisableRedirect = AsBool(value); break;
-                case "caps.enableclipboard": c.Caps.EnableClipboard = AsBool(value); break;
-                case "caps.enableprinter": c.Caps.EnablePrinter = AsBool(value); break;
-                case "caps.enableport": c.Caps.EnablePort = AsBool(value); break;
-                case "caps.enablepnp": c.Caps.EnablePnp = AsBool(value); break;
-                case "caps.enabledrive": c.Caps.EnableDrive = AsBool(value); break;
-                case "security.paatokenencryptionkey": c.Security.PAATokenEncryptionKey = AsString(value); break;
-                case "security.paatokensigningkey": c.Security.PAATokenSigningKey = AsString(value); break;
-                case "security.usertokenencryptionkey": c.Security.UserTokenEncryptionKey = AsString(value); break;
-                case "security.usertokensigningkey": c.Security.UserTokenSigningKey = AsString(value); break;
-                case "security.querytokensigningkey": c.Security.QueryTokenSigningKey = AsString(value); break;
-                case "security.querytokenissuer": c.Security.QueryTokenIssuer = AsString(value); break;
-                case "security.verifyclientip": c.Security.VerifyClientIp = AsBool(value); break;
-                case "security.enableusertoken": c.Security.EnableUserToken = AsBool(value); break;
-                case "security.gatewaysharedkey": c.Security.GatewaySharedKey = AsString(value); break;
-                case "client.defaults": c.Client.Defaults = AsString(value); break;
-                case "client.usernametemplate": c.Client.UsernameTemplate = AsString(value); break;
-                case "client.splituserdomain": c.Client.SplitUserDomain = AsBool(value); break;
-                case "client.nousername": c.Client.NoUsername = AsBool(value); break;
-                case "client.signingcert": c.Client.SigningCert = AsString(value); break;
-                case "client.signingkey": c.Client.SigningKey = AsString(value); break;
-                case "client.rdpoverridablekeys": c.Client.RdpOverridableKeys = AsStringList(value); break;
-            }
-        }
     }
 
     private static void ValidateAndFixup(Configuration c)
@@ -220,33 +48,33 @@ public sealed class Configuration
         if (c.Security.EnableUserToken && c.Security.UserTokenEncryptionKey.Length != 32) c.Security.UserTokenEncryptionKey = GenerateRandomString(32);
         if (c.Server.SessionKey.Length != 32) c.Server.SessionKey = GenerateRandomString(32);
         if (c.Server.SessionEncryptionKey.Length != 32) c.Server.SessionEncryptionKey = GenerateRandomString(32);
-        if (c.Server.HostSelection == HostSelectionSigned && c.Security.QueryTokenSigningKey.Length == 0) throw new InvalidOperationException("host selection is set to `signed` but `querytokensigningkey` is not set");
-        if (c.Server.BasicAuthEnabled() && c.Server.Tls == TlsDisable) throw new InvalidOperationException("basicauth=local and tls=disable are mutually exclusive");
-        if (c.Server.NtlmEnabled() && c.Server.KerberosEnabled()) throw new InvalidOperationException("ntlm and kerberos authentication are not stackable");
-        if (!c.Caps.TokenAuth && c.Server.OpenIDEnabled()) throw new InvalidOperationException("openid is configured but tokenauth disabled");
-        if (c.Server.KerberosEnabled() && string.IsNullOrEmpty(c.Kerberos.Keytab)) throw new InvalidOperationException("kerberos is configured but no keytab was specified");
-        if (c.Server.HeaderEnabled() && string.IsNullOrEmpty(c.Header.UserHeader)) throw new InvalidOperationException("header authentication is configured but no user header was specified");
+        if (c.Server.HostSelection == HostSelectionSigned && c.Security.QueryTokenSigningKey.Length == 0) throw new OptionsValidationException(nameof(Configuration), typeof(Configuration), ["host selection is set to `signed` but `QueryTokenSigningKey` is not set"]);
+        if (c.Server.BasicAuthEnabled() && c.Server.Tls == TlsDisable) throw new OptionsValidationException(nameof(Configuration), typeof(Configuration), ["basicauth=local and tls=disable are mutually exclusive"]);
+        if (c.Server.NtlmEnabled() && c.Server.KerberosEnabled()) throw new OptionsValidationException(nameof(Configuration), typeof(Configuration), ["ntlm and kerberos authentication are not stackable"]);
+        if (!c.Caps.TokenAuth && c.Server.OpenIDEnabled()) throw new OptionsValidationException(nameof(Configuration), typeof(Configuration), ["openid is configured but tokenauth disabled"]);
+        if (c.Server.KerberosEnabled() && string.IsNullOrEmpty(c.Kerberos.Keytab)) throw new OptionsValidationException(nameof(Configuration), typeof(Configuration), ["kerberos is configured but no keytab was specified"]);
+        if (c.Server.HeaderEnabled() && string.IsNullOrEmpty(c.Header.UserHeader)) throw new OptionsValidationException(nameof(Configuration), typeof(Configuration), ["header authentication is configured but no user header was specified"]);
         if (!string.IsNullOrEmpty(c.Server.GatewayAddress) && !c.Server.GatewayAddress.Contains("//", StringComparison.Ordinal)) c.Server.GatewayAddress = "//" + c.Server.GatewayAddress;
         if (!string.IsNullOrEmpty(c.Server.PrimaryGateway))
         {
-            if (c.Security.GatewaySharedKey.Length < 32) throw new InvalidOperationException("`server.primarygateway` is set but `security.gatewaysharedkey` is missing or shorter than 32 characters; subservient gateways must share a strong key with the primary");
+            if (c.Security.GatewaySharedKey.Length < 32) throw new OptionsValidationException(nameof(Configuration), typeof(Configuration), ["`Server:PrimaryGateway` is set but `Security:GatewaySharedKey` is missing or shorter than 32 characters; subservient gateways must share a strong key with the primary"]);
             if (!c.Server.PrimaryGateway.Contains("://", StringComparison.Ordinal)) c.Server.PrimaryGateway = "https://" + c.Server.PrimaryGateway;
         }
-        if (c.Security.GatewaySharedKey.Length > 0 && c.Security.GatewaySharedKey.Length < 32) throw new InvalidOperationException("`security.gatewaysharedkey` must be at least 32 characters");
+        if (c.Security.GatewaySharedKey.Length > 0 && c.Security.GatewaySharedKey.Length < 32) throw new OptionsValidationException(nameof(Configuration), typeof(Configuration), ["`Security:GatewaySharedKey` must be at least 32 characters"]);
     }
 
     private static void CheckDefaultSecrets(Configuration c)
     {
         (string Name, string Value)[] fields =
         [
-            ("server.sessionkey", c.Server.SessionKey), ("server.sessionencryptionkey", c.Server.SessionEncryptionKey),
-            ("security.paatokensigningkey", c.Security.PAATokenSigningKey), ("security.paatokenencryptionkey", c.Security.PAATokenEncryptionKey),
-            ("security.usertokensigningkey", c.Security.UserTokenSigningKey), ("security.usertokenencryptionkey", c.Security.UserTokenEncryptionKey),
-            ("security.querytokensigningkey", c.Security.QueryTokenSigningKey),
+            ("Server:SessionKey", c.Server.SessionKey), ("Server:SessionEncryptionKey", c.Server.SessionEncryptionKey),
+            ("Security:PAATokenSigningKey", c.Security.PAATokenSigningKey), ("Security:PAATokenEncryptionKey", c.Security.PAATokenEncryptionKey),
+            ("Security:UserTokenSigningKey", c.Security.UserTokenSigningKey), ("Security:UserTokenEncryptionKey", c.Security.UserTokenEncryptionKey),
+            ("Security:QueryTokenSigningKey", c.Security.QueryTokenSigningKey),
         ];
         foreach (var field in fields.Where(f => !string.IsNullOrEmpty(f.Value)))
         foreach (var known in KnownDefaultSecrets)
-            if (field.Value == known) throw new InvalidOperationException($"{field.Name} is set to a known placeholder value ({known}); replace it with a unique secret before starting");
+            if (field.Value == known) throw new OptionsValidationException(nameof(Configuration), typeof(Configuration), [$"{field.Name} is set to a known placeholder value ({known}); replace it with a unique secret before starting"]);
     }
 
     private static string GenerateRandomString(int n)
@@ -254,20 +82,6 @@ public sealed class Configuration
         const string letters = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-";
         return RandomNumberGenerator.GetString(letters, n);
     }
-
-    private static string AsString(object? value) => value?.ToString() ?? string.Empty;
-    private static int AsInt(object? value) => value is int i ? i : int.TryParse(AsString(value), out var n) ? n : 0;
-    private static bool AsBool(object? value) => value is bool b ? b : AsString(value).Equals("true", StringComparison.OrdinalIgnoreCase) || AsString(value) == "1";
-    private static List<string> AsStringList(object? value) => value switch
-    {
-        null => [],
-        IEnumerable<string> e => e.ToList(),
-        IEnumerable<object> e => e.Select(AsString).ToList(),
-        string s when s.Contains(' ') => s.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList(),
-        string s when s.Length > 0 => [s],
-        _ => [AsString(value)]
-    };
-    private static List<int> AsIntList(object? value) => AsStringList(value).Select(v => int.TryParse(v, out var i) ? i : 0).ToList();
 }
 
 public sealed class ServerConfig

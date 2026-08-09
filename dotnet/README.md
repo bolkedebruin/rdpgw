@@ -30,14 +30,22 @@ dotnet publish src/Rdpgw.Auth -c Release -o out/rdpgw-auth
 
 ## Running
 
-The programs use the same YAML configuration files, environment variable
-overrides (`RDPGW_` prefix, `__` as section separator), command line flags,
+The gateway (`rdpgw`) is configured through the standard .NET configuration
+system using the IOptions pattern: default options live in `appsettings.json`
+(sections `Server`, `OpenId`, `Kerberos`, `Header`, `Caps`, `Security`,
+`Client`) and every option can be overridden with environment variables —
+either the standard ASP.NET Core form (`Server__Port=443`) or with the
+legacy `RDPGW_` prefix (`RDPGW_SERVER__PORT=443`), which makes it easy to
+configure when containerized. Lists are set by index, e.g.
+`RDPGW_SERVER__AUTHENTICATION__0=local`. The authentication daemon
+(`rdpgw-auth`) still reads its user database from a YAML file. The
 endpoints (`/remoteDesktopGateway/`, `/connect`, `/callback`, `/tokeninfo`,
-`/KdcProxy`, `/metrics`, `/api/v1/...`) and gRPC socket protocol as the Go
-implementation, so the existing documentation in the repository root applies.
+`/KdcProxy`, `/metrics`, `/api/v1/...`) and gRPC socket protocol are the same
+as the Go implementation, so the existing documentation in the repository
+root applies.
 
 ```sh
-./rdpgw -c rdpgw.yaml
+./rdpgw
 ./rdpgw-auth -c rdpgw-auth.yaml
 ```
 

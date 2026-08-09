@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.Extensions.Options;
 using MudBlazor.Services;
 using Prometheus;
 using Rdpgw.Components;
@@ -16,13 +17,17 @@ using Rdpgw.Web;
 const string GatewayEndPoint = "/remoteDesktopGateway/";
 const string KdcProxyEndPoint = "/KdcProxy";
 
-var configFile = "rdpgw.yaml";
-for (var i = 0; i < args.Length; i++)
-{
-    if ((args[i] == "-c" || args[i] == "--conf") && i + 1 < args.Length) configFile = args[++i];
-    else if (args[i].StartsWith("--conf=", StringComparison.Ordinal)) configFile = args[i][7..];
-}
-var conf = Configuration.Load(configFile);
+var builder = WebApplication.CreateBuilder(args);
+builder.Configuration.AddEnvironmentVariables("RDPGW_");
+var conf = Configuration.Load(builder.Configuration);
+builder.Services.AddSingleton<IOptions<Configuration>>(Options.Create(conf));
+builder.Services.AddSingleton<IOptions<ServerConfig>>(Options.Create(conf.Server));
+builder.Services.AddSingleton<IOptions<OpenIDConfig>>(Options.Create(conf.OpenId));
+builder.Services.AddSingleton<IOptions<KerberosConfig>>(Options.Create(conf.Kerberos));
+builder.Services.AddSingleton<IOptions<HeaderConfig>>(Options.Create(conf.Header));
+builder.Services.AddSingleton<IOptions<CapsConfig>>(Options.Create(conf.Caps));
+builder.Services.AddSingleton<IOptions<SecurityConfig>>(Options.Create(conf.Security));
+builder.Services.AddSingleton<IOptions<ClientConfig>>(Options.Create(conf.Client));
 
 var dbFile = string.IsNullOrEmpty(conf.Server.DatabaseFile) ? "rdpgw.db" : conf.Server.DatabaseFile;
 var dbOptions = new DbContextOptionsBuilder<RdpgwDbContext>().UseSqlite($"Data Source={dbFile}").Options;
@@ -68,7 +73,6 @@ if (conf.Security.EnableUserToken) webConfig.UserTokenGenerator = Security.Gener
 var web = webConfig.NewHandler();
 
 Console.WriteLine("Starting remote desktop gateway server");
-var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddAuthentication(NegotiateDefaults.AuthenticationScheme).AddNegotiate();
 builder.Services.AddAuthorization();
 builder.Services.AddMetricServer(options => { });
