@@ -4,15 +4,30 @@ using Microsoft.AspNetCore.Http;
 
 namespace Rdpgw.KdcProxy;
 
+/// <summary>
+/// Decoded MS-KKDCP request containing a Kerberos message and optional routing metadata.
+/// </summary>
 public sealed class KdcProxyMsg
 {
+    /// <summary>Gets or sets the raw Kerberos request payload, including the TCP length prefix expected by KDCs.</summary>
     public byte[] Message { get; set; } = [];
+    /// <summary>Gets or sets the requested Kerberos realm; an empty value falls back to the default realm.</summary>
     public string Realm { get; set; } = string.Empty;
+    /// <summary>Gets or sets optional KDC proxy flags when present in the DER request.</summary>
     public int? Flags { get; set; }
 }
 
+/// <summary>
+/// KDC endpoint candidate discovered from krb5 configuration.
+/// </summary>
+/// <param name="Realm">Kerberos realm served by the KDC.</param>
+/// <param name="Host">KDC host name or host:port.</param>
+/// <param name="Proto">Transport protocol, either udp or tcp.</param>
 public sealed record Kdc(string Realm, string Host, string Proto);
 
+/// <summary>
+/// Implements the HTTP KDC proxy endpoint and forwards decoded Kerberos messages to configured KDCs.
+/// </summary>
 public sealed class KerberosProxy
 {
     private const int MaxLength = 128 * 1024;
@@ -22,12 +37,17 @@ public sealed class KerberosProxy
 
     private KerberosProxy(Krb5Config config) => _config = config;
 
+    /// <summary>Creates a KDC proxy using the configured krb5.conf path or the system default.</summary>
+    /// <param name="krb5Conf">Optional krb5.conf path.</param>
+    /// <returns>A configured <see cref="KerberosProxy"/>.</returns>
     public static KerberosProxy InitKdcProxy(string? krb5Conf = null)
     {
         var path = string.IsNullOrEmpty(krb5Conf) ? SystemConfigPath : krb5Conf;
         return new KerberosProxy(Krb5Config.Load(path));
     }
 
+    /// <summary>Handles an HTTP KDC proxy request and writes the DER-encoded proxy response.</summary>
+    /// <param name="ctx">HTTP request context for the KDC proxy endpoint.</param>
     public async Task Handler(HttpContext ctx)
     {
         if (!HttpMethods.IsPost(ctx.Request.Method))
@@ -87,6 +107,10 @@ public sealed class KerberosProxy
         await ctx.Response.Body.WriteAsync(Encode(reply));
     }
 
+    /// <summary>Forwards a Kerberos request to the KDCs configured for a realm and returns the first successful reply.</summary>
+    /// <param name="realm">Requested realm, or empty to use the default realm.</param>
+    /// <param name="data">Kerberos TCP-framed request payload.</param>
+    /// <returns>The Kerberos TCP-framed KDC reply.</returns>
     public async Task<byte[]> Forward(string realm, byte[] data)
     {
         if (string.IsNullOrEmpty(realm)) realm = _config.DefaultRealm;
@@ -95,6 +119,7 @@ public sealed class KerberosProxy
         if (kdcs.Count == 0) throw new InvalidOperationException($"cannot get any kdcs (tcp or udp) for realm {realm}");
 
         using var cts = new CancellationTokenSource(Timeout);
+        // Query all configured UDP/TCP KDCs concurrently and use the first response to minimize login latency.
         var tasks = kdcs.Select(k => QueryKdc(k, data, cts.Token)).ToList();
         while (tasks.Count > 0)
         {
@@ -123,6 +148,7 @@ public sealed class KerberosProxy
                 return await ReadAllWithTimeout(stream, cancellationToken);
             }
             using var udp = new UdpClient();
+            // UDP KDC messages are not length-prefixed on the wire, unlike the TCP framing used by MS-KKDCP.
             await udp.SendAsync(data.AsMemory(data.Length >= 4 ? 4 : 0), Host(kdc.Host), Port(kdc.Host), cancellationToken);
             var resp = await udp.ReceiveAsync(cancellationToken);
             var withLength = new byte[resp.Buffer.Length + 4];
@@ -155,9 +181,13 @@ public sealed class KerberosProxy
         return ms.ToArray();
     }
 
+    /// <summary>Decodes a DER-encoded MS-KKDCP request into its Kerberos payload and metadata.</summary>
+    /// <param name="data">HTTP request body.</param>
+    /// <returns>The decoded KDC proxy message.</returns>
     public static KdcProxyMsg Decode(byte[] data)
     {
         var offset = 0;
+        // MS-KKDCP wraps the Kerberos message in a DER SEQUENCE with explicit context-specific fields.
         ExpectTag(data, ref offset, 0x30);
         var end = offset + ReadLength(data, ref offset);
         var message = ReadExplicitOctets(data, ref offset, 0);
@@ -174,6 +204,9 @@ public sealed class KerberosProxy
         return new KdcProxyMsg { Message = message, Realm = realm, Flags = flags };
     }
 
+    /// <summary>Encodes a Kerberos KDC reply as a DER MS-KKDCP response.</summary>
+    /// <param name="krb5Data">Kerberos TCP-framed reply bytes.</param>
+    /// <returns>DER-encoded proxy response body.</returns>
     public static byte[] Encode(byte[] krb5Data)
     {
         var octet = Der(0x04, krb5Data);
@@ -270,12 +303,19 @@ public sealed class KerberosProxy
     private static int Port(string hostPort) => hostPort.Contains(':') && int.TryParse(hostPort.Split(':', 2)[1], out var p) ? p : 88;
 }
 
+/// <summary>
+/// Minimal krb5.conf parser that extracts the default realm and configured KDC endpoints.
+/// </summary>
 internal sealed class Krb5Config
 {
+    /// <summary>Gets the default Kerberos realm from the libdefaults section.</summary>
     public string DefaultRealm { get; private set; } = string.Empty;
     private Dictionary<string, List<string>> UdpKdcs { get; init; } = new(StringComparer.OrdinalIgnoreCase);
     private Dictionary<string, List<string>> TcpKdcs { get; init; } = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Loads KDC realm mappings from a krb5.conf file.</summary>
+    /// <param name="path">Path to the krb5.conf file.</param>
+    /// <returns>A parsed configuration.</returns>
     public static Krb5Config Load(string path)
     {
         if (!File.Exists(path)) throw new FileNotFoundException($"Cannot load krb5 config {path}", path);
@@ -302,6 +342,7 @@ internal sealed class Krb5Config
                 list.Add(host);
                 if (!tcp && !udp)
                 {
+                    // Unqualified kdc entries are reachable by UDP and TCP according to common krb5.conf usage.
                     if (!cfg.TcpKdcs.TryGetValue(realm, out var tcpList)) cfg.TcpKdcs[realm] = tcpList = [];
                     tcpList.Add(host);
                 }
@@ -310,6 +351,10 @@ internal sealed class Krb5Config
         return cfg;
     }
 
+    /// <summary>Returns KDC endpoints for a realm and transport.</summary>
+    /// <param name="realm">Kerberos realm to look up.</param>
+    /// <param name="tcp">Whether to return TCP endpoints instead of UDP endpoints.</param>
+    /// <returns>Configured KDC host entries, or an empty list when none are configured.</returns>
     public IReadOnlyList<string> GetKdcs(string realm, bool tcp) => (tcp ? TcpKdcs : UdpKdcs).TryGetValue(realm, out var list) ? list : [];
 
     private static bool TryKeyValue(string line, out string key, out string value)

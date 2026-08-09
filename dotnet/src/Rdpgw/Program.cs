@@ -36,6 +36,7 @@ builder.Services.AddSingleton<IOptions<ClientConfig>>(Options.Create(conf.Client
 var dbFile = string.IsNullOrEmpty(conf.Server.DatabaseFile) ? "rdpgw.db" : conf.Server.DatabaseFile;
 var dbOptions = new DbContextOptionsBuilder<RdpgwDbContext>().UseSqlite($"Data Source={dbFile}").Options;
 var dbFactory = new PooledDbContextFactory<RdpgwDbContext>(dbOptions);
+// Stores are initialized before the host is built so legacy configuration rows are available to services immediately.
 var hostStore = new HostStore(dbFactory);
 await hostStore.InitializeAsync(conf.Server.Hosts);
 var gatewayStore = new GatewayStore(dbFactory);
@@ -52,6 +53,7 @@ SecurityOptions.UserEncryptionKey = System.Text.Encoding.UTF8.GetBytes(conf.Secu
 SecurityOptions.UserSigningKey = System.Text.Encoding.UTF8.GetBytes(conf.Security.UserTokenSigningKey);
 SecurityOptions.QuerySigningKey = System.Text.Encoding.UTF8.GetBytes(conf.Security.QueryTokenSigningKey);
 SecurityOptions.HostSelection = conf.Server.HostSelection;
+// Token validation calls back into the EF-backed store so host authorization reflects live host-management changes.
 SecurityOptions.HostsProvider = hostStore.GetHostAddresses;
 
 var webConfig = new WebHandlerConfig
@@ -112,6 +114,8 @@ Sessions.InitStore(System.Text.Encoding.UTF8.GetBytes(conf.Server.SessionKey), S
 ContextMiddleware.InitTrustedProxies(conf.Server.TrustedProxies);
 var web = app.Services.GetRequiredService<Handler>();
 
+// Middleware order matters: WebSockets first for RDG_IN/OUT upgrades, authentication/authorization next,
+// then rdpgw identity enrichment so later web and gateway handlers share the same request identity.
 app.UseWebSockets();
 app.UseAuthentication();
 app.UseAuthorization();
@@ -155,6 +159,7 @@ var authMux = new AuthMux();
 
 async Task WebAuth(HttpContext ctx, Func<Task> next)
 {
+    // Browser-facing routes use OIDC or trusted-header sessions; gateway protocol auth is dispatched separately.
     if (oidc is not null) { await oidc.Authenticated(ctx, next); return; }
     if (headerAuth is not null) { await headerAuth.Authenticated(ctx, next); return; }
     await next();
@@ -162,6 +167,7 @@ async Task WebAuth(HttpContext ctx, Func<Task> next)
 
 app.UseWhen(
     ctx => ctx.Request.Path == "/" || ctx.Request.Path.StartsWithSegments("/hosts") || ctx.Request.Path.StartsWithSegments("/gateways") || ctx.Request.Path.StartsWithSegments("/_blazor"),
+    // Restrict web UI authentication middleware to browser routes so it does not interfere with RDP gateway verbs.
     branch => branch.Use(async (ctx, next) => await WebAuth(ctx, () => next(ctx))));
 
 app.Map("/tokeninfo", TokenInfoEndpoint.TokenInfo);
@@ -221,6 +227,7 @@ if (conf.Server.KerberosEnabled())
 
 var unauthGateway = (oidc is not null && !conf.Server.KerberosEnabled() && !conf.Server.BasicAuthEnabled() && !conf.Server.NtlmEnabled() && !conf.Server.HeaderEnabled())
     || (headerAuth is not null && !conf.Server.KerberosEnabled() && !conf.Server.BasicAuthEnabled() && !conf.Server.NtlmEnabled() && !conf.Server.OpenIDEnabled());
+// When browser authentication is the only mode, the RDP gateway itself relies solely on PAA cookie validation.
 if (unauthGateway) app.MapMethods(GatewayEndPoint, ["RDG_IN_DATA", "RDG_OUT_DATA"], gw.HandleGatewayProtocol);
 else app.MapMethods(GatewayEndPoint, ["RDG_IN_DATA", "RDG_OUT_DATA"], GatewayDispatch);
 await app.RunAsync();
@@ -228,6 +235,7 @@ await app.RunAsync();
 async Task GatewayDispatch(HttpContext ctx)
 {
     var auth = ctx.Request.Headers.Authorization.ToString();
+    // RDP clients negotiate gateway authentication through Authorization headers on the RDG_IN/OUT requests.
     if (ntlmAuth is not null && (auth.StartsWith("NTLM", StringComparison.Ordinal) || auth.StartsWith("Negotiate", StringComparison.Ordinal))) { await ntlmAuth.NTLMAuth(ctx, () => gw.HandleGatewayProtocol(ctx)); return; }
     if (basicAuth is not null && auth.StartsWith("Basic", StringComparison.Ordinal)) { await basicAuth.BasicAuth(ctx, () => gw.HandleGatewayProtocol(ctx)); return; }
     if (kerberosEnabled && auth.StartsWith("Negotiate", StringComparison.OrdinalIgnoreCase))

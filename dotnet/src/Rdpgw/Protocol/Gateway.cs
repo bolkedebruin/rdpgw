@@ -5,6 +5,12 @@ using Rdpgw.Transport;
 
 namespace Rdpgw.Protocol;
 
+/// <summary>
+/// ASP.NET Core entry point for RD Gateway protocol requests and transport selection.
+/// </summary>
+/// <remarks>
+/// Handles both legacy RDG_IN_DATA/RDG_OUT_DATA HTTP transports and the WebSocket transport before delegating MS-TSGU packet processing to <see cref="Processor" />.
+/// </remarks>
 public sealed class Gateway
 {
     private const string RdgConnectionIdKey = "Rdg-Connection-Id";
@@ -13,20 +19,33 @@ public sealed class Gateway
     private static readonly MemoryCache Cache = new(new MemoryCacheOptions());
     private readonly ILogger _logger = Log.For<Gateway>();
 
+    /// <summary>Callback used to validate a PAA cookie from the tunnel create request.</summary>
     public Func<HttpContext, string, Task<bool>>? CheckPAACookie { get; set; }
+    /// <summary>Callback used to authorize the client computer name in tunnel authorization.</summary>
     public Func<HttpContext, string, Task<bool>>? CheckClientName { get; set; }
+    /// <summary>Callback used to authorize the requested target host and port.</summary>
     public Func<HttpContext, string, Task<bool>>? CheckHost { get; set; }
+    /// <summary>Device redirection policy advertised in tunnel authorization responses.</summary>
     public RedirectFlags RedirectFlags { get; set; } = new();
+    /// <summary>Idle timeout, in milliseconds, sent to clients that support the idle-timeout capability.</summary>
     public int IdleTimeout { get; set; }
+    /// <summary>Whether the gateway requires or offers smart-card extended authentication.</summary>
     public bool SmartCardAuth { get; set; }
+    /// <summary>Whether the gateway requires or offers PAA token-cookie authentication.</summary>
     public bool TokenAuth { get; set; }
+    /// <summary>Optional TCP receive buffer size applied to target server connections.</summary>
     public int ReceiveBuf { get; set; }
+    /// <summary>Optional TCP send buffer size applied to target server connections.</summary>
     public int SendBuf { get; set; }
 
+    /// <summary>Handles one HTTP request participating in an RD Gateway connection.</summary>
+    /// <param name="context">Current ASP.NET Core request context.</param>
+    /// <returns>A task that completes after the request or tunnel processing ends.</returns>
     public async Task HandleGatewayProtocol(HttpContext context)
     {
         ProtocolMetrics.ConnectionCache.Set(Cache.Count);
 
+        // Legacy clients correlate the RDG_OUT_DATA and RDG_IN_DATA requests with this header.
         var id = IdentityContext.FromContext(context) ?? new User();
         var connId = context.Request.Headers[RdgConnectionIdKey].FirstOrDefault() ?? string.Empty;
         if (!Cache.TryGetValue<Tunnel>(connId, out var tunnel) || tunnel is null)
@@ -47,6 +66,7 @@ public sealed class Gateway
             return;
         }
 
+        // RDG_OUT_DATA carries server-to-client bytes; with WebSockets it becomes the single bidirectional stream.
         if (string.Equals(context.Request.Method, MethodRDGOUT, StringComparison.OrdinalIgnoreCase))
         {
             if (IsWebSocketUpgrade(context))
@@ -63,6 +83,7 @@ public sealed class Gateway
             }
             await HandleLegacyProtocol(context, tunnel).ConfigureAwait(false);
         }
+        // RDG_IN_DATA carries client-to-server bytes for the legacy two-request transport.
         else if (string.Equals(context.Request.Method, MethodRDGIN, StringComparison.OrdinalIgnoreCase))
         {
             await HandleLegacyProtocol(context, tunnel).ConfigureAwait(false);
@@ -83,6 +104,7 @@ public sealed class Gateway
         {
             return false;
         }
+        // Require the same authenticated username and client IP before reusing a cached legacy tunnel.
         var cachedIp = Convert.ToString(tunnel.User.GetAttribute(IdentityContext.AttrClientIp)) ?? string.Empty;
         var reqIp = Convert.ToString(id.GetAttribute(IdentityContext.AttrClientIp)) ?? string.Empty;
         return cachedIp.Length > 0 && cachedIp == reqIp;
@@ -105,6 +127,7 @@ public sealed class Gateway
     }
 
     private static bool IsWebSocketUpgrade(HttpContext context) =>
+        // HTTP header token matching is comma-aware because Connection can contain multiple values.
         HeaderHasToken(context.Request.Headers, "Connection", "upgrade") &&
         HeaderHasToken(context.Request.Headers, "Upgrade", "websocket");
 
@@ -113,6 +136,7 @@ public sealed class Gateway
         ProtocolMetrics.WebsocketConnections.Inc();
         try
         {
+            // WebSocket mode maps both MS-TSGU directions onto one binary message transport.
             var inout = new WebSocketTransport(socket);
             tunnel.Id = Guid.NewGuid().ToString();
             tunnel.TransportOut = inout;
@@ -142,6 +166,7 @@ public sealed class Gateway
         var id = IdentityContext.FromContext(context) ?? tunnel.User;
         if (string.Equals(context.Request.Method, MethodRDGOUT, StringComparison.OrdinalIgnoreCase))
         {
+            // The first legacy request opens RDG_OUT_DATA and is cached until RDG_IN_DATA arrives.
             var output = await LegacyTransport.CreateAsync(context).ConfigureAwait(false);
             _logger.LogInformation("Opening RDGOUT for client {ClientIp}", id.GetAttribute(IdentityContext.AttrClientIp));
             tunnel.TransportOut = output;
@@ -169,6 +194,7 @@ public sealed class Gateway
 
                         _logger.LogInformation("Opening RDGIN for client {ClientIp}", id.GetAttribute(IdentityContext.AttrClientIp));
                         await input.SendAcceptAsync(false).ConfigureAwait(false);
+                        // RDG_IN_DATA sends an initial body segment after the HTTP 200; drain it before packet processing.
                         await input.DrainAsync().ConfigureAwait(false);
                         _logger.LogInformation("Legacy handshakeRequest done for client {ClientIp}", id.GetAttribute(IdentityContext.AttrClientIp));
 

@@ -7,8 +7,14 @@ using Rdpgw.Shared.Auth;
 
 namespace Rdpgw.Web;
 
+/// <summary>
+/// Creates gRPC channels to the external authentication helper over a Unix domain socket.
+/// </summary>
 internal static class GrpcAuth
 {
+    /// <summary>Creates a gRPC channel that dials the configured Unix domain socket.</summary>
+    /// <param name="socketAddress">Filesystem path of the authentication helper socket.</param>
+    /// <returns>A channel suitable for generated authentication clients.</returns>
     public static GrpcChannel Channel(string socketAddress)
     {
         var handler = new SocketsHttpHandler
@@ -20,16 +26,25 @@ internal static class GrpcAuth
                 return new NetworkStream(socket, ownsSocket: true);
             }
         };
+        // The URI is a placeholder; ConnectCallback routes all HTTP/2 traffic over the Unix socket.
         return GrpcChannel.ForAddress("http://localhost", new GrpcChannelOptions { HttpHandler = handler });
     }
 }
 
+/// <summary>
+/// Performs HTTP Basic authentication by delegating username/password verification to the gRPC auth service.
+/// </summary>
 public sealed class BasicAuthHandler
 {
     private readonly ILogger _logger = Log.For<BasicAuthHandler>();
+    /// <summary>Gets or sets the Unix domain socket path for the authentication service.</summary>
     public string SocketAddress { get; set; } = string.Empty;
+    /// <summary>Gets or sets the authentication service timeout in seconds.</summary>
     public int Timeout { get; set; }
 
+    /// <summary>Authenticates a request with a Basic Authorization header or returns a Basic challenge.</summary>
+    /// <param name="ctx">Current HTTP context.</param>
+    /// <param name="next">Next handler to invoke on successful authentication.</param>
     public async Task BasicAuth(HttpContext ctx, Func<Task> next)
     {
         var header = ctx.Request.Headers.Authorization.ToString();
@@ -67,12 +82,20 @@ public sealed class BasicAuthHandler
     }
 }
 
+/// <summary>
+/// Performs NTLM/Negotiate authentication by relaying protocol messages to the gRPC auth service.
+/// </summary>
 public sealed class NTLMAuthHandler
 {
     private readonly ILogger _logger = Log.For<NTLMAuthHandler>();
+    /// <summary>Gets or sets the Unix domain socket path for the authentication service.</summary>
     public string SocketAddress { get; set; } = string.Empty;
+    /// <summary>Gets or sets the authentication service timeout in seconds.</summary>
     public int Timeout { get; set; }
 
+    /// <summary>Processes an NTLM/Negotiate authentication step and continues when the service reports success.</summary>
+    /// <param name="ctx">Current HTTP context.</param>
+    /// <param name="next">Next handler to invoke on successful authentication.</param>
     public async Task NTLMAuth(HttpContext ctx, Func<Task> next)
     {
         var (payload, mode) = GetAuthPayload(ctx.Request.Headers.Authorization.ToString());
@@ -81,6 +104,7 @@ public sealed class NTLMAuthHandler
         if (!string.IsNullOrEmpty(challenge))
         {
             _logger.LogDebug("Sending NTLM challenge");
+            // NTLM is multi-round-trip; the gRPC service returns the next challenge blob to forward to the client.
             ctx.Response.Headers.Append("WWW-Authenticate", Prefix(mode) + challenge);
             ctx.Response.StatusCode = 401;
             await ctx.Response.WriteAsync("Unauthorized");

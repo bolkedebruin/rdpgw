@@ -9,13 +9,17 @@ namespace Rdpgw.Data;
 /// </summary>
 public sealed class GatewayEntry
 {
+    /// <summary>Gets or sets the database identifier for the gateway row.</summary>
     public int Id { get; set; }
 
+    /// <summary>Gets or sets the operator-friendly gateway name displayed in the UI.</summary>
     [Required]
     public string Name { get; set; } = string.Empty;
 
+    /// <summary>Gets or sets the gateway host name or host:port written into RDP files.</summary>
     [Required]
     public string Address { get; set; } = string.Empty;
 
+    /// <summary>Gets or sets optional explanatory text shown to administrators.</summary>
     public string Description { get; set; } = string.Empty;
 }

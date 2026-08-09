@@ -2,11 +2,19 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Rdpgw.Data;
 
+/// <summary>
+/// EF Core database context for rdpgw host and gateway metadata stored in SQLite.
+/// </summary>
+/// <param name="options">Database options configured by startup.</param>
 public sealed class RdpgwDbContext(DbContextOptions<RdpgwDbContext> options) : DbContext(options)
 {
+    /// <summary>Gets the host destination table.</summary>
     public DbSet<HostEntry> Hosts => Set<HostEntry>();
+    /// <summary>Gets the gateway table used for per-host gateway routing.</summary>
     public DbSet<GatewayEntry> Gateways => Set<GatewayEntry>();
 
+    /// <summary>Configures required columns, uniqueness, and gateway relationship behavior.</summary>
+    /// <param name="modelBuilder">EF Core model builder for this context.</param>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<HostEntry>(entity =>
@@ -15,6 +23,7 @@ public sealed class RdpgwDbContext(DbContextOptions<RdpgwDbContext> options) : D
             entity.Property(h => h.Address).IsRequired();
             entity.Property(h => h.Owner).IsRequired().HasDefaultValue(string.Empty);
             entity.HasIndex(h => new { h.Owner, h.Address }).IsUnique();
+            // Deleting a gateway should not delete hosts; they fall back to this server's gateway address.
             entity.HasOne(h => h.Gateway).WithMany().HasForeignKey(h => h.GatewayId).OnDelete(DeleteBehavior.SetNull);
         });
         modelBuilder.Entity<GatewayEntry>(entity =>
