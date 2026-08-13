@@ -7,6 +7,7 @@ using Prometheus;
 using Rdpgw.Components;
 using Rdpgw.Config;
 using Rdpgw.Data;
+using Rdpgw.Gateway;
 using Rdpgw.Protocol;
 using Rdpgw.Security;
 using Rdpgw.Security.GatewayToken;
@@ -36,6 +37,11 @@ builder.Services
 	.BindConfiguration("OpenId")
 	.ValidateDataAnnotations()
 	.ValidateOnStart();
+builder.Services
+	.AddOptions<OrchestratorConfig>()
+	.BindConfiguration("Orchestrator")
+	.ValidateDataAnnotations()
+	.ValidateOnStart();
 
 //builder.Services.AddSingleton<IOptions<KerberosConfig>>(Options.Create(configuration.Kerberos));
 //builder.Services.AddSingleton<IOptions<ClientConfig>>(Options.Create(configuration.Client));
@@ -44,13 +50,23 @@ var dbOptions = new DbContextOptionsBuilder<RdpgwDbContext>().UseSqlite($"Data S
 var dbFactory = new PooledDbContextFactory<RdpgwDbContext>(dbOptions);
 
 builder.Services.AddTransient<HostStore>();
-builder.Services.AddTransient<GatewayStore>();
+builder.Services.AddHttpClient<GatewayStore>();
 
+builder.Services.AddTransient<ITokenService, TokenService>();
 builder.Services.AddTransient<TokenService>();
 builder.Services.AddTransient<GatewayService>();
 builder.Services.AddDbContext<RdpgwDbContext>(options => options.UseSqlite($"Data Source=rdpgw.db"));
 
 builder.Services.AddMemoryCache();
+
+builder.Services.AddSingleton<GatewayTokenReplayValidator>();
+builder.Services.AddSingleton<GatewayRegistrationRateLimiter>();
+builder.Services.AddSingleton<IGatewayAdoptionState, GatewayAdoptionState>();
+
+builder.Services.AddHttpClient<JwksClient>();
+
+builder.Services.AddHttpClient<GatewayRegistrationInitializer>();
+builder.Services.AddHostedService<GatewayRegistrationInitializer>();
 
 builder.Services.AddAuthentication(NegotiateDefaults.AuthenticationScheme).AddNegotiate();
 builder.Services.AddAuthorization();
@@ -84,7 +100,11 @@ builder.Services.AddHttpContextAccessor();
 
 builder.Services
     .AddAuthentication()
-    .AddScheme<AuthenticationSchemeOptions, GatewayTokenAuthenticationHandler>("GatewayToken", options => { });
+    .AddScheme<AuthenticationSchemeOptions, GatewayTokenAuthenticationHandler>("GatewayToken", options => { })
+    .AddScheme<AuthenticationSchemeOptions, GatewayRegistrationAuthenticationHandler>(
+        GatewayRegistrationAuthenticationHandler.SchemeName, options => { })
+    .AddScheme<AuthenticationSchemeOptions, GatewayAdoptionAuthenticationHandler>(
+        GatewayAdoptionAuthenticationHandler.SchemeName, options => { });
 
 builder.Services
     .AddAuthorizationBuilder()
@@ -93,6 +113,34 @@ builder.Services
 			policy.AddAuthenticationSchemes("GatewayToken");
 			policy.RequireAuthenticatedUser();
             policy.RequireClaim("gatewayName");
+		})
+	.AddPolicy("GatewayRegister", policy =>
+		{
+			// Unregistered gateways authenticate with the pre-shared registration key.
+			policy.AddAuthenticationSchemes(GatewayRegistrationAuthenticationHandler.SchemeName);
+			policy.RequireAuthenticatedUser();
+			policy.RequireClaim("gatewayName");
+		})
+	.AddPolicy("GatewayRegistrationStatus", policy =>
+		{
+			// A gateway may check its status before or after its key is known to us,
+			// so both the registration key and its own signing key are accepted.
+			policy.AddAuthenticationSchemes(
+				GatewayRegistrationAuthenticationHandler.SchemeName,
+				"GatewayToken");
+			policy.RequireAuthenticatedUser();
+			policy.RequireClaim("gatewayName");
+		})
+	.AddPolicy("GatewayRegisterOrAdopt", policy =>
+		{
+			// An orchestrator receives registration requests signed with the pre-shared
+			// registration key; a gateway receives adoption notifications signed with
+			// the orchestrator's message key (validated via its published JWKS).
+			policy.AddAuthenticationSchemes(
+				GatewayRegistrationAuthenticationHandler.SchemeName,
+				GatewayAdoptionAuthenticationHandler.SchemeName);
+			policy.RequireAuthenticatedUser();
+			policy.RequireClaim("gatewayName");
 		});
 
 var app = builder.Build();

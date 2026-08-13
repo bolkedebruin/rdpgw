@@ -7,6 +7,9 @@ public interface ITokenService
 	Func<HttpContext, string, Task<bool>> CheckSession(Func<HttpContext, string, Task<bool>> next);
 	Task<string> GeneratePAAToken(string clientIp, string username, string server);
 	Task<string> GeneratePAAToken(string username, string server);
+	Task<string> GenerateMessageToken(string name);
+	Task<string> GenerateRegistrationToken(string name);
+	Task<string> GenerateAdoptionNotificationToken(string gatewayName);
 	Task<string> GenerateQueryToken(string query, string issuer);
 	Task<string> QueryInfo(HttpContext context, string tokenString, string issuer);
 	Task<string> QueryInfo(string tokenString, string issuer);

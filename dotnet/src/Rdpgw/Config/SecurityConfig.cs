@@ -50,6 +50,11 @@ public sealed class SecurityConfig
 	[RegularExpression(@"^[\s\S]{32}$", ErrorMessage = "GatewaySharedKey must be a 32-character string")]
 	public string GatewaySharedKey { get; set; } = string.Empty;
 
+	/// <summary>Gets or sets the pre-shared key gateways use to authenticate their initial registration request.</summary>
+	[Required]
+	[RegularExpression(@"^[\s\S]{32}$", ErrorMessage = "GatewayRegistrationKey must be a 32-character string")]
+	public string GatewayRegistrationKey { get; set; } = string.Empty;
+
 	/// <summary>Gets or sets the issuer expected for signed host query tokens.</summary>
 	public string QueryTokenIssuer { get; set; } = string.Empty;
 

@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Security.Cryptography;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using Rdpgw.Config;
@@ -21,6 +22,29 @@ public sealed record TokenClaims(string Subject, string Issuer, DateTimeOffset? 
 public sealed partial class TokenService(ILogger<TokenService> logger, SecurityConfigProvider securityOptions) : ITokenService
 {
 	private const string PaaAudience = "rdpgw-paa";
+
+	/// <summary>Audience expected by the orchestrator for gateway message tokens.</summary>
+	private const string MessageAudience = "rdpgw";
+
+	/// <summary>Audience used for pre-shared-key signed gateway registration tokens.</summary>
+	private const string RegistrationAudience = "rdpgw-registration";
+
+	private const string AdoptionAudience = "rdpgw-adoption";
+
+	/// <summary>Issuer used by the orchestrator when notifying a gateway that it has been adopted.</summary>
+	private const string OrchestratorIssuer = "orchestrator";
+
+	/// <summary>Claim the orchestrator uses to locate the calling gateway.</summary>
+	private const string GatewayHostNameClaim = "gatewayHostName";
+
+	/// <summary>Claim required by the orchestrator's gateway authorization policy.</summary>
+	private const string GatewayNameClaim = "gatewayName";
+
+	/// <summary>
+	/// Lifetime of a message token. Kept at or below the orchestrator's maximum accepted
+	/// token age so an expired token is never rejected as a replay instead.
+	/// </summary>
+	private static readonly TimeSpan MessageTokenLifetime = TimeSpan.FromMinutes(5);
 
 	/// <summary>
 	/// Generates a signed Protected Application Access token for an RDP gateway connection.
@@ -273,18 +297,115 @@ public sealed partial class TokenService(ILogger<TokenService> logger, SecurityC
 		return Task.FromResult(CreateSignedToken(claims, securityOptions.QuerySigningKey, securityOptions.ExpiryTime));
 	}
 
-	private static string CreateSignedToken(Dictionary<string, object> claims, byte[] key, TimeSpan lifetime)
+	/// <summary>
+	/// Generates a signed message token that a gateway presents to the orchestrator.
+	/// The claims match what <c>GatewayTokenAuthenticationHandler</c> validates: an
+	/// issuer and <c>gatewayHostName</c> identifying the gateway, the <c>rdpgw</c>
+	/// audience, plus <c>iat</c> and a unique <c>jti</c> used for replay protection.
+	/// </summary>
+	/// <param name="name">Gateway name used as the issuer, subject, and gateway host name claim.</param>
+	/// <returns>A compact JWT signed with the RSA message signing key.</returns>
+	public Task<string> GenerateMessageToken(string name)
 	{
+		if (string.IsNullOrWhiteSpace(name))
+		{
+			logger.LogError("gateway name is required to generate a message token");
+			throw new ArgumentException("Gateway name cannot be null or empty", nameof(name));
+		}
+
+		var claims = new Dictionary<string, object>
+		{
+			[JwtRegisteredClaimNames.Iss] = name,
+			[JwtRegisteredClaimNames.Sub] = name,
+			[JwtRegisteredClaimNames.Aud] = MessageAudience,
+			// The orchestrator rejects reused jti values, so every token needs a fresh one.
+			[JwtRegisteredClaimNames.Jti] = Guid.NewGuid().ToString(),
+			[GatewayHostNameClaim] = name,
+			// Required by the orchestrator's "GatewayLog" authorization policy.
+			[GatewayNameClaim] = name,
+		};
+
+		return Task.FromResult(CreateSignedToken(claims, SigningCredentials(securityOptions.MessageSigningKey), MessageTokenLifetime));
+	}
+
+	/// <summary>
+	/// Generates the token an unregistered gateway presents to the orchestrator's
+	/// registration endpoint. The gateway's public key is not known yet, so the token
+	/// is signed with the pre-shared registration key instead of the message signing key.
+	/// </summary>
+	/// <param name="name">Gateway name used as the issuer, subject, and gateway name claim.</param>
+	/// <returns>A compact JWT signed with the pre-shared registration key.</returns>
+	public Task<string> GenerateRegistrationToken(string name)
+	{
+		if (string.IsNullOrWhiteSpace(name))
+		{
+			logger.LogError("gateway name is required to generate a registration token");
+			throw new ArgumentException("Gateway name cannot be null or empty", nameof(name));
+		}
+
+		var claims = new Dictionary<string, object>
+		{
+			[JwtRegisteredClaimNames.Iss] = name,
+			[JwtRegisteredClaimNames.Sub] = name,
+			[JwtRegisteredClaimNames.Aud] = RegistrationAudience,
+			// The orchestrator rejects reused jti values, so every token needs a fresh one.
+			[JwtRegisteredClaimNames.Jti] = Guid.NewGuid().ToString(),
+			[GatewayHostNameClaim] = name,
+			[GatewayNameClaim] = name,
+		};
+
+		return Task.FromResult(CreateSignedToken(claims, securityOptions.GatewayRegistrationKey, MessageTokenLifetime));
+	}
+
+	/// <summary>
+	/// Generates the token the orchestrator sends to a gateway to notify it that its
+	/// registration has been adopted. Signed with the orchestrator's own message signing
+	/// key (kid <c>"message"</c> in its JWKS document), so the gateway validates it by
+	/// fetching the orchestrator's JWKS via its configured <c>OrchestratorAddress</c>
+	/// rather than a DB lookup.
+	/// </summary>
+	/// <param name="gatewayName">Name of the gateway being adopted, placed in the <c>gatewayName</c> claim so the recipient can confirm the notification is addressed to it.</param>
+	/// <returns>A compact JWT signed with the RSA message signing key.</returns>
+	public Task<string> GenerateAdoptionNotificationToken(string gatewayName)
+	{
+		if (string.IsNullOrWhiteSpace(gatewayName))
+		{
+			logger.LogError("gateway name is required to generate an adoption notification token");
+			throw new ArgumentException("Gateway name cannot be null or empty", nameof(gatewayName));
+		}
+
+		var claims = new Dictionary<string, object>
+		{
+			[JwtRegisteredClaimNames.Iss] = OrchestratorIssuer,
+			[JwtRegisteredClaimNames.Sub] = OrchestratorIssuer,
+			[JwtRegisteredClaimNames.Aud] = AdoptionAudience,
+			// The gateway rejects reused jti values, so every token needs a fresh one.
+			[JwtRegisteredClaimNames.Jti] = Guid.NewGuid().ToString(),
+			[GatewayNameClaim] = gatewayName,
+		};
+
+		return Task.FromResult(CreateSignedToken(claims, SigningCredentials(securityOptions.MessageSigningKey), MessageTokenLifetime));
+	}
+
+	private static string CreateSignedToken(Dictionary<string, object> claims, byte[] key, TimeSpan lifetime)
+		=> CreateSignedToken(claims, SigningCredentials(key), lifetime);
+
+	private static string CreateSignedToken(Dictionary<string, object> claims, SigningCredentials credentials, TimeSpan lifetime)
+	{
+		var issuedAt = DateTime.UtcNow;
 		var descriptor = new SecurityTokenDescriptor
 		{
 			Claims = claims,
-			Expires = DateTime.UtcNow.Add(lifetime),
-			SigningCredentials = SigningCredentials(key),
+			IssuedAt = issuedAt,
+			NotBefore = issuedAt,
+			Expires = issuedAt.Add(lifetime),
+			SigningCredentials = credentials,
 		};
 		return new JsonWebTokenHandler().CreateToken(descriptor);
 	}
 
 	private static SigningCredentials SigningCredentials(byte[] key) => new(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256);
+	private static SigningCredentials SigningCredentials(RSA key) => new(new RsaSecurityKey(key), SecurityAlgorithms.RsaSha256);
 	private static EncryptingCredentials EncryptingCredentials(byte[] key) => new(new SymmetricSecurityKey(key), "dir", SecurityAlgorithms.Aes128CbcHmacSha256);
 
 	private static TokenValidationParameters ValidationParameters(byte[]? signingKey, byte[]? encryptionKey, string issuer, string? audience)

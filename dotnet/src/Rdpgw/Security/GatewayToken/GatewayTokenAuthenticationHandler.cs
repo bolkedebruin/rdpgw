@@ -1,9 +1,10 @@
-﻿using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Rdpgw.Data;
 using System.IdentityModel.Tokens.Jwt;
+using System.Security.Cryptography;
 using System.Text.Encodings.Web;
 
 namespace Rdpgw.Security.GatewayToken;
@@ -13,8 +14,12 @@ public sealed class GatewayTokenAuthenticationHandler(
 	IOptionsMonitor<AuthenticationSchemeOptions> options,
 	ILoggerFactory loggerFactory,
 	UrlEncoder encoder,
+	GatewayTokenReplayValidator replayValidator,
 	RdpgwDbContext dbContext) : AuthenticationHandler<AuthenticationSchemeOptions>(options, loggerFactory, encoder)
 {
+	/// <summary>Claim carrying the gateway name, surfaced as the identity name.</summary>
+	private const string GatewayNameClaim = "gatewayName";
+
 	protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
 	{
 		// 1. Get the Authorization header.
@@ -85,10 +90,20 @@ public sealed class GatewayTokenAuthenticationHandler(
 
 		// 5. Construct the signing key.
 		//
-		// This example assumes the key is stored as a Base64 string.
-		var keyBytes = Convert.FromBase64String(host.GatewaySigningKey);
-
-		var signingKey = new SymmetricSecurityKey(keyBytes);
+		// The gateway signs message tokens with its RSA message signing key, so the
+		// orchestrator stores the matching public key as PEM.
+		RsaSecurityKey signingKey;
+		try
+		{
+			var rsa = RSA.Create();
+			rsa.ImportFromPem(host.GatewaySigningKey);
+			signingKey = new RsaSecurityKey(rsa);
+		}
+		catch (Exception ex)
+		{
+			logger.LogError(ex, "Unable to import signing key for gateway {GatewayName}.", gatewayName);
+			return AuthenticateResult.Fail("Invalid gateway signing key.");
+		}
 
 		// 6. NOW perform actual cryptographic validation.
 		var tokenHandler = new JwtSecurityTokenHandler();
@@ -106,7 +121,10 @@ public sealed class GatewayTokenAuthenticationHandler(
 
 			ValidateLifetime = true,
 
-			ClockSkew = TimeSpan.FromMinutes(1)
+			ClockSkew = GatewayTokenReplayValidator.ClockSkew,
+
+			// Surface the gateway name as User.Identity.Name for downstream controllers.
+			NameClaimType = GatewayNameClaim
 		};
 
 		try
@@ -121,7 +139,7 @@ public sealed class GatewayTokenAuthenticationHandler(
 			if (validatedToken is not JwtSecurityToken jwt ||
 				!string.Equals(
 					jwt.Header.Alg,
-					SecurityAlgorithms.HmacSha256,
+					SecurityAlgorithms.RsaSha256,
 					StringComparison.Ordinal))
 			{
 				logger.LogError(
@@ -131,7 +149,13 @@ public sealed class GatewayTokenAuthenticationHandler(
 					"Invalid token signing algorithm.");
 			}
 
-			// 7. The token is now cryptographically authenticated.
+			// 7. The token is cryptographically authenticated, so its claims can now be trusted.
+			//    Reject stale or already-seen tokens to prevent replay attacks.
+			if (!replayValidator.TryValidate(jwt, gatewayName, out var replayFailure))
+			{
+				return AuthenticateResult.Fail(replayFailure);
+			}
+
 			return AuthenticateResult.Success(
 				new AuthenticationTicket(principal, Scheme.Name));
 		}

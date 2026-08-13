@@ -22,6 +22,9 @@ public sealed partial class SecurityConfigProvider
 
 	public byte[] QuerySigningKey { get; }
 
+	/// <summary>Gets the pre-shared key used to authenticate gateway registration requests.</summary>
+	public byte[] GatewayRegistrationKey { get; }
+
 	public TimeSpan ExpiryTime => _securityConfig.ExpiryTime;
 
 	/// <summary>Context item key holding the target server authorized by a validated PAA token.</summary>
@@ -45,6 +48,7 @@ public sealed partial class SecurityConfigProvider
 		UserSigningKey = GetKeyBytes("UserTokenSigningKey", _securityConfig.UserTokenSigningKey);
 		UserEncryptionKey = GetKeyBytes("UserTokenEncryptionKey", _securityConfig.UserTokenEncryptionKey);
 		QuerySigningKey = GetKeyBytes("QueryTokenSigningKey", _securityConfig.QueryTokenSigningKey);
+		GatewayRegistrationKey = GetKeyBytes("GatewayRegistrationKey", _securityConfig.GatewayRegistrationKey);
 	}
 
 	private byte[] GetKeyBytes(string type, string key)

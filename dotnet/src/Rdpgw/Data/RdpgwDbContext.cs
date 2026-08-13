@@ -14,6 +14,10 @@ public sealed class RdpgwDbContext(DbContextOptions<RdpgwDbContext> options) : D
     public DbSet<GatewayEntry> Gateways => Set<GatewayEntry>();
     /// <summary>Gets the log entries table for gateway logs.</summary>
     public DbSet<LogEntry> Logs => Set<LogEntry>();
+    /// <summary>Gets the table of gateways awaiting registration approval.</summary>
+    public DbSet<PendingGatewayEntry> PendingGateways => Set<PendingGatewayEntry>();
+    /// <summary>Gets the table holding this gateway's pinned orchestrator trust anchor, if any.</summary>
+    public DbSet<OrchestratorTrustEntry> OrchestratorTrust => Set<OrchestratorTrustEntry>();
 
     /// <summary>Configures required columns, uniqueness, and gateway relationship behavior.</summary>
     /// <param name="modelBuilder">EF Core model builder for this context.</param>
@@ -33,6 +37,17 @@ public sealed class RdpgwDbContext(DbContextOptions<RdpgwDbContext> options) : D
             entity.Property(g => g.Name).IsRequired();
             entity.Property(g => g.Address).IsRequired();
             entity.HasIndex(g => g.Address).IsUnique();
+        });
+        modelBuilder.Entity<PendingGatewayEntry>(entity =>
+        {
+            entity.Property(g => g.Name).IsRequired();
+            entity.HasIndex(g => g.Name).IsUnique();
+        });
+        modelBuilder.Entity<OrchestratorTrustEntry>(entity =>
+        {
+            entity.Property(t => t.OrchestratorAddress).IsRequired();
+            entity.Property(t => t.PublicKeyPem).IsRequired();
+            entity.HasIndex(t => t.OrchestratorAddress).IsUnique();
         });
         modelBuilder.Entity<LogEntry>(entity =>
         {

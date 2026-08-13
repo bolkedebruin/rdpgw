@@ -19,11 +19,28 @@
         <MudContainer MaxWidth="MaxWidth.Large" Class="mt-8">
             <div class="d-flex align-center mb-4">
                 <MudText Typo="Typo.h4">Gateway Management</MudText>
-                <MudSpacer />
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
-                           OnClick="AddGatewayAsync">Add Gateway</MudButton>
             </div>
 
+            <MudText Typo="Typo.h6" Class="mb-2">Pending Gateways</MudText>
+            <MudTable Items="_pendingGateways" Hover="true" Striped="true" Loading="_loading" Elevation="3" Class="mb-8">
+                <HeaderContent>
+                    <MudTh>Name</MudTh>
+                    <MudTh Style="width: 120px;">Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Name">@context.Name</MudTd>
+                    <MudTd DataLabel="Actions">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                                   Disabled="_adopting.Contains(context.Id)"
+                                   OnClick="@(() => AdoptGatewayAsync(context))">Adopt</MudButton>
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText>No gateways are pending registration.</MudText>
+                </NoRecordsContent>
+            </MudTable>
+
+            <MudText Typo="Typo.h6" Class="mb-2">Registered Gateways</MudText>
             <MudTable Items="_gateways" Hover="true" Striped="true" Loading="_loading" Elevation="3">
                 <HeaderContent>
                     <MudTh>Name</MudTh>
@@ -43,7 +60,7 @@
                     </MudTd>
                 </RowTemplate>
                 <NoRecordsContent>
-                    <MudText>No gateways configured. Use "Add Gateway" to create one.</MudText>
+                    <MudText>No gateways registered yet. Gateways register themselves and appear above as pending until adopted.</MudText>
                 </NoRecordsContent>
             </MudTable>
         </MudContainer>
@@ -52,6 +69,8 @@
 
 @code {
     private List<GatewayEntry> _gateways = [];
+    private List<PendingGatewayEntry> _pendingGateways = [];
+    private readonly HashSet<int> _adopting = [];
     private bool _loading = true;
 
     protected override async Task OnInitializedAsync() => await LoadAsync();
@@ -60,28 +79,27 @@
     {
         _loading = true;
         _gateways = await GatewayStore.GetAllAsync();
+        _pendingGateways = await GatewayStore.GetPendingAsync();
         _loading = false;
     }
 
-    private async Task AddGatewayAsync()
+    private async Task AdoptGatewayAsync(PendingGatewayEntry pending)
     {
-        var parameters = new DialogParameters<GatewayEditDialog> { { d => d.Gateway, new GatewayDto() } };
-
-        var dialog = await DialogService.ShowAsync<GatewayEditDialog>("Add Gateway", parameters);
-        var result = await dialog.Result;
-        if (result is { Canceled: false, Data: GatewayDto gateway })
+        _adopting.Add(pending.Id);
+        try
         {
-            try
-            {
-                await GatewayStore.AddAsync(gateway.Name, gateway.Address, gateway.GatewaySigningKey, gateway.Description);
-                Snackbar.Add($"Gateway '{gateway.Name}' added.", Severity.Success);
-            }
-            catch (Exception ex)
-            {
-                Snackbar.Add($"Failed to add gateway: {ex.Message}", Severity.Error);
-            }
-            await LoadAsync();
+            await GatewayStore.AdoptAsync(pending.Id);
+            Snackbar.Add($"Gateway '{pending.Name}' adopted.", Severity.Success);
         }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to adopt gateway '{pending.Name}': {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _adopting.Remove(pending.Id);
+        }
+        await LoadAsync();
     }
 
     private async Task EditGatewayAsync(GatewayEntry gateway)

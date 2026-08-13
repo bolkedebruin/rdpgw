@@ -3,10 +3,25 @@ using Microsoft.Extensions.Options;
 namespace Rdpgw.Config;
 
 /// <summary>
+/// Execution mode the application runs in.
+/// </summary>
+public enum ServerMode
+{
+    /// <summary>Runs as the central orchestrator that gateways register with.</summary>
+    Orchestrator,
+
+    /// <summary>Runs as a gateway that registers itself with an orchestrator.</summary>
+    Gateway,
+}
+
+/// <summary>
 /// Listener, session, authentication, and destination settings for the gateway server.
 /// </summary>
 public sealed class ServerConfig
 {
+    /// <summary>Gets or sets whether this instance runs as the orchestrator or as a gateway.</summary>
+    public ServerMode Mode { get; set; } = ServerMode.Orchestrator;
+
     /// <summary>Gets or sets the public gateway address written into generated RDP files.</summary>
     public string GatewayAddress { get; set; } = string.Empty;
 
