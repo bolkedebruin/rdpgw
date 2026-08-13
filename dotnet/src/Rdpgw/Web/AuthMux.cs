@@ -17,7 +17,7 @@ public sealed class AuthMux
     public async Task SetAuthenticate(HttpContext ctx)
     {
         // Multiple challenges let RDP clients choose between Basic, NTLM, and SPNEGO as configured.
-        foreach (var h in _headers.Where(h => h.Condition is null || h.Condition(ctx))) ctx.Response.Headers.Append("WWW-Authenticate", h.Header);
+        foreach (var (Header, Condition) in _headers.Where(h => h.Condition is null || h.Condition(ctx))) ctx.Response.Headers.Append("WWW-Authenticate", Header);
         ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
         await ctx.Response.WriteAsync("Unauthorized");
     }

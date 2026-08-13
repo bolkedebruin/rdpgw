@@ -1,8 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using Microsoft.AspNetCore.Http;
-using Rdpgw.Logging;
 using Rdpgw.Security;
 
 namespace Rdpgw.Web;
@@ -12,7 +10,7 @@ namespace Rdpgw.Web;
 /// the primary gateway. The endpoint is secured with a shared key that every bona
 /// fide gateway must present as a bearer token.
 /// </summary>
-public static class GatewayFederation
+public sealed class GatewayFederation(ILogger<GatewayFederation> logger, ITokenService tokenService)
 {
     /// <summary>HTTP endpoint path exposed by a primary gateway for remote PAA token validation.</summary>
     public const string ValidateEndpoint = "/api/v1/gateway/validate";
@@ -36,7 +34,7 @@ public static class GatewayFederation
     /// </summary>
     /// <param name="ctx">HTTP request context for the validation request.</param>
     /// <param name="sharedKey">UTF-8 bytes of the shared bearer key configured on all gateways.</param>
-    public static async Task HandleValidate(HttpContext ctx, byte[] sharedKey)
+    public async Task HandleValidate(HttpContext ctx, byte[] sharedKey)
     {
         if (!IsAuthorized(ctx, sharedKey))
         {
@@ -57,12 +55,12 @@ public static class GatewayFederation
         try
         {
             // The primary owns token validation because it minted the PAA signing key in federation mode.
-            var info = await Tokens.ValidatePAAToken(request.Token);
+            var info = await tokenService.ValidatePAAToken(request.Token);
             await JsonSerializer.SerializeAsync(ctx.Response.Body, new ValidateResponse(true, info.Username, info.RemoteServer, info.ClientIp, null), JsonOptions);
         }
         catch (Exception ex)
         {
-            Log.For(typeof(GatewayFederation)).LogWarning(ex, "gateway federation: token validation failed");
+            logger.LogWarning(ex, "gateway federation: token validation failed");
             await JsonSerializer.SerializeAsync(ctx.Response.Body, new ValidateResponse(false, null, null, null, "token validation failed"), JsonOptions);
         }
     }
@@ -85,16 +83,18 @@ public static class GatewayFederation
     {
         private readonly HttpClient _http;
         private readonly Uri _validateUri;
-        private readonly ILogger _logger = Log.For<RemoteTokenValidator>();
+        private readonly ILogger<RemoteTokenValidator> _logger;
 
         /// <summary>Initializes a validator that calls the configured primary gateway.</summary>
         /// <param name="primaryGateway">Base URL of the primary gateway.</param>
         /// <param name="sharedKey">Shared bearer key used to authenticate federation calls.</param>
-        public RemoteTokenValidator(Uri primaryGateway, string sharedKey)
+        /// <param name="logger">Logger instance.</param>
+        public RemoteTokenValidator(Uri primaryGateway, string sharedKey, ILogger<RemoteTokenValidator> logger)
         {
             _validateUri = new Uri(primaryGateway, ValidateEndpoint);
             _http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
             _http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", sharedKey);
+            _logger = logger;
         }
 
         /// <summary>Validates a PAA token remotely and applies returned claims to the request context.</summary>
@@ -113,7 +113,7 @@ public static class GatewayFederation
             }
             var result = await JsonSerializer.DeserializeAsync<ValidateResponse>(await response.Content.ReadAsStreamAsync(), JsonOptions);
             if (result is not { Valid: true }) return false;
-            Tokens.ApplyPaaTokenInfo(context, new Tokens.PaaTokenInfo(result.Username ?? string.Empty, result.RemoteServer ?? string.Empty, result.ClientIp ?? string.Empty));
+            TokenService.ApplyPaaTokenInfo(context, new TokenService.PaaTokenInfo(result.Username ?? string.Empty, result.RemoteServer ?? string.Empty, result.ClientIp ?? string.Empty));
             return true;
         }
     }

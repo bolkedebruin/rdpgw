@@ -1,21 +1,13 @@
 using System.Net;
-using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Logging;
 using Rdpgw.Data;
 using Rdpgw.Identity;
 using Rdpgw.Rdp;
 
 namespace Rdpgw.Web;
 
-/// <summary>Generates a gateway PAA token for a selected user and destination server.</summary>
-/// <param name="context">Current HTTP context.</param>
-/// <param name="username">Authenticated username.</param>
-/// <param name="server">Selected RDP destination server.</param>
-/// <returns>A token string for the generated RDP file.</returns>
-public delegate Task<string> TokenGeneratorFunc(HttpContext context, string username, string server);
+
 /// <summary>Generates an optional user token for username templating.</summary>
 /// <param name="context">Current HTTP context.</param>
 /// <param name="username">Authenticated username.</param>
@@ -33,18 +25,12 @@ public delegate Task<string> QueryInfoFunc(HttpContext context, string token, st
 /// </summary>
 public sealed class WebHandlerConfig
 {
-    /// <summary>Gets or sets the PAA token generator required for downloadable RDP files.</summary>
-    public TokenGeneratorFunc? PAATokenGenerator { get; set; }
-    /// <summary>Gets or sets the optional encrypted user-token generator.</summary>
-    public UserTokenGeneratorFunc? UserTokenGenerator { get; set; }
     /// <summary>Gets or sets the signed query-token validator for signed host selection.</summary>
     public QueryInfoFunc? QueryInfo { get; set; }
     /// <summary>Gets or sets the expected issuer for signed host-selection query tokens.</summary>
     public string QueryTokenIssuer { get; set; } = string.Empty;
     /// <summary>Gets or sets whether username templates may contain generated user tokens.</summary>
     public bool EnableUserToken { get; set; }
-    /// <summary>Gets or sets the host store used to list and validate destinations.</summary>
-    public HostStore? HostStore { get; set; }
     /// <summary>Gets or sets the host-selection mode.</summary>
     public string HostSelection { get; set; } = string.Empty;
     /// <summary>Gets or sets the default gateway address for generated RDP files.</summary>
@@ -144,14 +130,12 @@ public sealed class WebConfig
 /// </summary>
 public sealed class Handler
 {
-    private readonly TokenGeneratorFunc? _paaTokenGenerator;
+    private readonly HostStore _hostStore;
+    private readonly IBuilderService _builderService;
     private readonly bool _enableUserToken;
-    private readonly UserTokenGeneratorFunc? _userTokenGenerator;
     private readonly QueryInfoFunc? _queryInfo;
     private readonly string _queryTokenIssuer;
     private readonly Uri _gatewayAddress;
-    private readonly HostStore _hostStore;
-    private readonly string _hostSelection;
     private readonly RdpOpts _rdpOpts;
     private readonly string _rdpDefaults;
     private readonly string _rdpSigningCert;
@@ -167,25 +151,21 @@ public sealed class Handler
     /// <summary>Initializes a new web handler from validated startup configuration.</summary>
     /// <param name="c">Handler configuration.</param>
     /// <param name="logger">Logger for request diagnostics.</param>
-    public Handler(WebHandlerConfig c, ILogger<Handler> logger)
+    public Handler(WebHandlerConfig c, ILogger<Handler> logger, HostStore hostStore, IBuilderService builderService)
     {
-        if (c.HostStore is null) throw new InvalidOperationException("No host store specified");
         _logger = logger;
-        _paaTokenGenerator = c.PAATokenGenerator;
+        _hostStore = hostStore;
+        _builderService = builderService;
+
         _enableUserToken = c.EnableUserToken;
-        _userTokenGenerator = c.UserTokenGenerator;
         _queryInfo = c.QueryInfo;
         _queryTokenIssuer = c.QueryTokenIssuer;
         _gatewayAddress = c.GatewayAddress;
-        _hostStore = c.HostStore;
-        _hostSelection = c.HostSelection;
         _rdpOpts = c.RdpOpts;
-        _rdpDefaults = c.TemplateFile;
         _rdpSigningCert = c.RdpSigningCert;
         _rdpSigningKey = c.RdpSigningKey;
         _templatesPath = string.IsNullOrEmpty(c.TemplatesPath) ? "./templates" : c.TemplatesPath;
         _destPolicy = new DestinationPolicy(c.AllowedDestinationPorts, c.AllowPrivateDestinations);
-        if (!string.IsNullOrEmpty(_rdpSigningCert) || !string.IsNullOrEmpty(_rdpSigningKey)) _logger.LogWarning("RDP file signing is configured but not implemented in the .NET port; unsigned RDP files will be returned");
     }
 
     /// <summary>Builds and returns a personalized RDP file for the authenticated user.</summary>
@@ -198,7 +178,10 @@ public sealed class Handler
         try { host = await GetHost(ctx); }
         catch (Exception ex) { ctx.Response.StatusCode = 400; await ctx.Response.WriteAsync(ex.Message); return; }
         host = host.Replace("{{ preferred_username }}", id.UserName, StringComparison.Ordinal);
-        var user = id.UserName; var domain = string.Empty;
+        
+        var user = id.UserName;
+        var domain = string.Empty;
+        
         if (_rdpOpts.SplitUserDomain)
         {
             var creds = id.UserName.Split('@', 2); user = creds[0]; if (creds.Length > 1) domain = creds[1];
@@ -209,33 +192,9 @@ public sealed class Handler
             render = _rdpOpts.UsernameTemplate.Replace("{{ username }}", user, StringComparison.Ordinal);
             if (render == _rdpOpts.UsernameTemplate) { ctx.Response.StatusCode = 500; await ctx.Response.WriteAsync("invalid server configuration"); return; }
         }
-        if (_paaTokenGenerator is null) { ctx.Response.StatusCode = 500; await ctx.Response.WriteAsync("unable to generate gateway credentials"); return; }
-        string token;
-        try { token = await _paaTokenGenerator(ctx, user, host); }
-        catch (Exception ex) { _logger.LogError(ex, "Cannot generate PAA token for user {User}", user); ctx.Response.StatusCode = 500; await ctx.Response.WriteAsync("unable to generate gateway credentials"); return; }
-        if (_enableUserToken && _userTokenGenerator is not null)
-        {
-            // User tokens can be substituted into the username template for downstream credential brokers.
-            try { render = render.Replace("{{ token }}", await _userTokenGenerator(ctx, user), StringComparison.Ordinal); }
-            catch (Exception ex) { _logger.LogError(ex, "Cannot generate token for user {User}", user); ctx.Response.StatusCode = 500; await ctx.Response.WriteAsync("unable to generate gateway credentials"); return; }
-        }
-        var fn = Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant() + ".rdp";
-        ctx.Response.Headers.ContentDisposition = "attachment; filename=" + fn;
-        ctx.Response.ContentType = "application/x-rdp";
-        Builder b;
-        try { b = string.IsNullOrEmpty(_rdpDefaults) ? Builder.NewBuilder() : Builder.NewBuilderFromFile(_rdpDefaults); }
-        catch (Exception ex) { _logger.LogError(ex, "Cannot load RDP template file {TemplateFile}", _rdpDefaults); ctx.Response.StatusCode = 500; await ctx.Response.WriteAsync("unable to load RDP template"); return; }
-        try { b.ApplyOverrides(ctx.Request.Query, _rdpOpts.OverridableRdpKeys); }
-        catch (Exception ex) { _logger.LogWarning("rejected rdp override for user {UserName}: {Reason}", id.UserName, ex.Message); ctx.Response.StatusCode = 400; await ctx.Response.WriteAsync(ex.Message); return; }
-        if (!_rdpOpts.NoUsername) { b.Settings.Username = render; if (!string.IsNullOrEmpty(domain)) b.Settings.Domain = domain; }
-        b.Settings.FullAddress = host;
-        var gatewayHost = _hostStore.GetGatewayAddressForHost(id.UserName, host);
-        b.Settings.GatewayHostname = gatewayHost ?? (_gatewayAddress.IsDefaultPort ? _gatewayAddress.Host : _gatewayAddress.Authority);
-        b.Settings.GatewayCredentialsSource = RdpCredentialSource.Cookie;
-        b.Settings.GatewayAccessToken = token;
-        b.Settings.GatewayCredentialMethod = 1;
-        b.Settings.GatewayUsageMethod = 1;
-        await ctx.Response.WriteAsync(b.ToString());
+
+        int hostEntryId = 0;
+        return _builderService.BuildRdpFile(user, hostEntryId);
     }
 
     /// <summary>Returns the host-picker model for a user.</summary>
@@ -243,11 +202,9 @@ public sealed class Handler
     /// <returns>Visible host options with exactly one default when possible.</returns>
     public List<Host> GetHosts(string userName)
     {
-        if (_hostSelection == "roundrobin")
-            return [new Host("roundrobin", "Available Servers", "", "Connect to an available server automatically", true)];
         var entries = _hostStore.GetVisible(userName);
         var hasDefault = entries.Any(h => h.IsDefault);
-        return entries.Select((h, i) => new Host($"host_{h.Id}", h.Name, h.Address, h.Description, hasDefault ? h.IsDefault : i == 0)).ToList();
+        return [.. entries.Select((h, i) => new Host($"host_{h.Id}", h.Name, h.Address, h.Description, hasDefault ? h.IsDefault : i == 0))];
     }
 
     /// <summary>Writes the authenticated user's host list as JSON.</summary>
@@ -294,21 +251,8 @@ public sealed class Handler
         await ctx.Response.SendFileAsync(path);
     }
 
-    private async Task<string> GetHost(HttpContext ctx) => _hostSelection switch
-    {
-        "roundrobin" => SelectRandomHost(ctx),
-        "signed" => await GetSignedHost(ctx),
-        "unsigned" => GetUnsignedHost(ctx),
-        "any" => await GetAnyHost(ctx),
-        _ => SelectRandomHost(ctx),
-    };
     private static string UserFromContext(HttpContext ctx) => IdentityContext.FromContext(ctx)?.UserName ?? string.Empty;
-    private string SelectRandomHost(HttpContext ctx)
-    {
-        var hosts = _hostStore.GetHostAddresses(UserFromContext(ctx));
-        if (hosts.Count < 1) throw new InvalidOperationException("no hosts configured in the host database");
-        return hosts[Random.Shared.Next(hosts.Count)];
-    }
+
     private async Task<string> GetSignedHost(HttpContext ctx)
     {
         var token = ctx.Request.Query["host"].FirstOrDefault();
@@ -342,7 +286,7 @@ public sealed class Handler
     public sealed record Host(string Id, string Name, string Address, string Description, bool IsDefault);
     private sealed class DestinationPolicy(List<int> allowedPorts, bool allowPrivate)
     {
-        private readonly HashSet<int> _allowedPorts = allowedPorts.Count == 0 ? [3389] : allowedPorts.ToHashSet();
+        private readonly HashSet<int> _allowedPorts = allowedPorts.Count == 0 ? [3389] : [.. allowedPorts];
         /// <summary>Validates that an arbitrary destination is allowed by port and address-range policy.</summary>
         /// <param name="hostport">Host or host:port destination requested by the user.</param>
         public async Task Allow(string hostport)

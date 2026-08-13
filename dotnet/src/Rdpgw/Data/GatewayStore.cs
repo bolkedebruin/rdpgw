@@ -6,124 +6,98 @@ namespace Rdpgw.Data;
 /// EF Core (SQLite) backed store for the gateways that RDP files can point clients to.
 /// Gateways are shared infrastructure and are not scoped per user.
 /// </summary>
-public sealed class GatewayStore(IDbContextFactory<RdpgwDbContext> contextFactory)
+public sealed partial class GatewayStore(ILogger<HostStore> logger, RdpgwDbContext dbContext)
 {
-    /// <summary>
-    /// Creates the Gateways table on databases created before multi-gateway support
-    /// and seeds it with this server's own configured gateway address when empty.
-    /// </summary>
-    /// <param name="ownGatewayAddress">Gateway address configured for this server; used to seed the initial primary gateway.</param>
-    public async Task InitializeAsync(string ownGatewayAddress)
-    {
-        await using var db = await contextFactory.CreateDbContextAsync();
-        await db.Database.EnsureCreatedAsync();
-        await MigrateSchemaAsync(db);
-        // Only seed an empty table so operator-managed gateway rows are never overwritten at startup.
-        if (string.IsNullOrWhiteSpace(ownGatewayAddress) || await db.Gateways.AnyAsync()) return;
-        var address = NormalizeAddress(ownGatewayAddress);
-        db.Gateways.Add(new GatewayEntry { Name = "Primary", Address = address, Description = "This gateway" });
-        await db.SaveChangesAsync();
-    }
-
     /// <summary>
     /// Returns all known gateways ordered by display name.
     /// </summary>
     /// <returns>A list of gateway entries suitable for management UI display.</returns>
-    public async Task<List<GatewayEntry>> GetAllAsync()
-    {
-        await using var db = await contextFactory.CreateDbContextAsync();
-        return await db.Gateways.AsNoTracking().OrderBy(g => g.Name).ToListAsync();
-    }
+    public Task<List<GatewayEntry>> GetAllAsync(CancellationToken cancellationToken = default) => dbContext
+        .Gateways
+        .AsNoTracking()
+        .OrderBy(g => g.Name)
+        .ToListAsync(cancellationToken);
 
     /// <summary>
-    /// Adds a new gateway after normalizing its address to the RDP host[:port] form.
+    /// Adds a new gateway.
     /// </summary>
     /// <param name="gateway">Gateway entry supplied by the caller.</param>
-    public async Task AddAsync(GatewayEntry gateway)
+    public async Task AddAsync(string name, string address, string gatewayKey, string? description = default, CancellationToken cancellationToken = default)
     {
-        await using var db = await contextFactory.CreateDbContextAsync();
-        gateway.Address = NormalizeAddress(gateway.Address);
-        db.Gateways.Add(gateway);
-        await db.SaveChangesAsync();
+        var gateway = new GatewayEntry
+        {
+            Name = name,
+            Address = address,
+            GatewaySigningKey = gatewayKey,
+            Description = description ?? string.Empty
+        };
+
+#warning if default, clear default flag on others
+
+		dbContext.Gateways.Add(gateway);
+        await dbContext.SaveChangesAsync(cancellationToken);
     }
 
     /// <summary>
     /// Updates an existing gateway row.
     /// </summary>
-    /// <param name="gateway">Gateway values, including the existing database identifier, to persist.</param>
+    /// <param name="id">Database identifier of the gateway to update.</param>
+    /// <param name="name">New name of the gateway.</param>
+    /// <param name="address">New address of the gateway.</param>
+    /// <param name="description">New description of the gateway.</param>
+    /// <param name="gatewayKey">New gateway signing key.</param>
+    /// <param name="isDefault">Whether the gateway is the default.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     /// <exception cref="InvalidOperationException">Thrown when the gateway no longer exists.</exception>
-    public async Task UpdateAsync(GatewayEntry gateway)
+    public Task UpdateAsync(int id, string name, string address, string? description, string gatewayKey, bool isDefault, CancellationToken cancellationToken = default)
     {
-        await using var db = await contextFactory.CreateDbContextAsync();
-        var existing = await db.Gateways.FindAsync(gateway.Id) ?? throw new InvalidOperationException($"gateway with id {gateway.Id} not found");
-        existing.Name = gateway.Name;
-        existing.Address = NormalizeAddress(gateway.Address);
-        existing.Description = gateway.Description;
-        await db.SaveChangesAsync();
+        var existing = dbContext.Gateways.Find(id);
+            
+        if (existing is null)
+        { 
+            logger.LogError("Attempted to update gateway with id {Id}, but it does not exist", id);
+            throw new InvalidOperationException($"Gateway with id {id} not found");
+        }
+
+        existing.Name = name;
+        existing.Address = address;
+        existing.Description = description ?? string.Empty;
+        existing.GatewaySigningKey = gatewayKey;
+        existing.IsDefault = isDefault;
+
+#warning if default, clear default flag on others
+
+        return dbContext.SaveChangesAsync(cancellationToken);
     }
 
     /// <summary>
     /// Deletes a gateway and clears any host assignments that referenced it.
     /// </summary>
     /// <param name="id">Database identifier of the gateway to delete.</param>
-    public async Task DeleteAsync(int id)
+    public Task DeleteAsync(int id, CancellationToken cancellationToken = default)
     {
-        await using var db = await contextFactory.CreateDbContextAsync();
-        var existing = await db.Gateways.FindAsync(id);
-        if (existing is null) return;
-        // Hosts should remain connectable by falling back to the server's default gateway.
-        await foreach (var h in db.Hosts.Where(h => h.GatewayId == id).AsAsyncEnumerable()) h.GatewayId = null;
-        db.Gateways.Remove(existing);
-        await db.SaveChangesAsync();
-    }
-
-    /// <summary>
-    /// Reduces a gateway address to the host[:port] form used in RDP files,
-    /// stripping any scheme or path the operator may have entered.
-    /// </summary>
-    /// <param name="address">Operator-supplied gateway address.</param>
-    /// <returns>The trimmed host or host:port value written into RDP files.</returns>
-    public static string NormalizeAddress(string address)
-    {
-        address = address.Trim();
-        if (address.Contains("://", StringComparison.Ordinal) && Uri.TryCreate(address, UriKind.Absolute, out var uri))
-            return uri.IsDefaultPort ? uri.Host : uri.Authority;
-        return address;
-    }
-
-    /// <summary>
-    /// Adds the Gateways table and the Hosts.GatewayId column to databases created
-    /// before multi-gateway support. EnsureCreated does not alter existing tables.
-    /// </summary>
-    private static async Task MigrateSchemaAsync(RdpgwDbContext db)
-    {
-        var connection = db.Database.GetDbConnection();
-        await db.Database.OpenConnectionAsync();
-        try
+        var existing = dbContext.Gateways.Find(id);
+        if (existing is null)
         {
-            await using var cmd = connection.CreateCommand();
-            cmd.CommandText = """
-                CREATE TABLE IF NOT EXISTS "Gateways" (
-                    "Id" INTEGER NOT NULL CONSTRAINT "PK_Gateways" PRIMARY KEY AUTOINCREMENT,
-                    "Name" TEXT NOT NULL,
-                    "Address" TEXT NOT NULL,
-                    "Description" TEXT NOT NULL
-                )
-                """;
-            await cmd.ExecuteNonQueryAsync();
-            cmd.CommandText = "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Gateways_Address\" ON \"Gateways\" (\"Address\")";
-            await cmd.ExecuteNonQueryAsync();
-            cmd.CommandText = "SELECT COUNT(*) FROM pragma_table_info('Hosts') WHERE name = 'GatewayId'";
-            var hasColumn = Convert.ToInt64(await cmd.ExecuteScalarAsync()) > 0;
-            if (!hasColumn)
-            {
-                cmd.CommandText = "ALTER TABLE Hosts ADD COLUMN GatewayId INTEGER NULL REFERENCES Gateways(Id) ON DELETE SET NULL";
-                await cmd.ExecuteNonQueryAsync();
-            }
+            logger.LogWarning("Gateway with id {Id} not found for deletion", id);
+			return Task.CompletedTask;
         }
-        finally
+
+        if (existing.IsDefault)
+		{
+            logger.LogWarning("Attempted to delete the default gateway with id {Id}", id);
+			throw new InvalidOperationException("Cannot delete the default gateway");
+		}
+
+		// Hosts should remain connectable by falling back to the server's default gateway.
+		foreach (var h in dbContext
+            .Hosts
+            .Where(h => h.GatewayId == id))
         {
-            await db.Database.CloseConnectionAsync();
+			h.GatewayId = null;
         }
+
+        dbContext.Gateways.Remove(existing);
+        return dbContext.SaveChangesAsync(cancellationToken);
     }
 }

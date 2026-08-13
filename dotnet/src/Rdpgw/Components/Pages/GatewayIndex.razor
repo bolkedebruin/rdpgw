@@ -11,7 +11,6 @@
 
 <MudLayout>
     <MudAppBar Elevation="1" Color="Color.Primary">
-        <img src="/assets/icon.svg" alt="Logo" height="32" class="mr-3" />
         <MudText Typo="Typo.h6">@Handler.WebConfig.Branding.Logo</MudText>
         <MudSpacer />
         <MudButton Href="/" StartIcon="@Icons.Material.Filled.Home" Color="Color.Inherit">Home</MudButton>
@@ -66,14 +65,15 @@
 
     private async Task AddGatewayAsync()
     {
-        var parameters = new DialogParameters<GatewayEditDialog> { { d => d.Gateway, new GatewayEntry() } };
+        var parameters = new DialogParameters<GatewayEditDialog> { { d => d.Gateway, new GatewayDto() } };
+
         var dialog = await DialogService.ShowAsync<GatewayEditDialog>("Add Gateway", parameters);
         var result = await dialog.Result;
-        if (result is { Canceled: false, Data: GatewayEntry gateway })
+        if (result is { Canceled: false, Data: GatewayDto gateway })
         {
             try
             {
-                await GatewayStore.AddAsync(gateway);
+                await GatewayStore.AddAsync(gateway.Name, gateway.Address, gateway.GatewaySigningKey, gateway.Description);
                 Snackbar.Add($"Gateway '{gateway.Name}' added.", Severity.Success);
             }
             catch (Exception ex)
@@ -86,15 +86,16 @@
 
     private async Task EditGatewayAsync(GatewayEntry gateway)
     {
-        var copy = new GatewayEntry { Id = gateway.Id, Name = gateway.Name, Address = gateway.Address, Description = gateway.Description };
-        var parameters = new DialogParameters<GatewayEditDialog> { { d => d.Gateway, copy } };
+        var edit = new GatewayDto { Name = gateway.Name, Address = gateway.Address, Description = gateway.Description, GatewaySigningKey = gateway.GatewayAuthKey };
+        var parameters = new DialogParameters<GatewayEditDialog> { { d => d.Gateway, edit } };
+
         var dialog = await DialogService.ShowAsync<GatewayEditDialog>("Edit Gateway", parameters);
         var result = await dialog.Result;
-        if (result is { Canceled: false, Data: GatewayEntry updated })
+        if (result is { Canceled: false, Data: GatewayDto updated })
         {
             try
             {
-                await GatewayStore.UpdateAsync(updated);
+                await GatewayStore.UpdateAsync(gateway.Id, updated.Name, updated.Address, updated.Description, updated.GatewaySigningKey, updated.IsDefault);
                 Snackbar.Add($"Gateway '{updated.Name}' updated.", Severity.Success);
             }
             catch (Exception ex)

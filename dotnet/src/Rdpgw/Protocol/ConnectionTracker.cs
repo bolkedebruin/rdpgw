@@ -14,7 +14,7 @@ public static class ConnectionTracker
     public sealed class Monitor
     {
         /// <summary>Processor driving the MS-TSGU state machine for the tunnel.</summary>
-        public required Processor Processor { get; init; }
+        public required ProcessorService Processor { get; init; }
         /// <summary>Tunnel metadata and transports associated with the connection.</summary>
         public required Tunnel Tunnel { get; init; }
     }
@@ -22,7 +22,7 @@ public static class ConnectionTracker
     /// <summary>Registers a tunnel when its protocol processor starts.</summary>
     /// <param name="t">Tunnel to expose in the connection cache.</param>
     /// <param name="p">Processor that can be signaled to disconnect the tunnel.</param>
-    public static void RegisterTunnel(Tunnel t, Processor p) =>
+    public static void RegisterTunnel(Tunnel t, ProcessorService p) =>
         Connections[t.Id] = new Monitor { Processor = p, Tunnel = t };
 
     /// <summary>Removes a tunnel from the active connection cache.</summary>

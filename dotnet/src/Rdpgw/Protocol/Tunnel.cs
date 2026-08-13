@@ -1,5 +1,4 @@
 using System.Net.Sockets;
-using Microsoft.AspNetCore.Http;
 using Rdpgw.Identity;
 using Rdpgw.Transport;
 
@@ -40,14 +39,17 @@ public sealed class Tunnel
     public DateTimeOffset LastSeen { get; set; }
 
     /// <summary>Writes a complete packet to the outbound transport and updates byte counters.</summary>
-    /// <param name="pkt">Packet bytes to send to the client.</param>
-    public async Task WriteAsync(byte[] pkt)
+    /// <param name="packet">Packet bytes to send to the client.</param>
+    public async Task WriteAsync(byte[] packet)
     {
         if (TransportOut is null)
         {
             throw new InvalidOperationException("transportOut is not set");
         }
-        var n = await TransportOut.WritePacketAsync(pkt).ConfigureAwait(false);
+
+        var n = await TransportOut
+            .WritePacketAsync(packet)
+            .ConfigureAwait(false);
         Interlocked.Add(ref _bytesSent, n);
     }
 
@@ -64,13 +66,17 @@ public sealed class Tunnel
         {
             throw new InvalidOperationException("transportIn is not set");
         }
-        var messages = await ProtocolCommon.ReadMessageAsync(TransportIn, ct).ConfigureAwait(false);
+        var messages = await ProtocolCommon
+            .ReadMessageAsync(TransportIn, ct)
+            .ConfigureAwait(false);
+
         // Count the full gateway packet length, not just the payload, for diagnostics.
         foreach (var message in messages)
         {
             Interlocked.Add(ref _bytesReceived, message.Length);
             LastSeen = DateTimeOffset.UtcNow;
         }
+
         return messages;
     }
 }

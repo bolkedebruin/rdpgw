@@ -4,43 +4,6 @@ using Rdpgw.Auth.Config;
 using Rdpgw.Auth.Database;
 using Rdpgw.Auth.Ntlm;
 
-// Parse CLI options before creating the web host so invalid invocations fail
-// without starting the Unix socket listener.
-CommandLineOptions options;
-try
-{
-    options = CommandLineOptions.Parse(args);
-}
-catch (Exception ex)
-{
-    Console.Error.WriteLine(ex.Message);
-    CommandLineOptions.PrintHelp(Console.Error);
-    return 2;
-}
-
-if (options.Help)
-{
-    CommandLineOptions.PrintHelp(Console.Out);
-    return 0;
-}
-
-using var bootstrapLoggerFactory = LoggerFactory.Create(logging => logging.AddSimpleConsole());
-var bootstrapLogger = bootstrapLoggerFactory.CreateLogger("Rdpgw.Auth.Startup");
-
-// Resolve and replace the socket path up front because Kestrel cannot bind over
-// a stale Unix domain socket file left by a previous process.
-var socketPath = Path.GetFullPath(options.SocketAddr);
-var configuration = Configuration.Load(options.ConfigFile, bootstrapLogger);
-if (File.Exists(socketPath))
-{
-    File.Delete(socketPath);
-}
-
-if (options.AllowUid.Count > 0 || options.AllowGid.Count > 0)
-{
-    bootstrapLogger.LogWarning("rdpgw-auth: --allow-uid/--allow-gid are accepted for CLI compatibility; ASP.NET Core transport relies on socket file permissions.");
-}
-
 // Register the gRPC service and its authenticators as singletons; NTLM keeps
 // short-lived per-session state, while PAM and config lookups are stateless.
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions { Args = [] });

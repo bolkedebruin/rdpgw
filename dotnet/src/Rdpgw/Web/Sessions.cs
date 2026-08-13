@@ -1,8 +1,6 @@
 using System.Security.Cryptography;
 using System.Text.Json;
-using Microsoft.AspNetCore.Http;
 using Rdpgw.Identity;
-using Rdpgw.Logging;
 
 namespace Rdpgw.Web;
 
@@ -30,8 +28,6 @@ public static class Sessions
         if (encryptionKey.Length < 32) throw new InvalidOperationException("Session key too small");
         _sessionKey = sessionKey[..32];
         _encryptionKey = encryptionKey[..32];
-        if (storeType == "file") Log.For(typeof(Sessions)).LogWarning("Filesystem session storage is unsupported in the .NET port; cookies are used as session storage");
-        else Log.For(typeof(Sessions)).LogInformation("Cookies are used as session storage");
     }
 
     /// <summary>Reads and deserializes the identity stored in the session cookie.</summary>

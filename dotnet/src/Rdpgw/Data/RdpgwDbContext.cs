@@ -12,6 +12,8 @@ public sealed class RdpgwDbContext(DbContextOptions<RdpgwDbContext> options) : D
     public DbSet<HostEntry> Hosts => Set<HostEntry>();
     /// <summary>Gets the gateway table used for per-host gateway routing.</summary>
     public DbSet<GatewayEntry> Gateways => Set<GatewayEntry>();
+    /// <summary>Gets the log entries table for gateway logs.</summary>
+    public DbSet<LogEntry> Logs => Set<LogEntry>();
 
     /// <summary>Configures required columns, uniqueness, and gateway relationship behavior.</summary>
     /// <param name="modelBuilder">EF Core model builder for this context.</param>
@@ -31,6 +33,13 @@ public sealed class RdpgwDbContext(DbContextOptions<RdpgwDbContext> options) : D
             entity.Property(g => g.Name).IsRequired();
             entity.Property(g => g.Address).IsRequired();
             entity.HasIndex(g => g.Address).IsUnique();
+        });
+        modelBuilder.Entity<LogEntry>(entity =>
+        {
+            entity.Property(l => l.GatewayId).IsRequired();
+            entity.Property(l => l.Timestamp).IsRequired();
+            entity.Property(l => l.LogMessage).IsRequired();
+            entity.HasOne(l => l.Gateway).WithMany().HasForeignKey(l => l.GatewayId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

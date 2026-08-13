@@ -1,3 +1,0 @@
-# basic PAM configuration for rdpgw on Alpine
-auth include base-auth
-auth include base-account

@@ -1,17 +1,14 @@
 using System.Net;
-using Microsoft.AspNetCore.Http;
 using Rdpgw.Identity;
-using Rdpgw.Logging;
 
 namespace Rdpgw.Web;
 
 /// <summary>
 /// Middleware helpers that attach identity and network metadata to each request context.
 /// </summary>
-public static class ContextMiddleware
+public sealed class ContextMiddleware(ILogger<ContextMiddleware> logger)
 {
     private static readonly List<IPNetwork> Trusted = [];
-    private static readonly ILogger Logger = Log.For(typeof(ContextMiddleware));
 
     /// <summary>Initializes the CIDR ranges trusted for forwarding client IP headers.</summary>
     /// <param name="cidrs">CIDR strings from configuration.</param>
@@ -28,11 +25,11 @@ public static class ContextMiddleware
     /// <summary>Loads or creates the rdpgw identity and adds client/proxy address attributes before downstream middleware runs.</summary>
     /// <param name="ctx">Current HTTP context.</param>
     /// <param name="next">Next middleware delegate.</param>
-    public static async Task EnrichContext(HttpContext ctx, Func<Task> next)
+    public async Task EnrichContext(HttpContext ctx, Func<Task> next)
     {
         var id = Sessions.GetSessionIdentity(ctx) ?? new User();
         if (IdentityContext.FromContext(ctx) is null) IdentityContext.AddToContext(ctx, id);
-        Logger.LogDebug("Identity SessionId: {SessionId}, UserName: {UserName}: Authenticated: {Authenticated}", id.SessionId, id.UserName, id.Authenticated);
+        logger.LogDebug("Identity SessionId: {SessionId}, UserName: {UserName}: Authenticated: {Authenticated}", id.SessionId, id.UserName, id.Authenticated);
         var remoteAddr = RemoteAddr(ctx);
         id.SetAttribute(IdentityContext.AttrRemoteAddr, remoteAddr);
         var remoteHost = HostOnly(remoteAddr);

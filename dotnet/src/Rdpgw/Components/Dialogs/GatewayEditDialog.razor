@@ -7,6 +7,7 @@
             <MudTextField T="string" @bind-Value="Gateway.Address" Label="Address" Required="true" RequiredError="Address is required"
                           HelperText="FQDN or FQDN:port of the gateway, e.g. gateway.example.com:443" Class="mb-3" />
             <MudTextField T="string" @bind-Value="Gateway.Description" Label="Description" Class="mb-3" />
+            <MudTextField T="string" @bind-Value="Gateway.GatewaySigningKey" Label="Gateway Signing Key" Required="true" RequiredError="Gateway signing key is required" Class="mb-3" />
         </MudForm>
     </DialogContent>
     <DialogActions>
@@ -18,7 +19,7 @@
 @code {
     [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
 
-    [Parameter] public GatewayEntry Gateway { get; set; } = new();
+    [Parameter] public GatewayDto Gateway { get; set; } = new();
 
     private MudForm _form = default!;
 

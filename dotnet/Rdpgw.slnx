@@ -1,7 +1,5 @@
 <Solution>
   <Folder Name="/src/">
-    <Project Path="src/Rdpgw.Auth/Rdpgw.Auth.csproj" />
-    <Project Path="src/Rdpgw.Shared/Rdpgw.Shared.csproj" />
     <Project Path="src/Rdpgw/Rdpgw.csproj" />
   </Folder>
 </Solution>

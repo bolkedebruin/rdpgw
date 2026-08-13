@@ -22,4 +22,9 @@ public sealed class GatewayEntry
 
     /// <summary>Gets or sets optional explanatory text shown to administrators.</summary>
     public string Description { get; set; } = string.Empty;
+
+    [Required]
+    public string GatewaySigningKey { get; set; } = string.Empty;
+
+	public bool IsDefault { get; set; } = false;
 }

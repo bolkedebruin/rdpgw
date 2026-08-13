@@ -23,7 +23,6 @@ public sealed class HostEntry
 
     /// <summary>
     /// Unique identifier of the user that owns this host (the authenticated username).
-    /// An empty owner marks a shared host seeded from the legacy `server.hosts` configuration.
     /// </summary>
     public string Owner { get; set; } = string.Empty;
 

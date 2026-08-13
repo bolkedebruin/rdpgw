@@ -13,35 +13,23 @@ namespace Rdpgw.Auth;
 /// local configuration database. NTLM authentication is delegated to
 /// <see cref="NtlmAuth"/>, which maintains the per-session NTLM challenge state.
 /// </remarks>
-public sealed class AuthService : ProtoAuth.Authenticate.AuthenticateBase
+/// <remarks>
+/// Initializes a new instance of the <see cref="AuthService"/> class.
+/// </remarks>
+/// <param name="pamAuthenticator">PAM authenticator used for system-account password checks.</param>
+/// <param name="database">Local configured-user database used as a fallback and for NTLM secrets.</param>
+/// <param name="ntlm">NTLM authenticator that processes NTLMSSP negotiate and authenticate messages.</param>
+/// <param name="logger">Logger for authentication success and failure events.</param>
+public sealed class AuthService(PamAuthenticator pamAuthenticator, IUserDatabase database, NtlmAuth ntlm, ILogger<AuthService> logger) : ProtoAuth.Authenticate.AuthenticateBase
 {
-    private readonly PamAuthenticator pamAuthenticator;
-    private readonly IUserDatabase database;
-    private readonly NtlmAuth ntlm;
-    private readonly ILogger<AuthService> logger;
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="AuthService"/> class.
-    /// </summary>
-    /// <param name="pamAuthenticator">PAM authenticator used for system-account password checks.</param>
-    /// <param name="database">Local configured-user database used as a fallback and for NTLM secrets.</param>
-    /// <param name="ntlm">NTLM authenticator that processes NTLMSSP negotiate and authenticate messages.</param>
-    /// <param name="logger">Logger for authentication success and failure events.</param>
-    public AuthService(PamAuthenticator pamAuthenticator, IUserDatabase database, NtlmAuth ntlm, ILogger<AuthService> logger)
-    {
-        this.pamAuthenticator = pamAuthenticator;
-        this.database = database;
-        this.ntlm = ntlm;
-        this.logger = logger;
-    }
-
-    /// <summary>
-    /// Authenticates a username and password through PAM or the local configuration file.
-    /// </summary>
-    /// <param name="request">gRPC request containing the username and password.</param>
-    /// <param name="context">Server call context supplied by gRPC.</param>
-    /// <returns>An authentication response indicating success or the failure reason.</returns>
-    public override Task<ProtoAuth.AuthResponse> Authenticate(ProtoAuth.UserPass request, ServerCallContext context)
+	/// <summary>
+	/// Authenticates a username and password through PAM or the local configuration file.
+	/// </summary>
+	/// <param name="request">gRPC request containing the username and password.</param>
+	/// <param name="context">Server call context supplied by gRPC.</param>
+	/// <returns>An authentication response indicating success or the failure reason.</returns>
+	public override Task<ProtoAuth.AuthResponse> Authenticate(ProtoAuth.UserPass request, ServerCallContext context)
     {
         var response = new ProtoAuth.AuthResponse { Authenticated = false };
         var (authenticated, error) = pamAuthenticator.Authenticate(request.Username, request.Password);
