@@ -1,8 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
-using Rdpgw.Config;
 using Rdpgw.Data;
 using Rdpgw.Security.GatewayToken;
 
@@ -10,15 +8,17 @@ namespace Rdpgw.Gateway;
 
 /// <summary>
 /// API endpoints used by gateways to register with the orchestrator node and to
-/// query the status of an existing registration request. In <see cref="ServerMode.Gateway"/>
-/// the POST verb instead handles an incoming adoption notification from the orchestrator.
+/// query the status of an existing registration request. The POST verb also handles
+/// an incoming adoption notification from the orchestrator; which behavior applies is
+/// determined by which authentication scheme actually validated the request (see
+/// <see cref="PostRegistrationAsync"/>), not by local server configuration, since only
+/// the authentication result is cryptographic proof of which party sent the request.
 /// </summary>
 [ApiController]
 [Route("api/gateway/register")]
 public sealed class RegistrationController(
 	ILogger<RegistrationController> logger,
 	RdpgwDbContext dbContext,
-	IOptions<ServerConfig> serverConfig,
 	IGatewayAdoptionState adoptionState) : ControllerBase
 {
 	private const int NotRegistered = 0;
@@ -57,15 +57,35 @@ public sealed class RegistrationController(
 	}
 
 	/// <summary>
-	/// Creates a pending registration request for the calling gateway (orchestrator mode),
-	/// or accepts the orchestrator's notification that this gateway has been adopted (gateway mode).
+	/// Creates a pending registration request for the calling gateway, or accepts the
+	/// orchestrator's notification that this gateway has been adopted. Which behavior
+	/// applies is determined by which authentication scheme actually validated the
+	/// request: the two schemes attached to the "GatewayRegisterOrAdopt" policy each
+	/// prove a distinct claim (possession of the pre-shared registration key, or a
+	/// signature from the orchestrator's own message key). Branching on that proof,
+	/// rather than on this node's local <c>ServerConfig.Mode</c>, means a request can
+	/// never be routed to the wrong handler just because a node is misconfigured or
+	/// running in an unexpected mode.
 	/// </summary>
 	[HttpPost]
 	[Authorize(Policy = "GatewayRegisterOrAdopt")]
-	public Task<IActionResult> PostRegistrationAsync(CancellationToken cancellationToken = default) =>
-		serverConfig.Value.Mode == ServerMode.Gateway
-			? PostAdoptionNotificationAsync()
-			: PostRegistrationRequestAsync(cancellationToken);
+	public Task<IActionResult> PostRegistrationAsync(CancellationToken cancellationToken = default)
+	{
+		var authenticationType = User.Identity?.AuthenticationType;
+
+		if (string.Equals(authenticationType, GatewayAdoptionAuthenticationHandler.SchemeName, StringComparison.Ordinal))
+		{
+			return PostAdoptionNotificationAsync();
+		}
+
+		if (string.Equals(authenticationType, GatewayRegistrationAuthenticationHandler.SchemeName, StringComparison.Ordinal))
+		{
+			return PostRegistrationRequestAsync(cancellationToken);
+		}
+
+		logger.LogError("Unexpected authentication scheme '{AuthenticationType}' on gateway register/adopt request.", authenticationType);
+		return Task.FromResult<IActionResult>(Unauthorized(new { error = "Unrecognized authentication scheme" }));
+	}
 
 	/// <summary>Orchestrator-side handling: records a pending registration request for the calling gateway.</summary>
 	private async Task<IActionResult> PostRegistrationRequestAsync(CancellationToken cancellationToken)
