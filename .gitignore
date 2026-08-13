@@ -84,3 +84,5 @@ config.yml
 # Backup files
 *.bak
 *.backup
+/.vs
+/dotnet/.vs
