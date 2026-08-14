@@ -54,6 +54,7 @@ builder.Services.AddHttpClient<GatewayStore>();
 
 builder.Services.AddTransient<ITokenService, TokenService>();
 builder.Services.AddTransient<TokenService>();
+builder.Services.AddTransient<ProcessorService>();
 builder.Services.AddTransient<GatewayService>();
 builder.Services.AddDbContext<RdpgwDbContext>(options => options.UseSqlite($"Data Source=rdpgw.db"));
 
@@ -165,14 +166,13 @@ app.UseMetricServer("/metrics");
 //    gw.CheckHost = Security.CheckSession((_, _) => Task.FromResult(true));
 //}
 
-OIDC? oidc = null;
 bool kerberosEnabled = false;
 var authMux = new AuthMux();
 
 async Task WebAuth(HttpContext ctx, Func<Task> next)
 {
-    // Browser-facing routes use OIDC or trusted-header sessions; gateway protocol auth is dispatched separately.
-    if (oidc is not null) { await oidc.Authenticated(ctx, next); return; }
+    // Browser-facing routes use trusted-header sessions; gateway protocol auth is dispatched separately.
+    // OIDC browser authentication is not implemented yet (see Web/Oidc.cs), so this is currently a pass-through.
     await next();
 }
 

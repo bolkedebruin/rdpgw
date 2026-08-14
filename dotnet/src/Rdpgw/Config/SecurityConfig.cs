@@ -20,6 +20,13 @@ public sealed class SecurityConfig
 	[Required]
 	public string CookieSigningPublicKey { get; set; } = string.Empty;
 
+	/// <summary>
+	/// An RSA private key in PEM format used to sign RDP cookie data. Pairs with <see cref="CookieSigningPublicKey"/>,
+	/// which is used by consumers that only need to verify (not create) signed cookies.
+	/// </summary>
+	[Required]
+	public string CookieSigningPrivateKey { get; set; } = string.Empty;
+
 	/// <summary>Gets or sets the PAA token encryption key retained for compatibility.</summary>
 	[Required]
 	[RegularExpression(@"^[\s\S]{32}$", ErrorMessage = "PAATokenEncryptionKey must be a 32-character string")]

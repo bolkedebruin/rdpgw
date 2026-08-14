@@ -27,6 +27,9 @@ public sealed partial class SecurityConfigProvider
 
 	public TimeSpan ExpiryTime => _securityConfig.ExpiryTime;
 
+	/// <summary>Gets whether gateway tokens are bound to the client IP address.</summary>
+	public bool VerifyClientIP => _securityConfig.VerifyClientIp;
+
 	/// <summary>Context item key holding the target server authorized by a validated PAA token.</summary>
 	public const string TunnelTargetServerKey = "Rdpgw.Security.TargetServer";
 	/// <summary>Context item key holding the client IP bound into a validated PAA token.</summary>

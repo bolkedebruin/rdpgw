@@ -89,6 +89,44 @@ public sealed partial class HostStore(ILogger<HostStore> logger, IDbContextFacto
         await db.SaveChangesAsync();
     }
 
+    /// <summary>
+    /// Returns the hosts visible to the given user: their own hosts plus any legacy hosts
+    /// (empty owner) shared with every user. Used by the web UI host picker.
+    /// </summary>
+    /// <param name="owner">Authenticated username requesting the host list.</param>
+    /// <returns>The user's visible hosts ordered by name.</returns>
+    public async Task<List<HostEntry>> GetVisible(string owner, CancellationToken cancellationToken = default)
+    {
+        logger.LogTrace("Retrieving hosts visible to {Owner}", owner);
+        await using var dbContext = await contextFactory.CreateDbContextAsync(cancellationToken);
+        return await dbContext.Hosts
+            .AsNoTracking()
+            .Where(h => h.Owner == owner || h.Owner == string.Empty)
+            .OrderBy(h => h.Name)
+            .ToListAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Returns the RDP destination addresses of the hosts visible to the given user.
+    /// Used to validate that a requested host is one the user is allowed to connect to.
+    /// </summary>
+    /// <param name="owner">Authenticated username requesting the host list.</param>
+    /// <returns>The set of addresses visible to the user.</returns>
+    public async Task<HashSet<string>> GetHostAddresses(string owner, CancellationToken cancellationToken = default)
+    {
+        var entries = await GetVisible(owner, cancellationToken);
+        return [.. entries.Select(h => h.Address)];
+    }
+
+    /// <summary>Finds a host entry by its RDP destination address.</summary>
+    /// <param name="address">Address to look up.</param>
+    /// <returns>The matching host entry, or <see langword="null"/> if none exists.</returns>
+    public async Task<HostEntry?> FindByAddressAsync(string address, CancellationToken cancellationToken = default)
+    {
+        await using var dbContext = await contextFactory.CreateDbContextAsync(cancellationToken);
+        return await dbContext.Hosts.AsNoTracking().FirstOrDefaultAsync(h => h.Address == address, cancellationToken);
+    }
+
     public async Task DeleteAsync(int id)
     {
         await using var db = await contextFactory.CreateDbContextAsync();

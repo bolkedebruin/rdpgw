@@ -121,7 +121,7 @@
         {
             try
             {
-                await HostStore.AddAsync(host, _owner);
+                await HostStore.AddAsync(host.Name, host.Address, host.Description, host.IsDefault, host.GatewayId, _owner);
                 Snackbar.Add($"Host '{host.Name}' added.", Severity.Success);
             }
             catch (Exception ex)
@@ -142,7 +142,7 @@
         {
             try
             {
-                await HostStore.UpdateAsync(updated, _owner);
+                await HostStore.UpdateAsync(updated.Id, updated.Name, updated.Address, updated.Description, updated.IsDefault, updated.GatewayId, _owner);
                 Snackbar.Add($"Host '{updated.Name}' updated.", Severity.Success);
             }
             catch (Exception ex)
@@ -160,7 +160,7 @@
         {
             try
             {
-                await HostStore.DeleteAsync(host.Id, _owner);
+                await HostStore.DeleteAsync(host.Id);
                 Snackbar.Add($"Host '{host.Name}' deleted.", Severity.Success);
             }
             catch (Exception ex)

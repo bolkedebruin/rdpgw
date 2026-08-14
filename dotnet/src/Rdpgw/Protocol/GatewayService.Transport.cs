@@ -12,7 +12,6 @@ namespace Rdpgw.Protocol;
 public sealed partial class GatewayService
 {
 	private const int TunnelId = 10;
-	private readonly CancellationTokenSource _disconnect = new();
 	private int _state = SERVER_STATE_INITIALIZED;
 
 	/// <summary>Runs the packet-processing loop until cancellation, disconnect, or channel close.</summary>
@@ -22,8 +21,22 @@ public sealed partial class GatewayService
 		using var _ = logger.BeginScope(tunnel.RemoteAddr);
 
 		// Combine request cancellation with administrative disconnects from ConnectionTracker.
-		using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, _disconnect.Token);
+		using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, processorService.DisconnectToken);
 		var token = linked.Token;
+
+		ConnectionTracker.RegisterTunnel(tunnel, processorService);
+		try
+		{
+			await ProcessLoopAsync(tunnel, token).ConfigureAwait(false);
+		}
+		finally
+		{
+			ConnectionTracker.RemoveTunnel(tunnel);
+		}
+	}
+
+	private async Task ProcessLoopAsync(Tunnel tunnel, CancellationToken token)
+	{
 
 		while (!token.IsCancellationRequested)
 		{

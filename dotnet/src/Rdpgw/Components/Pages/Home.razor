@@ -71,7 +71,7 @@
     private string? _connectingHostId;
     private PersistingComponentStateSubscription _subscription;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         _subscription = ApplicationState.RegisterOnPersisting(PersistState, RenderMode.InteractiveServer);
         if (ApplicationState.TryTakeFromJson<HomeState>(StateKey, out var restored) && restored is not null)
@@ -80,7 +80,7 @@
             return;
         }
         var identity = HttpContextAccessor.HttpContext is { } ctx ? IdentityContext.FromContext(ctx) : null;
-        _state = new HomeState(identity?.UserName ?? string.Empty, Handler.GetHosts(identity?.UserName ?? string.Empty));
+        _state = new HomeState(identity?.UserName ?? string.Empty, await Handler.GetHosts(identity?.UserName ?? string.Empty));
     }
 
     private Task PersistState()

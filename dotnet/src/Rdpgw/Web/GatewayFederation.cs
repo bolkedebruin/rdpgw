@@ -84,17 +84,20 @@ public sealed class GatewayFederation(ILogger<GatewayFederation> logger, ITokenS
         private readonly HttpClient _http;
         private readonly Uri _validateUri;
         private readonly ILogger<RemoteTokenValidator> _logger;
+        private readonly ITokenService _tokenService;
 
         /// <summary>Initializes a validator that calls the configured primary gateway.</summary>
         /// <param name="primaryGateway">Base URL of the primary gateway.</param>
         /// <param name="sharedKey">Shared bearer key used to authenticate federation calls.</param>
         /// <param name="logger">Logger instance.</param>
-        public RemoteTokenValidator(Uri primaryGateway, string sharedKey, ILogger<RemoteTokenValidator> logger)
+        /// <param name="tokenService">Token service used to apply validated PAA claims to the request context.</param>
+        public RemoteTokenValidator(Uri primaryGateway, string sharedKey, ILogger<RemoteTokenValidator> logger, ITokenService tokenService)
         {
             _validateUri = new Uri(primaryGateway, ValidateEndpoint);
             _http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
             _http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", sharedKey);
             _logger = logger;
+            _tokenService = tokenService;
         }
 
         /// <summary>Validates a PAA token remotely and applies returned claims to the request context.</summary>
@@ -113,7 +116,7 @@ public sealed class GatewayFederation(ILogger<GatewayFederation> logger, ITokenS
             }
             var result = await JsonSerializer.DeserializeAsync<ValidateResponse>(await response.Content.ReadAsStreamAsync(), JsonOptions);
             if (result is not { Valid: true }) return false;
-            TokenService.ApplyPaaTokenInfo(context, new TokenService.PaaTokenInfo(result.Username ?? string.Empty, result.RemoteServer ?? string.Empty, result.ClientIp ?? string.Empty));
+            _tokenService.ApplyPaaTokenInfo(context, new TokenService.PaaTokenInfo(result.Username ?? string.Empty, result.RemoteServer ?? string.Empty, result.ClientIp ?? string.Empty));
             return true;
         }
     }

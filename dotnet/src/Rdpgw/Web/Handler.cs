@@ -51,8 +51,10 @@ public sealed class WebHandlerConfig
     public bool AllowPrivateDestinations { get; set; }
     /// <summary>Creates the request handler using a supplied logger.</summary>
     /// <param name="logger">Logger for request handling diagnostics.</param>
+    /// <param name="hostStore">Host store used to resolve destination hosts.</param>
+    /// <param name="builderService">Builder service used to produce RDP files.</param>
     /// <returns>A configured <see cref="Handler"/>.</returns>
-    public Handler NewHandler(ILogger<Handler> logger) => new(this, logger);
+    public Handler NewHandler(ILogger<Handler> logger, HostStore hostStore, IBuilderService builderService) => new(this, logger, hostStore, builderService);
 }
 
 /// <summary>
@@ -141,6 +143,7 @@ public sealed class Handler
     private readonly string _rdpSigningCert;
     private readonly string _rdpSigningKey;
     private readonly string _templatesPath;
+    private readonly string _hostSelection;
     private readonly DestinationPolicy _destPolicy;
     private readonly WebConfig _webConfig = new();
     private readonly ILogger<Handler> _logger;
@@ -165,6 +168,7 @@ public sealed class Handler
         _rdpSigningCert = c.RdpSigningCert;
         _rdpSigningKey = c.RdpSigningKey;
         _templatesPath = string.IsNullOrEmpty(c.TemplatesPath) ? "./templates" : c.TemplatesPath;
+        _hostSelection = c.HostSelection;
         _destPolicy = new DestinationPolicy(c.AllowedDestinationPorts, c.AllowPrivateDestinations);
     }
 
@@ -193,16 +197,44 @@ public sealed class Handler
             if (render == _rdpOpts.UsernameTemplate) { ctx.Response.StatusCode = 500; await ctx.Response.WriteAsync("invalid server configuration"); return; }
         }
 
-        int hostEntryId = 0;
-        return _builderService.BuildRdpFile(user, hostEntryId);
+        var entry = await _hostStore.FindByAddressAsync(host);
+        if (entry is null) { ctx.Response.StatusCode = 400; await ctx.Response.WriteAsync("invalid host"); return; }
+
+        string rdpFile;
+        try
+        {
+            var clientIp = ctx.Connection.RemoteIpAddress?.ToString() ?? string.Empty;
+            rdpFile = await _builderService.BuildRdpFile(clientIp, render, entry.Id);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to build RDP file for user {UserName} host {HostEntryId}", id.UserName, entry.Id);
+            ctx.Response.StatusCode = 500;
+            await ctx.Response.WriteAsync("failed to prepare RDP connection");
+            return;
+        }
+
+        ctx.Response.ContentType = "application/x-rdp";
+        ctx.Response.Headers.ContentDisposition = "attachment; filename=connection.rdp";
+        await ctx.Response.WriteAsync(rdpFile);
     }
+
+    /// <summary>Resolves the host destination for a request based on the configured host-selection mode.</summary>
+    /// <param name="ctx">Current HTTP context.</param>
+    /// <returns>The validated host or host:port destination.</returns>
+    private Task<string> GetHost(HttpContext ctx) => _hostSelection switch
+    {
+        "signed" => GetSignedHost(ctx),
+        "any" => GetAnyHost(ctx),
+        _ => GetUnsignedHost(ctx),
+    };
 
     /// <summary>Returns the host-picker model for a user.</summary>
     /// <param name="userName">Authenticated username.</param>
     /// <returns>Visible host options with exactly one default when possible.</returns>
-    public List<Host> GetHosts(string userName)
+    public async Task<List<Host>> GetHosts(string userName)
     {
-        var entries = _hostStore.GetVisible(userName);
+        var entries = await _hostStore.GetVisible(userName);
         var hasDefault = entries.Any(h => h.IsDefault);
         return [.. entries.Select((h, i) => new Host($"host_{h.Id}", h.Name, h.Address, h.Description, hasDefault ? h.IsDefault : i == 0))];
     }
@@ -214,7 +246,7 @@ public sealed class Handler
         var id = IdentityContext.FromContext(ctx) ?? new User();
         if (!id.Authenticated) { ctx.Response.StatusCode = 401; await ctx.Response.WriteAsync("Unauthorized"); return; }
         ctx.Response.ContentType = "application/json";
-        await JsonSerializer.SerializeAsync(ctx.Response.Body, GetHosts(id.UserName), JsonOptions);
+        await JsonSerializer.SerializeAsync(ctx.Response.Body, await GetHosts(id.UserName), JsonOptions);
     }
 
     /// <summary>Writes basic information about the authenticated user as JSON.</summary>
@@ -258,14 +290,14 @@ public sealed class Handler
         var token = ctx.Request.Query["host"].FirstOrDefault();
         if (string.IsNullOrEmpty(token) || _queryInfo is null) throw new InvalidOperationException("invalid query parameter");
         var host = await _queryInfo(ctx, token, _queryTokenIssuer);
-        if (!_hostStore.GetHostAddresses(UserFromContext(ctx)).Contains(host)) throw new InvalidOperationException("invalid host specified in query token");
+        if (!(await _hostStore.GetHostAddresses(UserFromContext(ctx))).Contains(host)) throw new InvalidOperationException("invalid host specified in query token");
         return host;
     }
-    private string GetUnsignedHost(HttpContext ctx)
+    private async Task<string> GetUnsignedHost(HttpContext ctx)
     {
         var host = ctx.Request.Query["host"].FirstOrDefault();
         if (string.IsNullOrEmpty(host)) throw new InvalidOperationException("invalid query parameter");
-        if (!_hostStore.GetHostAddresses(UserFromContext(ctx)).Contains(host)) throw new InvalidOperationException("invalid host specified in query parameter");
+        if (!(await _hostStore.GetHostAddresses(UserFromContext(ctx))).Contains(host)) throw new InvalidOperationException("invalid host specified in query parameter");
         return host;
     }
     private async Task<string> GetAnyHost(HttpContext ctx)

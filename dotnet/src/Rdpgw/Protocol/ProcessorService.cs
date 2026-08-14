@@ -16,5 +16,15 @@ namespace Rdpgw.Protocol;
 /// </remarks>
 public sealed class ProcessorService(ILogger<ProcessorService> logger)
 {
-   
+    private readonly CancellationTokenSource _disconnect = new();
+
+    /// <summary>Cancellation token observed by the tunnel processing loop; cancelled by <see cref="SignalDisconnect"/>.</summary>
+    public CancellationToken DisconnectToken => _disconnect.Token;
+
+    /// <summary>Requests that the tunnel currently driven by this processor stop processing and disconnect.</summary>
+    public void SignalDisconnect()
+    {
+        logger.LogInformation("Signaling disconnect for tunnel processor");
+        _disconnect.Cancel();
+    }
 }
