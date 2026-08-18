@@ -27,7 +27,7 @@ require (
 	github.com/spf13/afero v1.14.0
 	github.com/stretchr/testify v1.10.0
 	github.com/thought-machine/go-flags v1.6.3
-	golang.org/x/crypto v0.51.0
+	golang.org/x/crypto v0.52.0
 	golang.org/x/oauth2 v0.34.0
 	golang.org/x/sys v0.45.0
 	google.golang.org/grpc v1.79.3
