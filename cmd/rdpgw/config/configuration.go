@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/security"
 	"github.com/knadh/koanf/parsers/yaml"
@@ -147,14 +148,20 @@ type RDGCapsConfig struct {
 }
 
 type SecurityConfig struct {
-	PAATokenEncryptionKey  string `koanf:"paatokenencryptionkey"`
-	PAATokenSigningKey     string `koanf:"paatokensigningkey"`
-	UserTokenEncryptionKey string `koanf:"usertokenencryptionkey"`
-	UserTokenSigningKey    string `koanf:"usertokensigningkey"`
-	QueryTokenSigningKey   string `koanf:"querytokensigningkey"`
-	QueryTokenIssuer       string `koanf:"querytokenissuer"`
-	VerifyClientIp         bool   `koanf:"verifyclientip"`
-	EnableUserToken        bool   `koanf:"enableusertoken"`
+	PAATokenEncryptionKey  string        `koanf:"paatokenencryptionkey"`
+	PAATokenSigningKey     string        `koanf:"paatokensigningkey"`
+	UserTokenEncryptionKey string        `koanf:"usertokenencryptionkey"`
+	UserTokenSigningKey    string        `koanf:"usertokensigningkey"`
+	QueryTokenSigningKey   string        `koanf:"querytokensigningkey"`
+	QueryTokenIssuer       string        `koanf:"querytokenissuer"`
+	VerifyClientIp         bool          `koanf:"verifyclientip"`
+	EnableUserToken        bool          `koanf:"enableusertoken"`
+	// PAATokenExpiry and UserTokenExpiry are configurable so the PAA leg
+	// can outlive the previously hardcoded 5m (e.g. long-running W365
+	// sessions), without patching the binary. Defaults preserve prior
+	// behavior when unset.
+	PAATokenExpiry  time.Duration `koanf:"paatokenexpiry"`
+	UserTokenExpiry time.Duration `koanf:"usertokenexpiry"`
 }
 
 type ClientConfig struct {
@@ -225,6 +232,8 @@ func Load(configFile string) Configuration {
 		"Client.NetworkAutoDetect":   1,
 		"Client.BandwidthAutoDetect": 1,
 		"Security.VerifyClientIp":    true,
+		"Security.PAATokenExpiry":    5 * time.Minute,
+		"Security.UserTokenExpiry":   5 * time.Minute,
 		"Caps.TokenAuth":             true,
 	}, "."), nil)
 

@@ -98,6 +98,8 @@ func main() {
 	security.QuerySigningKey = []byte(conf.Security.QueryTokenSigningKey)
 	security.HostSelection = conf.Server.HostSelection
 	security.Hosts = conf.Server.Hosts
+	security.PAATokenExpiry = conf.Security.PAATokenExpiry
+	security.UserTokenExpiry = conf.Security.UserTokenExpiry
 
 	// init session store
 	web.InitStore([]byte(conf.Server.SessionKey),

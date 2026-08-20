@@ -27,7 +27,11 @@ var (
 	Oauth2Config      oauth2.Config
 )
 
-var ExpiryTime time.Duration = 5
+// PAATokenExpiry and UserTokenExpiry are configurable via
+// Security.PAATokenExpiry / Security.UserTokenExpiry (see config package);
+// these defaults preserve the previous hardcoded 5m behavior when unset.
+var PAATokenExpiry time.Duration = 5 * time.Minute
+var UserTokenExpiry time.Duration = 5 * time.Minute
 var VerifyClientIP bool = true
 
 type customClaims struct {
@@ -124,7 +128,7 @@ func GeneratePAAToken(ctx context.Context, username string, server string) (stri
 	standard := jwt.Claims{
 		Issuer:   "rdpgw",
 		Audience: jwt.Audience{paaAudience},
-		Expiry:   jwt.NewNumericDate(time.Now().Add(time.Minute * 5)),
+		Expiry:   jwt.NewNumericDate(time.Now().Add(PAATokenExpiry)),
 		Subject:  username,
 	}
 
@@ -149,7 +153,7 @@ func GenerateUserToken(ctx context.Context, userName string) (string, error) {
 
 	claims := jwt.Claims{
 		Subject: userName,
-		Expiry:  jwt.NewNumericDate(time.Now().Add(time.Minute * 5)),
+		Expiry:  jwt.NewNumericDate(time.Now().Add(UserTokenExpiry)),
 		Issuer:  "rdpgw",
 	}
 
