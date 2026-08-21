@@ -1,12 +1,14 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
 	"strings"
 
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/security"
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/confmap"
 	"github.com/knadh/koanf/providers/env"
@@ -124,13 +126,11 @@ type OpenIDConfig struct {
 }
 
 type HeaderConfig struct {
-	UserHeader      string `koanf:"userheader"`
-	UserIdHeader    string `koanf:"useridheader"`
-	EmailHeader     string `koanf:"emailheader"`
-	DisplayNameHeader string `koanf:"displaynameheader"`
-	// TrustedProxies is the CIDR allow-list of upstream proxies allowed to
-	// stamp UserHeader (and friends). Empty disables header auth at runtime.
-	TrustedProxies  []string `koanf:"trustedproxies"`
+	UserHeader        string   `koanf:"userheader"`
+	UserIdHeader      string   `koanf:"useridheader"`
+	EmailHeader       string   `koanf:"emailheader"`
+	DisplayNameHeader string   `koanf:"displaynameheader"`
+	TrustedProxies    []string `koanf:"trustedproxies"`
 }
 
 type RDGCapsConfig struct {
@@ -209,23 +209,61 @@ func ToCamel(s string) string {
 
 var Conf Configuration
 
+func decodeConfiguration(k *koanf.Koanf, configuration *Configuration) error {
+	decoderConfig := &mapstructure.DecoderConfig{
+		ErrorUnused:      true,
+		Result:           configuration,
+		WeaklyTypedInput: true,
+	}
+	return k.UnmarshalWithConf("", configuration, koanf.UnmarshalConf{
+		Tag:           "koanf",
+		DecoderConfig: decoderConfig,
+	})
+}
+
+func validateConfiguration(configuration *Configuration) error {
+	switch configuration.Server.Tls {
+	case TlsAuto, "enable", TlsDisable:
+		return nil
+	default:
+		return fmt.Errorf("invalid Server.Tls value %q; expected auto, enable, or disable", configuration.Server.Tls)
+	}
+}
+
+func decodeAndValidateConfiguration(k *koanf.Koanf, configuration *Configuration) error {
+	decodeErr := decodeConfiguration(k, configuration)
+	validationErr := validateConfiguration(configuration)
+	return errors.Join(decodeErr, validationErr)
+}
+
+func loadEnvironment(k *koanf.Koanf) error {
+	return k.Load(env.ProviderWithValue("RDPGW_", ".", func(s string, v string) (string, interface{}) {
+		key := strings.Replace(strings.ToLower(strings.TrimPrefix(s, "RDPGW_")), "__", ".", -1)
+		key = ToCamel(key)
+
+		v = strings.Trim(v, " ")
+		if strings.Contains(v, " ") {
+			return key, strings.Split(v, " ")
+		}
+		return key, v
+	}), nil)
+}
+
 func Load(configFile string) Configuration {
 
 	var k = koanf.New(".")
 
 	k.Load(confmap.Provider(map[string]interface{}{
-		"Server.Tls":                 "auto",
-		"Server.Port":                443,
-		"Server.BindAddress":         "",
-		"Server.SessionStore":        "cookie",
-		"Server.HostSelection":       "roundrobin",
-		"Server.Authentication":      "openid",
-		"Server.AuthSocket":          "/tmp/rdpgw-auth.sock",
-		"Server.BasicAuthTimeout":    5,
-		"Client.NetworkAutoDetect":   1,
-		"Client.BandwidthAutoDetect": 1,
-		"Security.VerifyClientIp":    true,
-		"Caps.TokenAuth":             true,
+		"Server.Tls":              "auto",
+		"Server.Port":             443,
+		"Server.BindAddress":      "",
+		"Server.SessionStore":     "cookie",
+		"Server.HostSelection":    "roundrobin",
+		"Server.Authentication":   "openid",
+		"Server.AuthSocket":       "/tmp/rdpgw-auth.sock",
+		"Server.BasicAuthTimeout": 5,
+		"Security.VerifyClientIp": true,
+		"Caps.TokenAuth":          true,
 	}, "."), nil)
 
 	if _, err := os.Stat(configFile); os.IsNotExist(err) {
@@ -236,30 +274,13 @@ func Load(configFile string) Configuration {
 		}
 	}
 
-	if err := k.Load(env.ProviderWithValue("RDPGW_", ".", func(s string, v string) (string, interface{}) {
-		key := strings.Replace(strings.ToLower(strings.TrimPrefix(s, "RDPGW_")), "__", ".", -1)
-		key = ToCamel(key)
-
-		v = strings.Trim(v, " ")
-
-		// handle lists
-		if strings.Contains(v, " ") {
-			return key, strings.Split(v, " ")
-		}
-		return key, v
-
-	}), nil); err != nil {
+	if err := loadEnvironment(k); err != nil {
 		log.Fatalf("Error loading config from environment: %v", err)
 	}
 
-	koanfTag := koanf.UnmarshalConf{Tag: "koanf"}
-	k.UnmarshalWithConf("Server", &Conf.Server, koanfTag)
-	k.UnmarshalWithConf("OpenId", &Conf.OpenId, koanfTag)
-	k.UnmarshalWithConf("Header", &Conf.Header, koanfTag)
-	k.UnmarshalWithConf("Caps", &Conf.Caps, koanfTag)
-	k.UnmarshalWithConf("Security", &Conf.Security, koanfTag)
-	k.UnmarshalWithConf("Client", &Conf.Client, koanfTag)
-	k.UnmarshalWithConf("Kerberos", &Conf.Kerberos, koanfTag)
+	if err := decodeAndValidateConfiguration(k, &Conf); err != nil {
+		log.Fatalf("invalid configuration: %s", err)
+	}
 
 	if err := checkDefaultSecrets(&Conf); err != nil {
 		log.Fatalf("refusing to start: %s", err)
