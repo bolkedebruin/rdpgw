@@ -12,7 +12,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.8.1
 	github.com/gorilla/sessions v1.2.2
-	github.com/gorilla/websocket v1.5.1
+	github.com/gorilla/websocket v1.5.3
 	github.com/jcmturner/gofork v1.7.6
 	github.com/jcmturner/goidentity/v6 v6.0.1
 	github.com/knadh/koanf/parsers/yaml v0.1.0
