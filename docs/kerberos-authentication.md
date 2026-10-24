@@ -10,6 +10,8 @@ RDPGW supports Kerberos authentication via SPNEGO for seamless integration with 
 
 **⚠️ Error Messages**: Kerberos errors are not always descriptive. This documentation provides configuration guidance, but detailed Kerberos troubleshooting is beyond scope.
 
+**⚠️ KDC Proxy Transport**: RDPGW's built-in KDC Proxy (`/KdcProxy`) prioritizes **TCP KDCs** over UDP. This prevents Active Directory `KRB5KRB_ERR_RESPONSE_TOO_BIG` errors that occur when tickets containing large PACs exceed the UDP 1,465-byte limit.
+
 ## Prerequisites
 
 - Valid Kerberos environment (KDC/Active Directory)
@@ -98,6 +100,9 @@ RDPGW includes KDC proxy functionality for environments where clients cannot dir
 - Endpoint: `https://your-gateway/KdcProxy`
 - Supports MS-KKDCP protocol
 - Automatically configured when Kerberos authentication is enabled
+- UDP and TCP KDCs are both tried, with TCP preferred for large ticket responses (PAC overflow protection)
+- KDC host entries without an explicit port default to port 88
+- Properly handles framed (4-byte length-prefixed) Kerberos messages over both UDP and TCP
 
 ## Client Configuration
 

@@ -66,8 +66,8 @@ func EnrichContext(next http.Handler) http.Handler {
 			}
 		}
 
-		log.Printf("Identity SessionId: %s, UserName: %s: Authenticated: %t",
-			id.SessionId(), id.UserName(), id.Authenticated())
+		log.Printf("Identity SessionId: %s, UserName: %s: Authenticated: %t (%s %s)",
+			id.SessionId(), id.UserName(), id.Authenticated(), r.Method, r.URL.Path)
 
 		id.SetAttribute(identity.AttrRemoteAddr, r.RemoteAddr)
 
