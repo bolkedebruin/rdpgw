@@ -49,24 +49,24 @@ docker build -f dev/docker/Dockerfile.auth-winbind -t rdpgw-auth-winbind .
 ways to provide that:
 
 1. **Run winbindd in the container.** Mount a domain member `smb.conf` and a
-   persistent `/var/lib/samba` volume, join the domain once, then start the
-   container normally. The entrypoint starts `winbindd`, waits for it, and runs
-   `rdpgw-auth` as UID 1001.
+   persistent `/var/lib/samba` volume. The container can join the domain automatically if you pass `AD_JOIN_USER` and `AD_JOIN_PASSWORD`, or wait cleanly for a manual join (`net ads join -U Administrator`). Once joined, the state is persisted in `/var/lib/samba` across restarts. The entrypoint starts `winbindd`, waits for it, and runs `rdpgw-auth` as UID 1001.
 
    ```bash
+   # Automatic join on first start:
+   docker run -d --name rdpgw-auth --hostname rdpgw-auth \
+     -e AD_JOIN_USER=Administrator -e AD_JOIN_PASSWORD=your_password \
+     -v ./smb.conf:/etc/samba/smb.conf:ro -v samba-state:/var/lib/samba \
+     -v ./rdpgw-auth.yaml:/etc/rdpgw-auth.yaml:ro \
+     -v auth-socket:/tmp \
+     ghcr.io/example-org/rdpgw-auth-winbind:latest
+
+   # Or manual one-time join via interactive exec:
    docker run --rm -it --entrypoint net \
      -v ./smb.conf:/etc/samba/smb.conf:ro -v samba-state:/var/lib/samba \
-     rdpgw-auth-winbind ads join -U Administrator
-
-   docker run -d --name rdpgw-auth --hostname rdpgw-auth \
-     -v ./smb.conf:/etc/samba/smb.conf:ro -v samba-state:/var/lib/samba \
-     -v ./rdpgw-auth.yaml:/opt/rdpgw/rdpgw-auth.yaml:ro \
-     -v auth-socket:/tmp \
-     rdpgw-auth-winbind
+     ghcr.io/example-org/rdpgw-auth-winbind:latest ads join -U Administrator
    ```
 
-   Keep the container hostname stable: it is the computer account name in the
-   domain.
+   Keep the NetBIOS name or container hostname stable (e.g. `netbios name = rdpgw-auth` in `smb.conf`): it is the computer account name in the domain.
 
 2. **Use the winbind of a domain-joined Docker host.** Set
    `RDPGW_AUTH_EXTERNAL_WINBIND=1` and mount the host's `/run/samba` and

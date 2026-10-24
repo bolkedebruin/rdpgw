@@ -22,9 +22,11 @@ RUN CGO_ENABLED=1 GOOS=linux go build -trimpath -o /opt/rdpgw/rdpgw-auth ./cmd/a
 FROM alpine:latest
 
 # samba-winbind provides winbindd, samba-winbind-clients provides
-# ntlm_auth and wbinfo, krb5 is needed to join and talk to the domain.
+# ntlm_auth and wbinfo, samba-common-tools provides net (for "net ads join"),
+# ldb-tools provides ldb tools for secrets.ldb initialization,
+# and krb5 is needed to join and talk to the domain.
 RUN apk --no-cache add linux-pam musl tzdata ca-certificates \
-        samba-winbind samba-winbind-clients krb5 su-exec && \
+        samba-winbind samba-winbind-clients samba-common-tools ldb-tools krb5 su-exec && \
     addgroup -S winbindd_priv && \
     adduser -D -H -h /opt/rdpgw -u 1001 rdpgw && \
     addgroup rdpgw winbindd_priv

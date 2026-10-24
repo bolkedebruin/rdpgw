@@ -2,7 +2,7 @@
 
 ![Kerberos](images/flow-kerberos.svg)
 
-RDPGW supports Kerberos authentication via SPNEGO for seamless integration with Active Directory and other Kerberos environments.
+RDPGW supports Kerberos authentication via SPNEGO for seamless integration with Active Directory and other Kerberos environments, including built-in KDC Proxy support (`/KdcProxy`).
 
 ## Important Notes
 
@@ -17,44 +17,13 @@ RDPGW supports Kerberos authentication via SPNEGO for seamless integration with 
 - Valid Kerberos environment (KDC/Active Directory)
 - Proper DNS configuration (forward and reverse lookups)
 - Service principal for the gateway
-- Keytab file with appropriate permissions
+- Keytab file with appropriate permissions (ensure binary transfer without UTF-8 string mangling)
 
 ## Configuration
 
-### 1. Create Service Principal
+### 1. Configure krb5.conf
 
-Create a service principal for the gateway in your Kerberos realm:
-
-```bash
-# Active Directory
-setspn -A HTTP/rdpgw.example.com@YOUR.REALM service-account
-
-# MIT Kerberos
-kadmin.local -q "addprinc -randkey HTTP/rdpgw.example.com@YOUR.REALM"
-```
-
-### 2. Generate Keytab
-
-Use `ktutil` or similar tool to create a keytab file:
-
-```bash
-ktutil
-addent -password -p HTTP/rdpgw.example.com@YOUR.REALM -k 1 -e aes256-cts-hmac-sha1-96
-wkt rdpgw.keytab
-quit
-```
-
-Place the keytab file in a secure location and ensure it's only readable by the gateway user:
-
-```bash
-sudo mv rdpgw.keytab /etc/keytabs/
-sudo chown rdpgw:rdpgw /etc/keytabs/rdpgw.keytab
-sudo chmod 600 /etc/keytabs/rdpgw.keytab
-```
-
-### 3. Configure krb5.conf
-
-Ensure `/etc/krb5.conf` is properly configured:
+Before joining domains or generating keytabs, ensure `/etc/krb5.conf` is properly configured on the gateway:
 
 ```ini
 [libdefaults]
@@ -64,8 +33,10 @@ Ensure `/etc/krb5.conf` is properly configured:
 
 [realms]
     YOUR.REALM = {
-        kdc = kdc.your.realm:88
-        admin_server = kdc.your.realm:749
+        kdc = kdc1.your.realm:88
+        kdc = kdc2.your.realm:88
+        admin_server = kdc1.your.realm:749
+        admin_server = kdc2.your.realm:749
     }
 
 [domain_realm]
@@ -73,7 +44,76 @@ Ensure `/etc/krb5.conf` is properly configured:
     your.realm = YOUR.REALM
 ```
 
+> 💡 **Multiple KDCs / Domain Controllers**: If you need to specify multiple KDC or administration servers for redundancy, you can repeat the `kdc` and `admin_server` entries within the realm block.
+
+### 2. Domain Join & Service Principal Creation
+
+Service principals (SPNs) identify the gateway service in the Kerberos realm. Depending on your environment, choose one of the following methods:
+
+#### Method A: Active Directory Domain Join & Samba (`net ads`)
+When using `rdpgw-auth-winbind` or a domain-joined Linux gateway, joining the domain automatically creates the computer object and principal in Active Directory.
+- **`net ads setspn add`**: Note that running `net ads setspn add` registers the SPN directly on the domain computer object in Active Directory on the Domain Controller (DC), not just locally in the keytab.
+
+```bash
+# Join domain (if not already joined via AD_JOIN_USER env var)
+net ads join -U Administrator
+
+# Register additional SPNs on the Active Directory Domain Controller if needed
+net ads setspn add HTTP/rdpgw.example.com -U Administrator
+```
+
+#### Method B: Classic Active Directory / MIT Kerberos (`setspn` / `kadmin`)
+For standalone service accounts or MIT Kerberos KDCs:
+
+```bash
+# Active Directory (registers SPN on service-account in DC)
+setspn -A HTTP/rdpgw.example.com@YOUR.REALM service-account
+
+# MIT Kerberos KDC
+kadmin.local -q "addprinc -randkey HTTP/rdpgw.example.com@YOUR.REALM"
+```
+
+### 3. Generate Keytab
+
+Once the principal is registered in the realm or domain controller, generate a keytab file:
+
+#### Linux / Samba (`net ads keytab`)
+```bash
+# Automatically create or update the keytab file and extract registered SPNs from AD
+net ads keytab create -P
+```
+
+#### Standalone MIT Kerberos (`ktutil`)
+```bash
+ktutil
+addent -password -p HTTP/rdpgw.example.com@YOUR.REALM -k 1 -e aes256-cts-hmac-sha1-96
+wkt rdpgw.keytab
+quit
+```
+
+#### Windows (`ktpass`)
+When working in a Windows management environment, use the built-in `ktpass` tool:
+```cmd
+ktpass /princ HTTP/rdpgw.example.com@YOUR.REALM /pass YourStrongPassword /mapuser YOUR\ServiceAccount /crypto All /ptype KRB5_NT_PRINCIPAL /out C:\path\to\rdpgw.keytab
+```
+
+**⚠️ Important Considerations:**
+- **AES Encryption (`/crypto All`)**: Ensure modern encryption algorithms (AES128 / AES256) are enabled.
+- **Binary Transfer (PowerShell)**: When transferring keytab files from a Windows management station to a Linux gateway or Kubernetes Secret via PowerShell, always read them as raw byte arrays (`[System.IO.File]::ReadAllBytes()`) rather than text strings to prevent UTF-8/Windows-1252 corruption.
+
+#### Keytab Permissions & Secure Storage
+
+Regardless of how the keytab is generated, place the resulting keytab file in a secure location readable only by the gateway user (`rdpgw`):
+
+```bash
+sudo mv rdpgw.keytab /etc/keytabs/
+sudo chown rdpgw:rdpgw /etc/keytabs/rdpgw.keytab
+sudo chmod 600 /etc/keytabs/rdpgw.keytab
+```
+
 ### 4. Gateway Configuration
+
+Configure RDPGW in `rdpgw.yaml`:
 
 ```yaml
 Server:

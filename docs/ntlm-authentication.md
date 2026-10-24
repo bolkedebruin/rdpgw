@@ -85,7 +85,6 @@ gateway host has to be a member of the domain.
        realm = EXAMPLE.COM
        workgroup = EXAMPLE
        winbind use default domain = yes
-       winbind separator = \
        idmap config * : backend = tdb
        idmap config * : range = 3000-7999
        idmap config EXAMPLE : backend = rid
@@ -241,18 +240,27 @@ SupplementaryGroups=winbindd_priv
 
 ### Docker Deployment
 
+#### Using Winbind Backend with Persistent State & Auto-Join
+
+The `rdpgw-auth-winbind` container can automatically join Active Directory on startup, or wait cleanly for a manual one-time join without crashing. Domain join credentials can be supplied via environment variables:
+
 ```yaml
 # docker-compose.yml
 services:
   rdpgw-auth:
-    image: rdpgw-auth
+    image: ghcr.io/example-org/rdpgw-auth-winbind:latest
+    environment:
+      - AD_JOIN_USER=Administrator
+      - AD_JOIN_PASSWORD=your_ad_password
     volumes:
+      - ./smb.conf:/etc/samba/smb.conf:ro
       - ./rdpgw-auth.yaml:/etc/rdpgw-auth.yaml:ro
+      - samba-state:/var/lib/samba
       - auth-socket:/tmp
     restart: always
 
   rdpgw:
-    image: rdpgw
+    image: ghcr.io/example-org/rdpgw:latest
     volumes:
       - auth-socket:/tmp
     depends_on:
@@ -260,40 +268,90 @@ services:
 
 volumes:
   auth-socket:
+  samba-state:
 ```
 
 ### Kubernetes Deployment
 
+In Kubernetes, deploy `rdpgw-auth` as a sidecar alongside `rdpgw`, sharing the unix domain socket via an `emptyDir` volume at `/tmp` and preserving Samba domain membership via a persistent volume (e.g. Longhorn PVC):
+
 ```yaml
 apiVersion: v1
-kind: ConfigMap
+kind: PersistentVolumeClaim
 metadata:
-  name: rdpgw-auth-config
-data:
-  rdpgw-auth.yaml: |
-    Users:
-      - Username: "user1"
-        Password: "password1"
+  name: rdpgw-samba-state-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 1Gi
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: rdpgw-auth
+  name: rdpgw
 spec:
   template:
     spec:
       containers:
-      - name: rdpgw-auth
-        image: rdpgw-auth
+      - name: rdpgw
+        image: ghcr.io/example-org/rdpgw:latest
         volumeMounts:
-        - name: config
+        - name: auth-socket
+          mountPath: /tmp
+      - name: rdpgw-auth
+        image: ghcr.io/example-org/rdpgw-auth-winbind:latest
+        args:
+          - -c
+          - /etc/rdpgw-auth.yaml
+          - -s
+          - /tmp/rdpgw-auth.sock
+          - --allow-uid
+          - "1001"
+        env:
+          # Optional: provide credentials to automatically join Active Directory on first boot
+          - name: AD_JOIN_USER
+            valueFrom:
+              secretKeyRef:
+                name: ad-join-credentials
+                key: username
+                optional: true
+          - name: AD_JOIN_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: ad-join-credentials
+                key: password
+                optional: true
+        volumeMounts:
+        - name: config-volume
           mountPath: /etc/rdpgw-auth.yaml
           subPath: rdpgw-auth.yaml
+        - name: smb-conf
+          mountPath: /etc/samba
+        - name: samba-state
+          mountPath: /var/lib/samba
+        - name: auth-socket
+          mountPath: /tmp
       volumes:
-      - name: config
-        configMap:
-          name: rdpgw-auth-config
+      - name: auth-socket
+        emptyDir: {}
+      - name: samba-state
+        persistentVolumeClaim:
+          claimName: rdpgw-samba-state-pvc
 ```
+
+#### Automatic vs. Manual Join Behavior
+
+- **Automatic Join**: When `AD_JOIN_USER` and `AD_JOIN_PASSWORD` are defined, the container checks `net ads testjoin`. If unjoined, it runs `net ads join` automatically during startup, saves the domain trust machine credentials to `/var/lib/samba/private/secrets.tdb`, and launches `winbindd`.
+- **Manual Join**: If join credentials are not defined in the environment, the container starts, creates required Samba directories (`/var/lib/samba/private`, `/var/lib/samba/winbindd_privileged`), and waits cleanly without crashlooping:
+  ```text
+  Domain join state (/var/lib/samba/private/secrets.tdb) not found.
+  Waiting for manual domain join (exec into the container and run: net ads join -U Administrator)...
+  ```
+  You can exec into the container and run `net ads join -U Administrator` manually. As soon as the join completes, the startup script automatically detects `secrets.tdb` and starts `winbindd` and `rdpgw-auth`.
+- **Persistent Trust**: Because `/var/lib/samba` is mounted on a persistent volume, domain join is a one-time operation. Pod restarts will automatically detect the existing join state and start immediately without re-joining.
 
 ## Client Configuration
 
