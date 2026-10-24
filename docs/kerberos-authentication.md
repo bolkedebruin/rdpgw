@@ -2,7 +2,7 @@
 
 ![Kerberos](images/flow-kerberos.svg)
 
-RDPGW supports Kerberos authentication via SPNEGO for seamless integration with Active Directory and other Kerberos environments, including built-in KDC Proxy support (`/KdcProxy`).
+RDPGW supports Kerberos authentication via SPNEGO for seamless integration with Active Directory and other Kerberos environments, including built-in KDC Proxy support (`/KdcProxy`) and stacked NTLM fallback.
 
 ## Important Notes
 
@@ -124,6 +124,20 @@ Kerberos:
   Krb5conf: /etc/krb5.conf
 Caps:
   TokenAuth: false
+```
+
+#### Stacked Authentication (Kerberos + NTLM Fallback)
+RDPGW supports stacking Kerberos and NTLM authentication simultaneously. Non-domain-joined clients seamlessly fall back to NTLM via Samba winbind (`/tmp/rdpgw-auth.sock`), while domain-joined clients use SPNEGO/Kerberos via KDC Proxy.
+
+```yaml
+Server:
+  Authentication:
+    - kerberos
+    - ntlm
+  AuthSocket: /tmp/rdpgw-auth.sock
+Kerberos:
+  Keytab: /etc/kerberos/rdpgw.keytab
+  Krb5conf: /etc/kerberos/krb5.conf
 ```
 
 ## Authentication Flow

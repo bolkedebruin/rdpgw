@@ -117,30 +117,50 @@ func (k *KerberosProxy) forward(realm string, data []byte) (resp []byte, err err
 		realm = k.krb5Config.LibDefaults.DefaultRealm
 	}
 
-	// load udp first as is the default for kerberos
-	_, udpKdcs, err := k.krb5Config.GetKDCs(realm, false)
-	if err != nil {
-		return nil, fmt.Errorf("cannot get udp kdc for realm %s due to %s", realm, err)
-	}
-
-	// load tcp
+	// Prefer TCP KDCs first: MS-KKDCP messages are already framed with a
+	// 4-byte TCP length prefix, and Active Directory UDP KDCs reply faster
+	// than TCP (no handshake) with KRB5KRB_ERR_RESPONSE_TOO_BIG whenever a
+	// ticket with PAC exceeds ~1465 bytes. Since KDC Proxy clients cannot
+	// force the proxy to switch transports on retry, racing UDP against TCP
+	// causes UDP's ERR_RESPONSE_TOO_BIG to win the race and break logon.
 	_, tcpKdcs, err := k.krb5Config.GetKDCs(realm, true)
 	if err != nil {
 		return nil, fmt.Errorf("cannot get tcp kdc for realm %s due to %s", realm, err)
 	}
 
-	var kdcs []Kdc
-	for _, host := range udpKdcs {
-		kdcs = append(kdcs, Kdc{Realm: realm, Host: ensureDefaultPort(host), Proto: "udp"})
-	}
+	var tcpList []Kdc
 	for _, host := range tcpKdcs {
-		kdcs = append(kdcs, Kdc{Realm: realm, Host: ensureDefaultPort(host), Proto: "tcp"})
+		tcpList = append(tcpList, Kdc{Realm: realm, Host: ensureDefaultPort(host), Proto: "tcp"})
+	}
+	if len(tcpList) > 0 {
+		if reply := sendToKdcs(tcpList, data); reply != nil {
+			return reply, nil
+		}
 	}
 
-	if len(kdcs) == 0 {
+	// Fall back to UDP only if TCP KDCs did not respond
+	_, udpKdcs, err := k.krb5Config.GetKDCs(realm, false)
+	if err != nil {
+		return nil, fmt.Errorf("cannot get udp kdc for realm %s due to %s", realm, err)
+	}
+
+	var udpList []Kdc
+	for _, host := range udpKdcs {
+		udpList = append(udpList, Kdc{Realm: realm, Host: ensureDefaultPort(host), Proto: "udp"})
+	}
+	if len(udpList) == 0 && len(tcpList) == 0 {
 		return nil, fmt.Errorf("cannot get any kdcs (tcp or udp) for realm %s", realm)
 	}
+	if len(udpList) > 0 {
+		if reply := sendToKdcs(udpList, data); reply != nil {
+			return reply, nil
+		}
+	}
 
+	return nil, fmt.Errorf("no replies received from kdcs for realm %s", realm)
+}
+
+func sendToKdcs(kdcs []Kdc, data []byte) []byte {
 	replies := make(chan []byte, len(kdcs))
 	active := 0
 	for i := range kdcs {
@@ -192,11 +212,7 @@ func (k *KerberosProxy) forward(realm string, data []byte) (resp []byte, err err
 		}
 	}
 
-	if reply != nil {
-		return reply, nil
-	}
-
-	return nil, fmt.Errorf("no replies received from kdcs for realm %s", realm)
+	return reply
 }
 
 func ensureDefaultPort(host string) string {

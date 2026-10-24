@@ -1,7 +1,9 @@
 package web
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"log"
 	"net"
@@ -14,6 +16,33 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
+
+var ntlmsspSignature = []byte("NTLMSSP\x00")
+
+// NegotiateAuthDispatcher inspects an "Authorization: Negotiate <token>"
+// header and routes NTLMSSP tokens (raw or SPNEGO-wrapped) to ntlmHandler
+// (when configured) and Kerberos SPNEGO tokens to spnegoHandler.
+func NegotiateAuthDispatcher(spnegoHandler http.Handler, ntlmHandler http.HandlerFunc) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if ntlmHandler != nil && isNegotiateNTLMSSP(r.Header.Get("Authorization")) {
+			ntlmHandler.ServeHTTP(w, r)
+			return
+		}
+		spnegoHandler.ServeHTTP(w, r)
+	})
+}
+
+func isNegotiateNTLMSSP(authHeader string) bool {
+	const prefix = "Negotiate "
+	if !strings.HasPrefix(authHeader, prefix) {
+		return false
+	}
+	raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(authHeader[len(prefix):]))
+	if err != nil {
+		return false
+	}
+	return bytes.Contains(raw, ntlmsspSignature)
+}
 
 type ntlmAuthMode uint32
 const (
@@ -57,7 +86,13 @@ func (h *NTLMAuthHandler) getAuthPayload(r *http.Request) (payload string, authM
 		return authorisationEncoded[len(ntlmPrefix):], authNTLM, nil
 	}
 	if strings.HasPrefix(authorisationEncoded, negotiatePrefix) {
-		return authorisationEncoded[len(negotiatePrefix):], authNegotiate, nil
+		token := strings.TrimSpace(authorisationEncoded[len(negotiatePrefix):])
+		if raw, decErr := base64.StdEncoding.DecodeString(token); decErr == nil {
+			if idx := bytes.Index(raw, ntlmsspSignature); idx > 0 {
+				token = base64.StdEncoding.EncodeToString(raw[idx:])
+			}
+		}
+		return token, authNegotiate, nil
 	}
 	return "", authNone, errors.New("Invalid NTLM Authorisation header")
 }
@@ -100,7 +135,16 @@ func (h *NTLMAuthHandler) authenticate(w http.ResponseWriter, r *http.Request, a
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(h.Timeout))
 	defer cancel()
 
-	req := &auth.NtlmRequest{Session: r.RemoteAddr, NtlmMessage: authorisationEncoded}
+	sessionKey := r.RemoteAddr
+	if connId := r.Header.Get("Rdg-Connection-Id"); connId != "" {
+		sessionKey = connId + ":" + r.Method
+	} else if id := identity.FromRequestCtx(r); id != nil {
+		if clientIp, ok := id.GetAttribute(identity.AttrClientIp).(string); ok && clientIp != "" {
+			sessionKey = clientIp
+		}
+	}
+
+	req := &auth.NtlmRequest{Session: sessionKey, NtlmMessage: authorisationEncoded}
 	res, err := c.NTLM(ctx, req)
 	if err != nil {
 		log.Printf("Error talking to authentication provider: %s", err)
