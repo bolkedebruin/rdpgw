@@ -11,9 +11,7 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/bolkedebruin/gokrb5/v8/keytab"
 	"github.com/bolkedebruin/gokrb5/v8/service"
-	"github.com/bolkedebruin/gokrb5/v8/spnego"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/config"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/kdcproxy"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/protocol"
@@ -322,13 +320,10 @@ func main() {
 	// spnego / kerberos
 	if conf.Server.KerberosEnabled() {
 		log.Printf("enabling kerberos authentication")
-		keytab, err := keytab.Load(conf.Kerberos.Keytab)
-		if err != nil {
-			log.Fatalf("Cannot load keytab: %s", err)
-		}
-		spnegoHandler := spnego.SPNEGOKRB5Authenticate(
+		keytabProvider := web.NewDynamicKeytabProvider(conf.Kerberos.Keytab)
+		spnegoHandler := web.DynamicSPNEGOKRB5Authenticate(
 			web.TransposeSPNEGOContext(http.HandlerFunc(gw.HandleGatewayProtocol)),
-			keytab,
+			keytabProvider,
 			service.Logger(log.Default()))
 		rdp.NewRoute().HeadersRegexp("Authorization", "Negotiate").Handler(
 			web.NegotiateAuthDispatcher(spnegoHandler, ntlmHandler))

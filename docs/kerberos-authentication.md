@@ -52,7 +52,7 @@ Service principals (SPNs) identify the gateway service in the Kerberos realm. De
 
 #### Method A: Active Directory Domain Join & Samba (`net ads`)
 When using `rdpgw-auth-winbind` or a domain-joined Linux gateway, joining the domain automatically creates the computer object and principal in Active Directory.
-- **`net ads setspn add`**: Note that running `net ads setspn add` registers the SPN directly on the domain computer object in Active Directory on the Domain Controller (DC), not just locally in the keytab.
+- **`net ads setspn add`**: Note that running `net ads setspn add` (or letting the container startup script automatically manage SPNs based on `GatewayAddress`) registers the SPN directly on the domain computer object in Active Directory on the Domain Controller (DC), not just locally in the keytab.
 
 ```bash
 # Join domain (if not already joined via AD_JOIN_USER env var)
@@ -139,6 +139,11 @@ Kerberos:
   Keytab: /etc/kerberos/rdpgw.keytab
   Krb5conf: /etc/kerberos/krb5.conf
 ```
+
+#### Dynamic Keytab Loading & SPN Management
+When deploying with Active Directory winbind (`rdpgw-auth-winbind`), RDPGW supports dynamic keytab reloading. The gateway automatically detects updates to the keytab file (e.g. when Samba refreshes the machine account keytab or adds SPNs).
+
+Additionally, the startup script automatically inspects `rdpgw.yaml`'s `GatewayAddress` setting, extracts the gateway FQDN, automatically requests an SPN (`HTTP/<GatewayAddress>`), and registers it both in Active Directory and the keytab. Additional SPNs can be provided via the `KERBEROS_SPNS` environment variable.
 
 ## Authentication Flow
 

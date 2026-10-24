@@ -8,14 +8,93 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/bolkedebruin/gokrb5/v8/keytab"
+	"github.com/bolkedebruin/gokrb5/v8/service"
+	"github.com/bolkedebruin/gokrb5/v8/spnego"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/identity"
 	"github.com/bolkedebruin/rdpgw/shared/auth"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
+
+// DynamicKeytabProvider reloads the keytab file automatically whenever its
+// modtime changes on disk (e.g. when Samba / winbind refreshes the machine
+// keytab).
+type DynamicKeytabProvider struct {
+	path       string
+	mu         sync.RWMutex
+	lastMod    time.Time
+	cached     *keytab.Keytab
+}
+
+func NewDynamicKeytabProvider(path string) *DynamicKeytabProvider {
+	return &DynamicKeytabProvider{path: path}
+}
+
+func (p *DynamicKeytabProvider) GetKeytab() (*keytab.Keytab, error) {
+	p.mu.RLock()
+	st, err := os.Stat(p.path)
+	if err == nil && st.ModTime().Equal(p.lastMod) && p.cached != nil {
+		kt := p.cached
+		p.mu.RUnlock()
+		return kt, nil
+	}
+	p.mu.RUnlock()
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	st, err = os.Stat(p.path)
+	if err != nil {
+		if p.cached != nil {
+			return p.cached, nil
+		}
+		// Log as info/warning once or periodically, avoiding spamming logs every request if missing
+		return nil, err
+	}
+
+	if st.ModTime().Equal(p.lastMod) && p.cached != nil {
+		return p.cached, nil
+	}
+
+	kt, err := keytab.Load(p.path)
+	if err != nil {
+		log.Printf("keytab reload from %s failed: %v", p.path, err)
+		if p.cached != nil {
+			return p.cached, nil
+		}
+		return nil, err
+	}
+
+	log.Printf("Loaded keytab from %s (modtime: %s)", p.path, st.ModTime().Format(time.RFC3339))
+	p.lastMod = st.ModTime()
+	p.cached = kt
+	return p.cached, nil
+}
+
+// DynamicSPNEGOKRB5Authenticate wraps spnego.SPNEGOKRB5Authenticate to
+// transparently re-evaluate the keytab from DynamicKeytabProvider on each request.
+func DynamicSPNEGOKRB5Authenticate(next http.Handler, provider *DynamicKeytabProvider, options ...func(*service.Settings)) http.Handler {
+	var lastWarn time.Time
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		kt, err := provider.GetKeytab()
+		if err != nil {
+			if time.Since(lastWarn) > 10*time.Second {
+				log.Printf("SPNEGO: keytab waiting to be created at %s: %v", provider.path, err)
+				lastWarn = time.Now()
+			}
+			http.Error(w, "Service Unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		h := spnego.SPNEGOKRB5Authenticate(next, kt, options...)
+		h.ServeHTTP(w, r)
+	})
+}
 
 var ntlmsspSignature = []byte("NTLMSSP\x00")
 
