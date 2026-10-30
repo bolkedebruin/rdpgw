@@ -42,8 +42,6 @@ Winbind:
     - host: "dc2.example.corp.local"
       port: 88
       adminPort: 749
-  spns:                                 # SPNs to register in AD and add to keytab
-    - "HTTP/rdpgw.example.corp.local"
 
 # 2. LDAP Directories (Multiple allowed)
 Ldap:
@@ -76,6 +74,8 @@ AuthProtocols:
   Kerberos:
     share: true                         # When true, injects keytab sync directives into smb.conf
     keytabPath: "/var/lib/samba/rdpgw.keytab" # Path where the shared keytab is stored
+    spns:                               # SPNs to register in AD and add to the shared keytab
+      - "HTTP/rdpgw.example.corp.local" # (only meaningful when share: true)
 
   # NTLM Protocol: Ordered list of NT-hash capable backends (fully sortable/combinable)
   Ntlm:
@@ -138,7 +138,14 @@ type WinbindConfig struct {
     StripDomain        bool                 `koanf:"stripdomain"`
     Separator          string               `koanf:"separator"`
     DomainControllers  []DomainController   `koanf:"domaincontrollers"`
-    Spns               []string             `koanf:"spns"`
+}
+
+// SPNs live under AuthProtocols.Kerberos: registering them is only
+// meaningful when the machine keytab is shared with the gateway.
+type KerberosProtocolConfig struct {
+    Share      bool     `koanf:"share"`
+    KeytabPath string   `koanf:"keytabpath"`
+    Spns       []string `koanf:"spns"`
 }
 
 type DomainController struct {

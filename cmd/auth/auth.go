@@ -4,18 +4,21 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
+	"net"
+	"os"
+	"strings"
+	"syscall"
+	"time"
+
 	"github.com/bolkedebruin/rdpgw/cmd/auth/config"
 	"github.com/bolkedebruin/rdpgw/cmd/auth/database"
 	"github.com/bolkedebruin/rdpgw/cmd/auth/ntlm"
 	"github.com/bolkedebruin/rdpgw/shared/auth"
 	"github.com/msteinert/pam/v2"
+	"github.com/samber/lo"
 	"github.com/thought-machine/go-flags"
 	"google.golang.org/grpc"
-	"log"
-	"net"
-	"os"
-	"syscall"
-	"time"
 )
 
 const (
@@ -48,28 +51,81 @@ func NewAuthService(serviceName string, backend ntlm.Backend) auth.AuthenticateS
 	return s
 }
 
-// newNtlmBackend picks the NTLM verifier from the configuration: the
-// in-process verifier fed by the Users list, or Samba's ntlm_auth helper
-// which asks the Active Directory domain controller via winbindd.
+// newNtlmBackend maps AuthProtocols.Ntlm onto NTLM verifiers. Backends
+// entries map to verifiers in order: "winbind" to Samba's ntlm_auth helper
+// (which asks the domain controller via winbindd; the gateway never sees
+// any password), "users" to the in-process verifier fed by the Users list.
+// A configuration with a single usable backend returns that backend
+// directly; multiple usable backends are chained with the ordered
+// alternative/exclusive execution. Whenever NTLM is unusable — the protocol
+// is not configured, explicitly disabled, or no listed backend could be
+// built — an explicit-denial NullBackend is installed so the auth service
+// stays up and reports the misconfiguration instead of silently falling
+// back to another verifier.
 func newNtlmBackend(conf config.Configuration) ntlm.Backend {
-	switch conf.Ntlm.Backend {
-	case config.NtlmBackendWinbind:
-		w := conf.Ntlm.Winbind
-		log.Printf("NTLM: using winbind backend (%s)", w.NtlmAuthPath)
-		if len(conf.Users) > 0 {
+	ntlmProto := conf.AuthProtocols
+	switch {
+	case ntlmProto == nil || ntlmProto.Ntlm == nil:
+		// AuthProtocols absent, or only other protocols (e.g. Kerberos) enabled.
+		return &ntlm.NullBackend{Reason: "AuthProtocols.Ntlm is not configured"}
+	case !ntlmProto.Ntlm.Enabled:
+		// Disabled means disabled: NTLM handshakes must be denied, never
+		// served by a lucky fallback verifier.
+		return &ntlm.NullBackend{Reason: "AuthProtocols.Ntlm is disabled by configuration"}
+	default:
+		var chain []ntlm.Backend
+		var usingUsersBackend bool
+
+		backends := lo.Map(ntlmProto.Ntlm.Backends, func(b string, _ int) string { return strings.ToLower(b) })
+		backends = lo.Uniq(backends)
+
+		for _, b := range backends {
+			switch b {
+			case config.NtlmBackendWinbind:
+				w := conf.Winbind
+				if w == nil {
+					// Validation guarantees Winbind presence; skip defensively.
+					log.Printf("NTLM: winbind backend requested but Winbind is not configured, skipping")
+					continue
+				}
+				log.Printf("NTLM: using winbind backend (%s)", w.NtlmAuthPath)
+				sep := w.Separator
+				if sep == 0 {
+					sep = config.DefaultSeparator
+				}
+				chain = append(chain, &ntlm.WinbindBackend{
+					NtlmAuthPath:        w.NtlmAuthPath,
+					Domain:              w.Workgroup, // legacy ntlm_auth --domain (NetBIOS workgroup)
+					RequireMembershipOf: w.RequireMembershipOf,
+					Timeout:             time.Duration(w.Timeout) * time.Second,
+					StripDomain:         w.StripDomain,
+					Separator:           sep.String(),
+				})
+			case config.NtlmBackendUsers, config.NtlmBackendLegacyFile:
+				usingUsersBackend = true
+				if len(conf.Users) > 0 {
+					log.Printf("NTLM: using users backend with %d user(s)", len(conf.Users))
+				} else {
+					log.Printf("NTLM: warning: using users backend without users")
+				}
+				chain = append(chain, ntlm.NewLocalBackend(database.NewConfig(conf.Users)))
+			default:
+				log.Printf("NTLM: warning: unknown backend %q skipped", b)
+			}
+		}
+
+		if !usingUsersBackend && len(conf.Users) > 0 {
 			log.Printf("NTLM: warning: Users list is ignored with the winbind backend")
 		}
-		return &ntlm.WinbindBackend{
-			NtlmAuthPath:        w.NtlmAuthPath,
-			Domain:              w.Domain,
-			RequireMembershipOf: w.RequireMembershipOf,
-			Timeout:             time.Duration(w.Timeout) * time.Second,
-			StripDomain:         w.StripDomain,
-			Separator:           w.Separator,
+
+		switch len(chain) {
+		case 0:
+			return &ntlm.NullBackend{Reason: fmt.Sprintf("AuthProtocols.Ntlm contains no usable backend (configured: %v)", backends)}
+		case 1:
+			return chain[0]
+		default:
+			return ntlm.NewOrderedBackend(chain...)
 		}
-	default:
-		log.Printf("NTLM: using file backend with %d user(s)", len(conf.Users))
-		return ntlm.NewLocalBackend(database.NewConfig(conf.Users))
 	}
 }
 
