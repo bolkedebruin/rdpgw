@@ -1,0 +1,7 @@
+# Bugs
+
+## Kerberos login passes FQDN domain instead of original username
+
+When logging using Kerberos and passing a user in the format `<workgroup>\<username>`, SPNEGO succeeds, but when the user is passed down to the remote machine in the login screen you see `<domainfdqn>\<username>`.
+
+Instead the original username should be passed down.
