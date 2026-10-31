@@ -73,8 +73,8 @@ func peerCred(conn net.Conn) (*unix.Ucred, error) {
 		return nil, err
 	}
 	var (
-		ucred    *unix.Ucred
-		credErr  error
+		ucred   *unix.Ucred
+		credErr error
 	)
 	ctrlErr := raw.Control(func(fd uintptr) {
 		ucred, credErr = unix.GetsockoptUcred(int(fd), unix.SOL_SOCKET, unix.SO_PEERCRED)

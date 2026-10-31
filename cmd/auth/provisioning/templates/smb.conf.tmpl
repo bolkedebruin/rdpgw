@@ -1,0 +1,32 @@
+[global]
+    security = ads
+    realm = {{ .Realm }}
+    workgroup = {{ .Workgroup }}
+    {{- if .Hostname }}
+    netbios name = {{ .Hostname }}
+    {{- end }}
+    winbind use default domain = no
+    # NOTE: do not couple this directive with rdpgw's stripDomain config knob:
+    # stripDomain normalizes the DOMAIN<separator> prefix rdpgw-auth sees
+    # *outside* winbindd, leaving this samba-side reporting unchanged. Flipping
+    # it to "yes" would collapse separator/stripDomain semantics host-wide
+    # (NSS/PAM included) and is not what the gateway pipeline expects.
+{{- if .SeparatorDirective }}
+    winbind separator = {{ .SeparatorDirective }}
+{{- else }}
+    # winbind separator omitted on purpose: smb.conf has no escape syntax, a
+    # line ending in a backslash would continue onto the next line, so the
+    # samba default separator (backslash) is expressed by NOT writing it.
+{{- end }}
+    idmap config * : backend = tdb
+    idmap config * : range = 3000-7999
+    idmap config {{ .Workgroup }} : backend = rid
+    idmap config {{ .Workgroup }} : range = 10000-999999
+    kerberos method = secrets and keytab
+{{- if .KerberosShare }}
+    # The gateway reads the machine keytab rdpgw keeps synchronized when the
+    # machine account password rotates; never serve it through winbind itself.
+    dedicated keytab file = {{ .KeytabPath }}
+    sync machine password to keytab = "{{ .KeytabPath }}:sync_spns:sync_kvno:machine_password"
+{{- end }}
+    winbind refresh tickets = yes

@@ -1,0 +1,16 @@
+[libdefaults]
+    default_realm = {{ .Realm }}
+    dns_lookup_realm = true
+    dns_lookup_kdc = true
+
+[realms]
+    {{ .Realm }} = {
+{{- range .DomainControllers }}
+        kdc = {{ .Host }}:{{ .Port }}
+        admin_server = {{ .Host }}:{{ .AdminPort }}
+{{- end }}
+    }
+
+[domain_realm]
+    .{{ .Domain }} = {{ .Realm }}
+    {{ .Domain }} = {{ .Realm }}

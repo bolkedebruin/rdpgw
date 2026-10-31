@@ -26,7 +26,10 @@ const (
 	// Default configuration constants
 	DefaultNtlmAuthPath   = "/usr/bin/ntlm_auth"
 	DefaultWinbindTimeout = 10
-	// DefaultSeparator matches winbind's own documented default.
+	// DefaultSeparator matches winbind's own documented default. A backslash
+	// separator is rendered by OMITTING the smb.conf directive (the file
+	// parser has no escape syntax and any line ending in a backslash
+	// continues onto the next line); see cmd/auth/provisioning.
 	DefaultSeparator    SingleChar = '\\'
 	DefaultSharedKeytab            = "/var/lib/samba/rdpgw.keytab"
 	DefaultKdcPort                 = 88

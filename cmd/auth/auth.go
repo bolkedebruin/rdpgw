@@ -14,6 +14,7 @@ import (
 	"github.com/bolkedebruin/rdpgw/cmd/auth/config"
 	"github.com/bolkedebruin/rdpgw/cmd/auth/database"
 	"github.com/bolkedebruin/rdpgw/cmd/auth/ntlm"
+	"github.com/bolkedebruin/rdpgw/cmd/auth/provisioning"
 	"github.com/bolkedebruin/rdpgw/shared/auth"
 	"github.com/msteinert/pam/v2"
 	"github.com/samber/lo"
@@ -200,6 +201,13 @@ func main() {
 	}
 
 	conf = config.Load(opts.ConfigFile)
+
+	// Stage and reconcile samba/kerberos files before any
+	// join or supervision happens (Milestones 3+). Without winbind
+	// capability this is a logged no-op.
+	if err := provisioning.Provision(conf); err != nil {
+		log.Fatalf("Provisioning failed: %v", err)
+	}
 
 	log.Printf("Starting auth server on %s", opts.SocketAddr)
 	cleanup := func() {

@@ -219,7 +219,7 @@ Kerberos SPNEGO in `rdpgw` requires that Samba's machine credentials sync automa
     - Go attempts to append/fix them if writable.
     - If the file is mounted read-only and missing these directives or misconfigured, **`auth` explodes and terminates immediately (`log.Fatalf`)** with an actionable fatal error containing instructions on how to configure or call services.
 
-### 4.3 Embedded Templates (`cmd/auth/templates/`)
+### 4.3 Embedded Templates (`cmd/auth/provisioning/templates/`)
 Using Go `embed` (`//go:embed`):
 1. **`smb.conf.tmpl`**:
    ```ini
