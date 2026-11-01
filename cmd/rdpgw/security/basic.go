@@ -18,8 +18,23 @@ func CheckHost(ctx context.Context, host string) (bool, error) {
 	case "any":
 		return true, nil
 	case "signed":
-		// todo get from context?
-		return false, errors.New("cannot verify host in 'signed' mode as token data is missing")
+		// In signed mode the host is resolved from the signed query token at
+		// /connect and bound into the PAA token as RemoteServer. CheckPAACookie
+		// copies it to tunnel.TargetServer, so the channel request must match it
+		// and must still be on the configured allow-list.
+		t := getTunnel(ctx)
+		if t == nil || t.TargetServer == "" {
+			return false, errors.New("no token-bound target host found in context")
+		}
+		if t.TargetServer != host {
+			return false, fmt.Errorf("host %s does not match token host %s", host, t.TargetServer)
+		}
+		for _, h := range Hosts {
+			if h == host {
+				return true, nil
+			}
+		}
+		return false, fmt.Errorf("invalid host %s", host)
 	case "roundrobin", "unsigned":
 		s := getTunnel(ctx)
 		if s.User.UserName() == "" {
