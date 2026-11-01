@@ -47,7 +47,8 @@ against PAM. This requires, to ensure privilege separation, that ```rdpgw-auth``
 valid PAM configuration is provided per typical configuration.
 
 If NTLM authentication is used, the allowed user credentials for the gateway should be configured in the 
-configuration file of `rdpgw-auth`.
+configuration file of `rdpgw-auth`. Alternatively, `rdpgw-auth` can verify NTLM logons against Active Directory
+through Samba winbind, in which case no passwords are stored on the gateway.
 
 Finally, RDP hosts that the client wants to connect to are verified against what was provided by / allowed by
 the server. Next to that the client's ip address needs to match the one it obtained the gateway token with if
@@ -95,6 +96,9 @@ For detailed PAM setup including LDAP integration, container deployment, and com
 ### NTLM Authentication
 
 For detailed NTLM setup including user management, security considerations, and deployment options, see the [NTLM Authentication Documentation](docs/ntlm-authentication.md).
+NTLM logons can be verified against a local user list or against Microsoft Active Directory via Samba winbind
+(`Ntlm.Backend: winbind` in the `rdpgw-auth` configuration); see
+[Active Directory Authentication via Winbind](docs/ntlm-authentication.md#active-directory-authentication-via-winbind).
 
 ### Header Authentication (Proxy Integration)
 
@@ -270,6 +274,16 @@ cd rdpgw
 make
 make install
 ```
+
+## Continuous Integration
+
+GitHub Actions workflows are defined in `.github/workflows/`:
+
+* **Go** (`.github/workflows/go.yml`): builds and tests the Go code. Runs on pull requests against `master` and on version tags (`v*`). Uses concurrency groups so that new commits to an open PR cancel the previous in-progress run for that branch.
+* **Docker Image** (`.github/workflows/docker-image.yml`): builds and pushes multi-architecture (amd64, arm64) container images to GHCR (`ghcr.io`). Runs on pull requests against `master`, on version tags (`v*`), and can be triggered manually via `workflow_dispatch`.
+* **CodeQL** (`.github/workflows/codeql-analysis.yml`): runs a weekly scheduled security scan of the Go codebase (every Wednesday at 22:22 UTC) on the default branch.
+
+The repository also tracks `go.sum` in version control for reproducible builds.
 
 ## Testing locally
 A convenience docker-compose allows you to test the RDPGW locally. It uses [Keycloak](http://www.keycloak.org) 

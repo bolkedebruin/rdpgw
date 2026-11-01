@@ -41,6 +41,14 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ### Added
 
+- `rdpgw-auth`: NTLM logons can now be verified against Active Directory
+  via Samba winbind (`Ntlm.Backend: winbind`). The helper delegates the
+  handshake to `ntlm_auth`, so no passwords are stored on the gateway.
+  New settings: `Ntlm.Backend` (default `file`, the existing behavior),
+  `Ntlm.Winbind.NtlmAuthPath`, `Ntlm.Winbind.Domain`,
+  `Ntlm.Winbind.RequireMembershipOf`, `Ntlm.Winbind.Timeout`,
+  `Ntlm.Winbind.StripDomain`, `Ntlm.Winbind.Separator`. See
+  [docs/ntlm-authentication.md](docs/ntlm-authentication.md).
 - `rdpgw-auth --allow-uid` and `--allow-gid` flags (repeatable).
 - `Server.TrustedProxies` (`[]string`, CIDR, default empty).
 - `Server.AllowedDestinationPorts` (`[]int`, default `[3389]`).

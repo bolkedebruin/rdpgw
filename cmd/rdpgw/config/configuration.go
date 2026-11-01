@@ -300,10 +300,6 @@ func Load(configFile string) Configuration {
 		log.Fatalf("basicauth=local and tls=disable are mutually exclusive")
 	}
 
-	if Conf.Server.NtlmEnabled() && Conf.Server.KerberosEnabled() {
-		log.Fatalf("ntlm and kerberos authentication are not stackable")
-	}
-
 	if !Conf.Caps.TokenAuth && Conf.Server.OpenIDEnabled() {
 		log.Fatalf("openid is configured but tokenauth disabled")
 	}

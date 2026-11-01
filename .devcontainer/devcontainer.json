@@ -1,0 +1,22 @@
+{
+  "name": "rdpgw",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "remoteUser": "vscode",
+  "containerEnv": {
+    "CGO_ENABLED": "1"
+  },
+  "forwardPorts": [443],
+  "postCreateCommand": "make mod",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "golang.go"
+      ],
+      "settings": {
+        "go.toolsManagement.autoUpdate": true
+      }
+    }
+  }
+}

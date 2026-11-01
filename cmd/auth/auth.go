@@ -15,6 +15,7 @@ import (
 	"net"
 	"os"
 	"syscall"
+	"time"
 )
 
 const (
@@ -33,18 +34,43 @@ type AuthServiceImpl struct {
 	auth.UnimplementedAuthenticateServer
 
 	serviceName string
-	ntlm *ntlm.NTLMAuth
+	ntlm        *ntlm.NTLMAuth
 }
 
 var conf config.Configuration
 var _ auth.AuthenticateServer = (*AuthServiceImpl)(nil)
 
-func NewAuthService(serviceName string, database database.Database) auth.AuthenticateServer {
+func NewAuthService(serviceName string, backend ntlm.Backend) auth.AuthenticateServer {
 	s := &AuthServiceImpl{
 		serviceName: serviceName,
-		ntlm: ntlm.NewNTLMAuth(database),
+		ntlm:        ntlm.NewNTLMAuthWithBackend(backend),
 	}
 	return s
+}
+
+// newNtlmBackend picks the NTLM verifier from the configuration: the
+// in-process verifier fed by the Users list, or Samba's ntlm_auth helper
+// which asks the Active Directory domain controller via winbindd.
+func newNtlmBackend(conf config.Configuration) ntlm.Backend {
+	switch conf.Ntlm.Backend {
+	case config.NtlmBackendWinbind:
+		w := conf.Ntlm.Winbind
+		log.Printf("NTLM: using winbind backend (%s)", w.NtlmAuthPath)
+		if len(conf.Users) > 0 {
+			log.Printf("NTLM: warning: Users list is ignored with the winbind backend")
+		}
+		return &ntlm.WinbindBackend{
+			NtlmAuthPath:        w.NtlmAuthPath,
+			Domain:              w.Domain,
+			RequireMembershipOf: w.RequireMembershipOf,
+			Timeout:             time.Duration(w.Timeout) * time.Second,
+			StripDomain:         w.StripDomain,
+			Separator:           w.Separator,
+		}
+	default:
+		log.Printf("NTLM: using file backend with %d user(s)", len(conf.Users))
+		return ntlm.NewLocalBackend(database.NewConfig(conf.Users))
+	}
 }
 
 func (s *AuthServiceImpl) Authenticate(ctx context.Context, message *auth.UserPass) (*auth.AuthResponse, error) {
@@ -143,8 +169,7 @@ func main() {
 	listener = newGatedListener(listener, allowedUIDs, opts.AllowGID)
 
 	server := grpc.NewServer()
-	db := database.NewConfig(conf.Users)
-	service := NewAuthService(opts.ServiceName, db)
+	service := NewAuthService(opts.ServiceName, newNtlmBackend(conf))
 	auth.RegisterAuthenticateServer(server, service)
 	server.Serve(listener)
 }

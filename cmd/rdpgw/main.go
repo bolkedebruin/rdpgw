@@ -11,9 +11,7 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/bolkedebruin/gokrb5/v8/keytab"
 	"github.com/bolkedebruin/gokrb5/v8/service"
-	"github.com/bolkedebruin/gokrb5/v8/spnego"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/config"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/kdcproxy"
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/protocol"
@@ -293,14 +291,22 @@ func main() {
 	rdp.MatcherFunc(web.NoAuthz).HandlerFunc(auth.SetAuthenticate)
 
 	// ntlm
+	var ntlmHandler http.HandlerFunc
 	if conf.Server.NtlmEnabled() {
 		log.Printf("enabling NTLM authentication")
 		ntlm := web.NTLMAuthHandler{SocketAddress: conf.Server.AuthSocket, Timeout: conf.Server.BasicAuthTimeout}
-		rdp.NewRoute().HeadersRegexp("Authorization", "NTLM").HandlerFunc(ntlm.NTLMAuth(gw.HandleGatewayProtocol))
-		rdp.NewRoute().HeadersRegexp("Authorization", "Negotiate").HandlerFunc(ntlm.NTLMAuth(gw.HandleGatewayProtocol))
-		auth.Register([]string{`NTLM`, `Negotiate`}, func(r *http.Request) bool {
-			return r.Header.Get("Sec-WebSocket-Protocol") != "binary" // rdp client for ios is incompatible with this NTLM method.
-		})
+		ntlmHandler = ntlm.NTLMAuth(gw.HandleGatewayProtocol)
+		rdp.NewRoute().HeadersRegexp("Authorization", "NTLM").HandlerFunc(ntlmHandler)
+		if !conf.Server.KerberosEnabled() {
+			rdp.NewRoute().HeadersRegexp("Authorization", "Negotiate").HandlerFunc(ntlmHandler)
+			auth.Register([]string{`NTLM`, `Negotiate`}, func(r *http.Request) bool {
+				return r.Header.Get("Sec-WebSocket-Protocol") != "binary" // rdp client for ios is incompatible with this NTLM method.
+			})
+		} else {
+			auth.Register([]string{`NTLM`}, func(r *http.Request) bool {
+				return r.Header.Get("Sec-WebSocket-Protocol") != "binary"
+			})
+		}
 	}
 
 	// basic auth
@@ -314,14 +320,13 @@ func main() {
 	// spnego / kerberos
 	if conf.Server.KerberosEnabled() {
 		log.Printf("enabling kerberos authentication")
-		keytab, err := keytab.Load(conf.Kerberos.Keytab)
-		if err != nil {
-			log.Fatalf("Cannot load keytab: %s", err)
-		}
+		keytabProvider := web.NewDynamicKeytabProvider(conf.Kerberos.Keytab)
+		spnegoHandler := web.DynamicSPNEGOKRB5Authenticate(
+			web.TransposeSPNEGOContext(http.HandlerFunc(gw.HandleGatewayProtocol)),
+			keytabProvider,
+			service.Logger(log.Default()))
 		rdp.NewRoute().HeadersRegexp("Authorization", "Negotiate").Handler(
-			spnego.SPNEGOKRB5Authenticate(web.TransposeSPNEGOContext(http.HandlerFunc(gw.HandleGatewayProtocol)),
-				keytab,
-				service.Logger(log.Default())))
+			web.NegotiateAuthDispatcher(spnegoHandler, ntlmHandler))
 
 		// kdcproxy
 		k := kdcproxy.InitKdcProxy(conf.Kerberos.Krb5Conf)

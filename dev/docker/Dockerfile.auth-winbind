@@ -1,0 +1,41 @@
+# rdpgw-auth with Samba winbind, for NTLM authentication against
+# Microsoft Active Directory (Ntlm.Backend: winbind).
+#
+# Unlike the other images in this directory, this one builds from the local
+# source tree. Build it from the repository root:
+#
+#   docker build -f dev/docker/Dockerfile.auth-winbind -t rdpgw-auth-winbind .
+#
+# See dev/docker/docker-readme.md for how to run it.
+
+# builder stage
+FROM golang:1.25-alpine AS builder
+
+RUN apk --no-cache add gcc musl-dev linux-pam-dev
+
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=1 GOOS=linux go build -trimpath -o /opt/rdpgw/rdpgw-auth ./cmd/auth
+
+FROM alpine:latest
+
+# samba-winbind provides winbindd, samba-winbind-clients provides
+# ntlm_auth and wbinfo, samba-common-tools provides net (for "net ads join"),
+# ldb-tools provides ldb tools for secrets.ldb initialization,
+# and krb5 is needed to join and talk to the domain.
+RUN apk --no-cache add linux-pam musl tzdata ca-certificates \
+        samba-winbind samba-winbind-clients samba-common-tools ldb-tools krb5 su-exec && \
+    addgroup -S winbindd_priv && \
+    adduser -D -H -h /opt/rdpgw -u 1001 rdpgw && \
+    addgroup rdpgw winbindd_priv
+
+COPY --from=builder /opt/rdpgw/rdpgw-auth /opt/rdpgw/rdpgw-auth
+COPY dev/docker/rdpgw-pam /etc/pam.d/rdpgw
+COPY dev/docker/run-auth-winbind.sh /run-auth-winbind.sh
+
+WORKDIR /opt/rdpgw
+# The entrypoint starts as root so it can run winbindd; rdpgw-auth itself
+# is started as the unprivileged rdpgw user (UID 1001).
+ENTRYPOINT ["/bin/sh", "/run-auth-winbind.sh"]
