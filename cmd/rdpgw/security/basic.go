@@ -29,8 +29,12 @@ func CheckHost(ctx context.Context, host string) (bool, error) {
 		if t.TargetServer != host {
 			return false, fmt.Errorf("host %s does not match token host %s", host, t.TargetServer)
 		}
+		var username string
+		if t.User != nil {
+			username = t.User.UserName()
+		}
 		for _, h := range Hosts {
-			if h == host {
+			if matchSignedHost(h, host, username) {
 				return true, nil
 			}
 		}
@@ -52,4 +56,28 @@ func CheckHost(ctx context.Context, host string) (bool, error) {
 	}
 
 	return false, errors.New("unrecognized host selection criteria")
+}
+
+const usernamePlaceholder = "{{ preferred_username }}"
+
+// matchSignedHost reports whether host matches the allow-list entry for the
+// given PAA token subject. Plain entries must match exactly. Templated entries
+// are expanded at /connect with the full username, while the PAA subject may
+// have been shortened by SplitUserDomain ("alice@corp" -> "alice"), so the
+// substituted part must equal the subject or the subject followed by "@domain".
+func matchSignedHost(entry, host, username string) bool {
+	i := strings.Index(entry, usernamePlaceholder)
+	if i < 0 {
+		return entry == host
+	}
+	if username == "" {
+		return false
+	}
+	prefix, suffix := entry[:i], entry[i+len(usernamePlaceholder):]
+	if len(host) < len(prefix)+len(suffix) ||
+		!strings.HasPrefix(host, prefix) || !strings.HasSuffix(host, suffix) {
+		return false
+	}
+	name := host[len(prefix) : len(host)-len(suffix)]
+	return name == username || strings.HasPrefix(name, username+"@")
 }

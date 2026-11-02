@@ -54,12 +54,14 @@ func TestCheckHostSigned(t *testing.T) {
 	t.Cleanup(func() { HostSelection, Hosts = prevSel, prevHosts })
 
 	HostSelection = "signed"
-	Hosts = []string{"10.0.0.5:3389", "10.0.0.6:3389"}
+	Hosts = []string{"10.0.0.5:3389", "10.0.0.6:3389", "my-{{ preferred_username }}-host:3389"}
 
-	newCtx := func(target string) context.Context {
+	newUserCtx := func(target, user string) context.Context {
 		tun := &protocol.Tunnel{TargetServer: target, User: identity.NewUser()}
+		tun.User.SetUserName(user)
 		return context.WithValue(context.Background(), protocol.CtxTunnel, tun)
 	}
+	newCtx := func(target string) context.Context { return newUserCtx(target, "") }
 
 	cases := []struct {
 		name   string
@@ -72,6 +74,13 @@ func TestCheckHostSigned(t *testing.T) {
 		{"token host not on allow-list", newCtx("10.0.0.9:3389"), "10.0.0.9:3389", false},
 		{"no target bound in token", newCtx(""), "10.0.0.5:3389", false},
 		{"no tunnel in context", context.Background(), "10.0.0.5:3389", false},
+		{"templated host, full username", newUserCtx("my-alice-host:3389", "alice"), "my-alice-host:3389", true},
+		{"templated host, username with domain", newUserCtx("my-alice@corp.com-host:3389", "alice@corp.com"), "my-alice@corp.com-host:3389", true},
+		{"templated host, domain split from subject", newUserCtx("my-alice@corp.com-host:3389", "alice"), "my-alice@corp.com-host:3389", true},
+		{"templated host, other user", newUserCtx("my-alice-host:3389", "bob"), "my-alice-host:3389", false},
+		{"templated host, username prefix only", newUserCtx("my-alice2-host:3389", "alice"), "my-alice2-host:3389", false},
+		{"templated host, no username in token", newUserCtx("my-alice-host:3389", ""), "my-alice-host:3389", false},
+		{"templated host, wrong suffix", newUserCtx("my-alice-other:3389", "alice"), "my-alice-other:3389", false},
 	}
 
 	for _, tc := range cases {
