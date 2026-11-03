@@ -1,5 +1,5 @@
 # builder stage
-FROM golang:1.24-alpine as builder
+FROM golang:1.25-alpine as builder
 
 # Install CA certificates explicitly in builder
 RUN apk --no-cache add git gcc musl-dev linux-pam-dev
