@@ -30,6 +30,7 @@ jobs:
           context: ./dev/docker
           file: ./dev/docker/Dockerfile
           platforms: linux/amd64,linux/arm64
+          build-args: RDPGW_REF=${{ github.sha }}
           push: true
           tags: ${{ github.repository_owner }}/rdpgw:${{ github.ref_type == 'tag' && github.ref_name || 'latest' }}
       - name: Update Docker Hub Description
