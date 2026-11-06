@@ -121,6 +121,10 @@ type OpenIDConfig struct {
 	ProviderUrl  string `koanf:"providerurl"`
 	ClientId     string `koanf:"clientid"`
 	ClientSecret string `koanf:"clientsecret"`
+	// UsernameClaim is the ID token claim that holds the username. When it is
+	// empty, the first of preferred_username, unique_name, upn and username
+	// that is present is used.
+	UsernameClaim string `koanf:"usernameclaim"`
 }
 
 type HeaderConfig struct {

@@ -4,6 +4,8 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -23,17 +25,22 @@ const (
 type OIDC struct {
 	oAuth2Config      *oauth2.Config
 	oidcTokenVerifier *oidc.IDTokenVerifier
+	usernameClaim     string
 }
 
 type OIDCConfig struct {
 	OAuth2Config      *oauth2.Config
 	OIDCTokenVerifier *oidc.IDTokenVerifier
+	// UsernameClaim is the claim that holds the username; empty uses
+	// defaultUsernameClaims
+	UsernameClaim string
 }
 
 func (c *OIDCConfig) New() *OIDC {
 	return &OIDC{
 		oAuth2Config:      c.OAuth2Config,
 		oidcTokenVerifier: c.OIDCTokenVerifier,
+		usernameClaim:     c.UsernameClaim,
 	}
 }
 
@@ -128,9 +135,11 @@ func (h *OIDC) HandleCallback(w http.ResponseWriter, r *http.Request) {
 
 	id := identity.FromRequestCtx(r)
 
-	userName := findUsernameInClaims(data)
-	if userName == "" {
-		http.Error(w, "no oidc claim for username found", http.StatusInternalServerError)
+	userName, err := findUsernameInClaims(data, h.usernameClaim)
+	if err != nil {
+		log.Printf("OIDC HandleCallback: %s", err)
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return
 	}
 
 	id.SetUserName(userName)
@@ -140,21 +149,49 @@ func (h *OIDC) HandleCallback(w http.ResponseWriter, r *http.Request) {
 
 	if err := SaveSessionIdentity(r, w, id); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	http.Redirect(w, r, url, http.StatusFound)
 }
 
-func findUsernameInClaims(data map[string]interface{}) string {
-	candidates := []string{"preferred_username", "unique_name", "upn", "username"}
-	for _, claim := range candidates {
-		userName, found := data[claim].(string)
-		if found {
-			return userName
-		}
+// defaultUsernameClaims are tried in order when no username claim is configured
+var defaultUsernameClaims = []string{"preferred_username", "unique_name", "upn", "username"}
+
+// findUsernameInClaims returns the username from the ID token claims. With
+// claim set only that claim is used, otherwise the first of
+// defaultUsernameClaims that is present. An email address is only accepted
+// when the provider marks it as verified, as many providers let users set it.
+func findUsernameInClaims(data map[string]interface{}, claim string) (string, error) {
+	candidates := defaultUsernameClaims
+	if claim != "" {
+		candidates = []string{claim}
 	}
 
-	return ""
+	for _, c := range candidates {
+		userName, _ := data[c].(string)
+		if userName == "" {
+			continue
+		}
+		if c == "email" && !emailVerified(data) {
+			return "", errors.New("oidc email claim is not verified")
+		}
+		return userName, nil
+	}
+
+	return "", fmt.Errorf("no oidc claim for username found (tried %s)", strings.Join(candidates, ", "))
+}
+
+// emailVerified reports whether the email_verified claim is true. Some
+// providers send it as the string "true" instead of a boolean.
+func emailVerified(data map[string]interface{}) bool {
+	switch v := data["email_verified"].(type) {
+	case bool:
+		return v
+	case string:
+		return v == "true"
+	}
+	return false
 }
 
 func (h *OIDC) Authenticated(next http.Handler) http.Handler {
