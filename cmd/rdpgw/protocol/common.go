@@ -117,6 +117,8 @@ func readHeader(data []byte) (packetType uint16, size uint32, packet []byte, err
 
 // forwards data from a Connection to Transport and wraps it in the rdpgw protocol
 func forward(in net.Conn, tunnel *Tunnel) {
+	// closes the server connection when the server side fails; Process also
+	// closes it when the channel ends, so a second Close here is expected
 	defer in.Close()
 
 	b1 := new(bytes.Buffer)
