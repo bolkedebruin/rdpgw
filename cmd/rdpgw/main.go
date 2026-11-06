@@ -73,9 +73,12 @@ func initOIDC(callbackUrl *url.URL) *web.OIDC {
 
 func main() {
 	// load config
-	_, err := flags.Parse(&opts)
-	if err != nil {
-		panic(err)
+	if _, err := flags.Parse(&opts); err != nil {
+		if flags.WroteHelp(err) {
+			return
+		}
+		// go-flags has already printed the error
+		os.Exit(1)
 	}
 	conf = config.Load(opts.ConfigFile)
 
