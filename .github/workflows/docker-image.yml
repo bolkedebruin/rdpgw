@@ -23,22 +23,15 @@ jobs:
         with:
          username: ${{ secrets.DOCKER_USER }}
          password: ${{ secrets.DOCKER_PASSWORD }}
-      - name: Build and push - latest
+      # master is published as latest, a v* tag as that version
+      - name: Build and push
         uses: docker/build-push-action@v7
         with:
           context: ./dev/docker
           file: ./dev/docker/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ github.repository_owner }}/rdpgw:latest
-      - name: Build and push - latest
-        uses: docker/build-push-action@v7
-        with:
-          context: ./dev/docker
-          file: ./dev/docker/Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ github.repository_owner }}/rdpgw:${{ github.ref_name }}
+          tags: ${{ github.repository_owner }}/rdpgw:${{ github.ref_type == 'tag' && github.ref_name || 'latest' }}
       - name: Update Docker Hub Description
         uses: peter-evans/dockerhub-description@v5
         with:
