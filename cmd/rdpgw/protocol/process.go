@@ -43,6 +43,13 @@ func NewProcessor(gw *Gateway, tunnel *Tunnel) *Processor {
 const tunnelId = 10
 
 func (p *Processor) Process(ctx context.Context) error {
+	// forward only closes the server connection when the server side fails, so a
+	// channel closed by the client (or a broken tunnel) would leave it open
+	defer func() {
+		if p.tunnel.rwc != nil {
+			p.tunnel.rwc.Close()
+		}
+	}()
 	for {
 		//pt, sz, pkt, err := p.tunnel.Read()
 		messages, err := p.tunnel.Read()
