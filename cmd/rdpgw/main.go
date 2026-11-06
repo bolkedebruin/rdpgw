@@ -66,6 +66,7 @@ func initOIDC(callbackUrl *url.URL) *web.OIDC {
 	o := web.OIDCConfig{
 		OAuth2Config:      &oauthConfig,
 		OIDCTokenVerifier: verifier,
+		UsernameClaim:     conf.OpenId.UsernameClaim,
 	}
 
 	return o.New()

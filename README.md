@@ -205,6 +205,9 @@ OpenId:
  ProviderUrl: http://keycloak/auth/realms/test
  ClientId: rdpgw
  ClientSecret: your-secret
+ # claim that holds the username; by default the first of preferred_username,
+ # unique_name, upn and username. email requires email_verified.
+ # UsernameClaim: email
 # Kerberos:
 #  Keytab: /etc/keytabs/rdpgw.keytab
 #  Krb5conf: /etc/krb5.conf

@@ -20,6 +20,25 @@ Caps:
   TokenAuth: true
 ```
 
+### Username claim
+
+The gateway takes the username from the ID token. By default it uses the first
+of these claims that is present: `preferred_username`, `unique_name`, `upn`,
+`username`. To use a different claim, set `UsernameClaim`:
+
+```yaml
+OpenId:
+  UsernameClaim: email
+```
+
+When `UsernameClaim` is set, only that claim is used. The `email` claim is only
+accepted when the provider sends `email_verified: true`, because many providers
+let users change their email address.
+
+The username selects the hosts a user can connect to (`{{ preferred_username }}`
+in `Server.Hosts`) and becomes the RDP username. To turn an email address into
+a Windows login, use `Client.SplitUserDomain` or `Client.UsernameTemplate`.
+
 ## Authentication Flow
 
 1. User navigates to `https://your-gateway/connect`
@@ -57,7 +76,13 @@ OpenId:
   ProviderUrl: https://accounts.google.com
   ClientId: your-google-client-id.googleusercontent.com
   ClientSecret: your-google-secret
+  # Google does not send preferred_username, only email
+  UsernameClaim: email
 ```
+
+The gateway accepts every account that the provider authenticates. With an
+External OAuth consent screen that is any Google account, so use an Internal app
+(Google Workspace) to limit sign-in to your organization.
 
 ## Security Considerations
 

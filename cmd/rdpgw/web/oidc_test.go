@@ -7,43 +7,112 @@ import (
 
 func TestFindUserNameInClaims(t *testing.T) {
 	cases := []struct {
-		data map[string]interface{}
-		ret  string
-		name string
+		name    string
+		claim   string
+		data    map[string]interface{}
+		ret     string
+		wantErr bool
 	}{
 		{
-			data: map[string]interface{}{
-				"preferred_username": "exists",
-			},
-			ret:  "exists",
 			name: "preferred_username",
+			data: map[string]interface{}{"preferred_username": "exists"},
+			ret:  "exists",
 		},
 		{
-			data: map[string]interface{}{
-				"upn": "exists",
-			},
-			ret:  "exists",
 			name: "upn",
-		},
-		{
-			data: map[string]interface{}{
-				"unique_name": "exists",
-			},
+			data: map[string]interface{}{"upn": "exists"},
 			ret:  "exists",
-			name: "unique_name",
 		},
 		{
+			name: "unique_name",
+			data: map[string]interface{}{"unique_name": "exists"},
+			ret:  "exists",
+		},
+		{
+			name: "username",
+			data: map[string]interface{}{"username": "exists"},
+			ret:  "exists",
+		},
+		{
+			name: "default order",
+			data: map[string]interface{}{"upn": "upn", "preferred_username": "preferred"},
+			ret:  "preferred",
+		},
+		{
+			name: "empty value is skipped",
+			data: map[string]interface{}{"preferred_username": "", "upn": "upn"},
+			ret:  "upn",
+		},
+		{
+			name:    "no claim",
+			data:    map[string]interface{}{"fail": "exists"},
+			wantErr: true,
+		},
+		{
+			name:    "email is not a default claim",
+			data:    map[string]interface{}{"email": "user@example.com", "email_verified": true},
+			wantErr: true,
+		},
+		{
+			name:  "configured claim",
+			claim: "email",
+			data:  map[string]interface{}{"email": "user@example.com", "email_verified": true},
+			ret:   "user@example.com",
+		},
+		{
+			name:  "configured claim ignores defaults",
+			claim: "email",
 			data: map[string]interface{}{
-				"fail": "exists",
+				"preferred_username": "preferred",
+				"email":              "user@example.com",
+				"email_verified":     true,
 			},
-			ret:  "",
-			name: "fail",
+			ret: "user@example.com",
+		},
+		{
+			name:    "configured claim missing",
+			claim:   "email",
+			data:    map[string]interface{}{"preferred_username": "preferred"},
+			wantErr: true,
+		},
+		{
+			name:  "email verified as string",
+			claim: "email",
+			data:  map[string]interface{}{"email": "user@example.com", "email_verified": "true"},
+			ret:   "user@example.com",
+		},
+		{
+			name:    "email not verified",
+			claim:   "email",
+			data:    map[string]interface{}{"email": "user@example.com", "email_verified": false},
+			wantErr: true,
+		},
+		{
+			name:    "email verification missing",
+			claim:   "email",
+			data:    map[string]interface{}{"email": "user@example.com"},
+			wantErr: true,
+		},
+		{
+			name:  "other configured claim",
+			claim: "sAMAccountName",
+			data:  map[string]interface{}{"sAMAccountName": "user", "preferred_username": "preferred"},
+			ret:   "user",
 		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			s := findUsernameInClaims(tc.data)
+			s, err := findUsernameInClaims(tc.data, tc.claim)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("expected an error, got username %q", s)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 			if s != tc.ret {
 				t.Fatalf("expected return: %v, got: %v", tc.ret, s)
 			}
