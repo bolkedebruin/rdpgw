@@ -105,16 +105,14 @@ func (s *AuthServiceImpl) NTLM(ctx context.Context, message *auth.NtlmRequest) (
 }
 
 func main() {
-	_, err := flags.Parse(&opts)
-	if err != nil {
-		var fErr *flags.Error
-		if errors.As(err, &fErr) {
-			if fErr.Type == flags.ErrHelp {
-				fmt.Printf("Acknowledgements:\n")
-				fmt.Printf(" - This product includes software developed by the Thomson Reuters Global Resources. (go-ntlm - https://github.com/m7913d/go-ntlm - BSD-4 License)\n")
-			}
+	if _, err := flags.Parse(&opts); err != nil {
+		if flags.WroteHelp(err) {
+			fmt.Printf("Acknowledgements:\n")
+			fmt.Printf(" - This product includes software developed by the Thomson Reuters Global Resources. (go-ntlm - https://github.com/m7913d/go-ntlm - BSD-4 License)\n")
+			return
 		}
-		return
+		// go-flags has already printed the error
+		os.Exit(1)
 	}
 
 	conf = config.Load(opts.ConfigFile)

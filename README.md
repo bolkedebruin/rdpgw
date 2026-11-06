@@ -157,6 +157,9 @@ Server:
  GatewayAddress: localhost
  # port to listen on (change to 80 or equivalent if not using TLS)
  Port: 443
+ # local address to bind both the gateway and automatic TLS challenge listeners.
+ # Empty binds to all interfaces. IPv4 and IPv6 addresses are supported.
+ # BindAddress: 127.0.0.1
  # list of acceptable desktop hosts to connect to
  Hosts:
   - localhost:3389
