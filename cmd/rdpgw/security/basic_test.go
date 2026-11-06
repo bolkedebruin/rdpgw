@@ -34,7 +34,7 @@ func TestCheckHost(t *testing.T) {
 
 	HostSelection = "signed"
 	if ok, err := CheckHost(ctx, host); ok || err == nil {
-		t.Fatalf("signed host selection isnt supported at the moment")
+		t.Fatalf("%s should NOT be allowed with host selection %s when it differs from the token host", host, HostSelection)
 	}
 
 	HostSelection = "roundrobin"
@@ -47,4 +47,51 @@ func TestCheckHost(t *testing.T) {
 		t.Fatalf("%s should be allowed with host selection %s (err: %s)", host, HostSelection, err)
 	}
 
+}
+
+func TestCheckHostSigned(t *testing.T) {
+	prevSel, prevHosts := HostSelection, Hosts
+	t.Cleanup(func() { HostSelection, Hosts = prevSel, prevHosts })
+
+	HostSelection = "signed"
+	Hosts = []string{"10.0.0.5:3389", "10.0.0.6:3389", "my-{{ preferred_username }}-host:3389"}
+
+	newUserCtx := func(target, user string) context.Context {
+		tun := &protocol.Tunnel{TargetServer: target, User: identity.NewUser()}
+		tun.User.SetUserName(user)
+		return context.WithValue(context.Background(), protocol.CtxTunnel, tun)
+	}
+	newCtx := func(target string) context.Context { return newUserCtx(target, "") }
+
+	cases := []struct {
+		name   string
+		ctx    context.Context
+		host   string
+		wantOK bool
+	}{
+		{"token host on allow-list", newCtx("10.0.0.5:3389"), "10.0.0.5:3389", true},
+		{"channel host differs from token host", newCtx("10.0.0.5:3389"), "10.0.0.6:3389", false},
+		{"token host not on allow-list", newCtx("10.0.0.9:3389"), "10.0.0.9:3389", false},
+		{"no target bound in token", newCtx(""), "10.0.0.5:3389", false},
+		{"no tunnel in context", context.Background(), "10.0.0.5:3389", false},
+		{"templated host, full username", newUserCtx("my-alice-host:3389", "alice"), "my-alice-host:3389", true},
+		{"templated host, username with domain", newUserCtx("my-alice@corp.com-host:3389", "alice@corp.com"), "my-alice@corp.com-host:3389", true},
+		{"templated host, domain split from subject", newUserCtx("my-alice@corp.com-host:3389", "alice"), "my-alice@corp.com-host:3389", true},
+		{"templated host, other user", newUserCtx("my-alice-host:3389", "bob"), "my-alice-host:3389", false},
+		{"templated host, username prefix only", newUserCtx("my-alice2-host:3389", "alice"), "my-alice2-host:3389", false},
+		{"templated host, no username in token", newUserCtx("my-alice-host:3389", ""), "my-alice-host:3389", false},
+		{"templated host, wrong suffix", newUserCtx("my-alice-other:3389", "alice"), "my-alice-other:3389", false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ok, err := CheckHost(tc.ctx, tc.host)
+			if ok != tc.wantOK {
+				t.Fatalf("CheckHost(%s) = %v (err: %v), want %v", tc.host, ok, err, tc.wantOK)
+			}
+			if !tc.wantOK && err == nil {
+				t.Fatalf("CheckHost(%s) denied without an error", tc.host)
+			}
+		})
+	}
 }

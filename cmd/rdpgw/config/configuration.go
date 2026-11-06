@@ -300,6 +300,10 @@ func Load(configFile string) Configuration {
 		log.Fatalf("host selection is set to `signed` but `querytokensigningkey` is not set")
 	}
 
+	if Conf.Server.HostSelection == "signed" && !Conf.Caps.TokenAuth {
+		log.Fatalf("host selection is set to `signed` but `caps.tokenauth` is disabled; the signed host is carried in the PAA token")
+	}
+
 	if Conf.Server.BasicAuthEnabled() && Conf.Server.Tls == "disable" {
 		log.Fatalf("basicauth=local and tls=disable are mutually exclusive")
 	}
