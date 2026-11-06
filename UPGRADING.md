@@ -1,6 +1,48 @@
 # Upgrading
 
-## Unreleased
+## Upgrading from 2.X to 3.0
+
+### Building from source requires Go 1.26
+
+`go.mod` now requires Go 1.26 or later. The container images build with
+Go 1.27. `go.sum` is committed, so builds verify every module against it.
+
+### Header authentication requires `Header.TrustedProxies`
+
+Header authentication previously trusted any request that carried the
+configured user header. Any client that reached rdpgw directly could
+log in as any user by setting that header.
+
+When header authentication is enabled, rdpgw now refuses to start if
+`Header.TrustedProxies` is empty, and requests from outside those CIDRs
+get `401`. List the proxy that sets the header:
+
+```yaml
+Header:
+  UserHeader: X-Forwarded-User
+  TrustedProxies:
+    - 10.0.0.0/8        # the proxy's egress subnet
+```
+
+Configure the proxy to remove any copy of the user header that the
+client sends. See [docs/header-authentication.md](docs/header-authentication.md).
+
+### Existing RDP files stop working
+
+The gateway access token in downloaded RDP files has a new format.
+Files downloaded before the upgrade are rejected; download a new one.
+
+### OIDC logins without a username claim are rejected
+
+When the ID token had none of `preferred_username`, `unique_name`,
+`upn` or `username`, the login could continue with an empty username.
+It now fails with `403`. If your provider only sends `email` (Google),
+set `OpenId.UsernameClaim: email`. See
+[docs/openid-authentication.md](docs/openid-authentication.md).
+
+### The `master` Docker image tag is no longer updated
+
+Pushes to master publish `latest`; releases publish their version tag.
 
 ### Container image no longer bakes a TLS cert and runs as UID 1001
 
