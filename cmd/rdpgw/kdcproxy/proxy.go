@@ -2,6 +2,7 @@ package kdcproxy
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	krbconfig "github.com/bolkedebruin/gokrb5/v8/config"
 	"github.com/jcmturner/gofork/encoding/asn1"
@@ -17,6 +18,9 @@ const (
 	systemConfigPath = "/etc/krb5.conf"
 	timeout          = 5 * time.Second
 )
+
+// errRealmNotServed is returned for a realm that is not in krb5.conf
+var errRealmNotServed = errors.New("realm not served by this proxy")
 
 type KdcProxyMsg struct {
 	Message []byte `asn1:"tag:0,explicit"`
@@ -82,6 +86,11 @@ func (k KerberosProxy) Handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	krb5resp, err := k.forward(msg.Realm, msg.Message)
+	if errors.Is(err, errRealmNotServed) {
+		log.Printf("kdc proxy: refusing request for realm %q: %s", msg.Realm, err)
+		http.Error(w, "Realm not served", http.StatusForbidden)
+		return
+	}
 	if err != nil {
 		log.Printf("cannot forward to kdc due to %s", err)
 		http.Error(w, "Service unavailable", http.StatusServiceUnavailable)
@@ -109,6 +118,9 @@ func (k KerberosProxy) Handler(w http.ResponseWriter, r *http.Request) {
 func (k *KerberosProxy) forward(realm string, data []byte) (resp []byte, err error) {
 	if realm == "" {
 		realm = k.krb5Config.LibDefaults.DefaultRealm
+	}
+	if !k.servesRealm(realm) {
+		return nil, errRealmNotServed
 	}
 	if len(data) < 4 || int(binary.BigEndian.Uint32(data[:4])) != len(data)-4 {
 		return nil, fmt.Errorf("malformed request for realm %s", realm)
@@ -140,6 +152,26 @@ func (k *KerberosProxy) forward(realm string, data []byte) (resp []byte, err err
 		return resp, nil
 	}
 	return nil, fmt.Errorf("no replies received from kdcs for realm %s", realm)
+}
+
+// servesRealm reports whether requests for realm are forwarded: the default
+// realm and the realms in the [realms] section of krb5.conf. The realm comes
+// from an unauthenticated client. With dns_lookup_kdc any other realm would
+// make the proxy look up the KDCs in the client's own DNS, and send the
+// request to whatever host and port those records name.
+func (k *KerberosProxy) servesRealm(realm string) bool {
+	if realm == "" {
+		return false
+	}
+	if realm == k.krb5Config.LibDefaults.DefaultRealm {
+		return true
+	}
+	for _, r := range k.krb5Config.Realms {
+		if r.Realm == realm {
+			return true
+		}
+	}
+	return false
 }
 
 func exchange(kdc Kdc, data []byte) ([]byte, error) {

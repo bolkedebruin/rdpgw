@@ -3,6 +3,7 @@ package kdcproxy
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -182,5 +183,37 @@ func TestForwardRejectsBadLength(t *testing.T) {
 	k := proxyFor(t, "127.0.0.1:1")
 	if _, err := k.forward("EXAMPLE.TEST", []byte{0, 0, 0, 9, 1}); err == nil {
 		t.Fatal("accepted a message whose length prefix is wrong")
+	}
+}
+
+// The realm comes from an unauthenticated client. Only the default realm and
+// the realms in krb5.conf are served; for any other realm the proxy must not
+// look up KDCs, even with dns_lookup_kdc enabled.
+func TestForwardOnlyServesConfiguredRealms(t *testing.T) {
+	got := make(chan []byte, 4)
+	addr := tcpKdc(t, []byte("rep"), got)
+	cfg, err := krbconfig.NewFromString(fmt.Sprintf("[libdefaults]\n default_realm = EXAMPLE.TEST\n dns_lookup_kdc = true\n"+
+		"[realms]\n EXAMPLE.TEST = {\n  kdc = %s\n }\n CHILD.EXAMPLE.TEST = {\n  kdc = %s\n }\n", addr, addr))
+	if err != nil {
+		t.Fatal(err)
+	}
+	k := KerberosProxy{krb5Config: cfg}
+
+	for _, realm := range []string{"", "EXAMPLE.TEST", "CHILD.EXAMPLE.TEST"} {
+		if resp := post(t, k, realm, []byte("req")); !bytes.Equal(resp, frame([]byte("rep"))) {
+			t.Errorf("realm %q: reply %q", realm, resp)
+		}
+	}
+
+	for _, realm := range []string{"ATTACKER.TEST", "example.test", "EXAMPLE.TEST.ATTACKER.TEST"} {
+		if _, err := k.forward(realm, frame([]byte("req"))); !errors.Is(err, errRealmNotServed) {
+			t.Errorf("realm %q: err = %v, want errRealmNotServed", realm, err)
+		}
+		req, _ := asn1.Marshal(KdcProxyMsg{Message: frame([]byte("req")), Realm: realm})
+		w := httptest.NewRecorder()
+		k.Handler(w, httptest.NewRequest(http.MethodPost, "/KdcProxy", bytes.NewReader(req)))
+		if w.Code != http.StatusForbidden {
+			t.Errorf("realm %q: status %d, want %d", realm, w.Code, http.StatusForbidden)
+		}
 	}
 }
