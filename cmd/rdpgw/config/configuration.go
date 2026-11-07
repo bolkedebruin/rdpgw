@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"strings"
 
@@ -80,7 +81,15 @@ type Configuration struct {
 }
 
 type ServerConfig struct {
-	GatewayAddress       string   `koanf:"gatewayaddress"`
+	GatewayAddress string `koanf:"gatewayaddress"`
+	// GatewayAddressIPv4 and GatewayAddressIPv6 replace GatewayAddress in
+	// rdp files downloaded over that address family. Point each at a name
+	// with only A or only AAAA records: VerifyClientIp binds the token to
+	// the download address, so a dual-stack client must reach the gateway
+	// over the same family. They only apply with Caps.TokenAuth and
+	// Security.VerifyClientIp enabled.
+	GatewayAddressIPv4   string   `koanf:"gatewayaddressipv4"`
+	GatewayAddressIPv6   string   `koanf:"gatewayaddressipv6"`
 	Port                 int      `koanf:"port"`
 	BindAddress          string   `koanf:"bindaddress"`
 	CertFile             string   `koanf:"certfile"`
@@ -320,12 +329,23 @@ func Load(configFile string) Configuration {
 		log.Fatalf("header authentication is configured but no user header was specified")
 	}
 
-	// prepend '//' if required for URL parsing
-	if !strings.Contains(Conf.Server.GatewayAddress, "//") {
-		Conf.Server.GatewayAddress = "//" + Conf.Server.GatewayAddress
-	}
-
 	return Conf
+}
+
+// ParseGatewayAddress parses a gateway address given as a host, host:port
+// or URL. Without a scheme it defaults to https.
+func ParseGatewayAddress(address string) (*url.URL, error) {
+	if !strings.Contains(address, "//") {
+		address = "//" + address
+	}
+	u, err := url.Parse(address)
+	if err != nil {
+		return nil, err
+	}
+	if u.Scheme == "" {
+		u.Scheme = "https"
+	}
+	return u, nil
 }
 
 func (s *ServerConfig) OpenIDEnabled() bool {

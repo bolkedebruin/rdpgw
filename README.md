@@ -155,6 +155,14 @@ Server:
  Tls: auto
  # gateway address advertised in the rdp files and browser
  GatewayAddress: localhost
+ # gateway addresses advertised in rdp files downloaded over IPv4 or IPv6. Use names
+ # with only A or only AAAA records, so a dual-stack client connects over the same
+ # family it downloaded the rdp file with. They only apply with Caps.TokenAuth and
+ # Security.VerifyClientIp enabled. A client that downloads over IPv6 is sent to the
+ # IPv6 name, so it can only connect if its rdp client also has working IPv6. The TLS
+ # certificate must include these names.
+ # GatewayAddressIPv4: gw4.example.com
+ # GatewayAddressIPv6: gw6.example.com
  # port to listen on (change to 80 or equivalent if not using TLS)
  Port: 443
  # local address to bind both the gateway and automatic TLS challenge listeners.
@@ -257,6 +265,8 @@ Security:
   EnableUserToken: true
   # Verifies if the ip used to connect to download the rdp file equals from where the
   # connection is opened.
+  # A dual-stack client can download over IPv6 and connect over IPv4, which this
+  # refuses. Set Server.GatewayAddressIPv4 and Server.GatewayAddressIPv6 to prevent that.
   VerifyClientIp: true
 ```
 

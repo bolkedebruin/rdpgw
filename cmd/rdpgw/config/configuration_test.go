@@ -166,3 +166,28 @@ func TestHeaderConfigValidation(t *testing.T) {
 		})
 	}
 }
+func TestParseGatewayAddress(t *testing.T) {
+	cases := []struct {
+		in, scheme, host string
+	}{
+		{"gw.example.com", "https", "gw.example.com"},
+		{"gw.example.com:8443", "https", "gw.example.com:8443"},
+		{"https://gw.example.com", "https", "gw.example.com"},
+		{"http://gw.example.com:8080/x", "http", "gw.example.com:8080"},
+		{"[2001:db8::1]:443", "https", "[2001:db8::1]:443"},
+		{"", "https", ""},
+	}
+	for _, tc := range cases {
+		u, err := ParseGatewayAddress(tc.in)
+		if err != nil {
+			t.Errorf("ParseGatewayAddress(%q): %v", tc.in, err)
+			continue
+		}
+		if u.Scheme != tc.scheme || u.Host != tc.host {
+			t.Errorf("ParseGatewayAddress(%q) = %s://%s, want %s://%s", tc.in, u.Scheme, u.Host, tc.scheme, tc.host)
+		}
+	}
+	if _, err := ParseGatewayAddress("gw.example.com:port"); err == nil {
+		t.Error("ParseGatewayAddress accepted an invalid port")
+	}
+}
