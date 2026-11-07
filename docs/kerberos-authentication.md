@@ -98,6 +98,7 @@ RDPGW includes KDC proxy functionality for environments where clients cannot dir
 - Endpoint: `https://your-gateway/KdcProxy`
 - Supports MS-KKDCP protocol
 - Automatically configured when Kerberos authentication is enabled
+- Only forwards requests for the `default_realm` and the realms listed in `[realms]` of `krb5.conf`. Requests for other realms get `403`. List every realm clients need tickets for, such as trusted domains. With `dns_lookup_kdc = true` the KDCs of a listed realm can still come from DNS.
 
 ## Client Configuration
 
