@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"time"
 
 	"github.com/bolkedebruin/rdpgw/cmd/rdpgw/identity"
@@ -49,13 +50,29 @@ func CheckSession(next protocol.CheckHostFunc) protocol.CheckHostFunc {
 
 		// use identity from context rather then set by tunnel
 		id := identity.FromCtx(ctx)
-		if VerifyClientIP && tunnel.RemoteAddr != id.GetAttribute(identity.AttrClientIp) {
+		clientIp, _ := id.GetAttribute(identity.AttrClientIp).(string)
+		if VerifyClientIP && (clientIp == "" || tunnel.RemoteAddr != clientIp) {
 			log.Printf("Current client ip address %s does not match token client ip %s",
-				id.GetAttribute(identity.AttrClientIp), tunnel.RemoteAddr)
+				clientIp, tunnel.RemoteAddr)
+			if ipFamilyDiffers(clientIp, tunnel.RemoteAddr) {
+				log.Printf("The rdp file was downloaded over one ip family and the gateway was " +
+					"reached over the other. Set server.gatewayaddressipv4 and server.gatewayaddressipv6 " +
+					"to names with only A and only AAAA records to keep dual-stack clients on one family")
+			}
 			return false, nil
 		}
 		return next(ctx, host)
 	}
+}
+
+// ipFamilyDiffers reports whether a and b are valid ip addresses of
+// different families
+func ipFamilyDiffers(a, b string) bool {
+	ipA, ipB := net.ParseIP(a), net.ParseIP(b)
+	if ipA == nil || ipB == nil {
+		return false
+	}
+	return (ipA.To4() == nil) != (ipB.To4() == nil)
 }
 
 func CheckPAACookie(ctx context.Context, tokenString string) (bool, error) {

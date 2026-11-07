@@ -657,3 +657,56 @@ func genKeypair(fs afero.Fs) error {
 
 	return nil
 }
+
+// issue #180: the rdp file names the gateway for the family the client
+// downloaded it over, so the tunnel arrives from the address in the token
+func TestHandler_HandleDownload_GatewayPerFamily(t *testing.T) {
+	u, _ := url.Parse(gateway)
+	v4, _ := url.Parse("https://gw4.example.com")
+	v6, _ := url.Parse("https://gw6.example.com:8443")
+
+	cases := []struct {
+		name     string
+		clientIp string
+		v4, v6   *url.URL
+		want     string
+	}{
+		{"ipv4 client", "192.0.2.10", v4, v6, v4.Host},
+		{"ipv6 client", "2001:db8::10", v4, v6, v6.Host},
+		{"ipv4-mapped ipv6 client", "::ffff:192.0.2.10", v4, v6, v4.Host},
+		{"ipv6 client, only ipv4 name set", "2001:db8::10", v4, nil, u.Host},
+		{"ipv4 client, only ipv6 name set", "192.0.2.10", nil, v6, u.Host},
+		{"not set", "2001:db8::10", nil, nil, u.Host},
+		{"unparseable client ip", "unknown", v4, v6, u.Host},
+		{"no client ip", "", v4, v6, u.Host},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			id := identity.NewUser()
+			id.SetUserName(testuser)
+			id.SetAuthenticated(true)
+			if tc.clientIp != "" {
+				id.SetAttribute(identity.AttrClientIp, tc.clientIp)
+			}
+			req := identity.AddToRequestCtx(id, httptest.NewRequest("GET", "/connect", nil))
+
+			c := Config{
+				HostSelection:      "roundrobin",
+				Hosts:              hosts,
+				PAATokenGenerator:  paaTokenMock,
+				GatewayAddress:     u,
+				GatewayAddressIPv4: tc.v4,
+				GatewayAddressIPv6: tc.v6,
+			}
+			rr := httptest.NewRecorder()
+			c.NewHandler().HandleDownload(rr, req)
+			if rr.Code != http.StatusOK {
+				t.Fatalf("status %d: %s", rr.Code, rr.Body.String())
+			}
+			data := rdpToMap(strings.Split(rr.Body.String(), rdp.CRLF))
+			if data["gatewayhostname"] != tc.want {
+				t.Errorf("gatewayhostname = %q, want %q", data["gatewayhostname"], tc.want)
+			}
+		})
+	}
+}

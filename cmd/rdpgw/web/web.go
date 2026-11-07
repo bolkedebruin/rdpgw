@@ -39,6 +39,10 @@ type Config struct {
 	Hosts              []string
 	HostSelection      string
 	GatewayAddress     *url.URL
+	// GatewayAddressIPv4 and GatewayAddressIPv6, when set, replace
+	// GatewayAddress in rdp files downloaded over that address family
+	GatewayAddressIPv4 *url.URL
+	GatewayAddressIPv6 *url.URL
 	RdpOpts            RdpOpts
 	TemplateFile       string
 	RdpSigningCert     string
@@ -100,6 +104,8 @@ type Handler struct {
 	queryInfo          QueryInfoFunc
 	queryTokenIssuer   string
 	gatewayAddress     *url.URL
+	gatewayAddressIPv4 *url.URL
+	gatewayAddressIPv6 *url.URL
 	hosts              []string
 	hostSelection      string
 	rdpOpts            RdpOpts
@@ -204,6 +210,8 @@ func (c *Config) NewHandler() *Handler {
 		queryInfo:          c.QueryInfo,
 		queryTokenIssuer:   c.QueryTokenIssuer,
 		gatewayAddress:     c.GatewayAddress,
+		gatewayAddressIPv4: c.GatewayAddressIPv4,
+		gatewayAddressIPv6: c.GatewayAddressIPv6,
 		hosts:              c.Hosts,
 		hostSelection:      c.HostSelection,
 		rdpOpts:            c.RdpOpts,
@@ -506,6 +514,23 @@ func (h *Handler) getHost(ctx context.Context, u *url.URL) (string, error) {
 	}
 }
 
+// gatewayHostFor returns the gateway host for the rdp file of a client.
+// The PAA token is bound to the address that downloads the file
+// (Security.VerifyClientIp). A dual-stack client can download over IPv6
+// and then connect over IPv4, which the gateway refuses. A gateway name
+// for the download family keeps the client on that family.
+func (h *Handler) gatewayHostFor(clientIp string) string {
+	ip := net.ParseIP(clientIp)
+	switch {
+	case ip == nil:
+	case ip.To4() != nil && h.gatewayAddressIPv4 != nil:
+		return h.gatewayAddressIPv4.Host
+	case ip.To4() == nil && h.gatewayAddressIPv6 != nil:
+		return h.gatewayAddressIPv6.Host
+	}
+	return h.gatewayAddress.Host
+}
+
 func (h *Handler) HandleDownload(w http.ResponseWriter, r *http.Request) {
 	id := identity.FromRequestCtx(r)
 	ctx := r.Context()
@@ -607,7 +632,8 @@ func (h *Handler) HandleDownload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	d.Settings.FullAddress = host
-	d.Settings.GatewayHostname = h.gatewayAddress.Host
+	clientIp, _ := id.GetAttribute(identity.AttrClientIp).(string)
+	d.Settings.GatewayHostname = h.gatewayHostFor(clientIp)
 	d.Settings.GatewayCredentialsSource = rdp.SourceCookie
 	d.Settings.GatewayAccessToken = token
 	d.Settings.GatewayCredentialMethod = 1

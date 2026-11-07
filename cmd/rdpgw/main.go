@@ -84,14 +84,12 @@ func main() {
 	conf = config.Load(opts.ConfigFile)
 
 	// set callback url and external advertised gateway address
-	url, err := url.Parse(conf.Server.GatewayAddress)
+	url, err := config.ParseGatewayAddress(conf.Server.GatewayAddress)
 	if err != nil {
-		log.Printf("Cannot parse server gateway address %s due to %s", url, err)
-	}
-	if url.Scheme == "" {
-		url.Scheme = "https"
+		log.Fatalf("Cannot parse server gateway address %s due to %s", conf.Server.GatewayAddress, err)
 	}
 	url.Path = "callback"
+	gatewayIPv4, gatewayIPv6 := familyGatewayAddresses(conf)
 
 	// set security options
 	security.VerifyClientIP = conf.Security.VerifyClientIp
@@ -126,6 +124,8 @@ func main() {
 			OverridableRdpKeys: conf.Client.RdpOverridableKeys,
 		},
 		GatewayAddress:           url,
+		GatewayAddressIPv4:       gatewayIPv4,
+		GatewayAddressIPv6:       gatewayIPv6,
 		TemplateFile:             conf.Client.Defaults,
 		RdpSigningCert:           conf.Client.SigningCert,
 		RdpSigningKey:            conf.Client.SigningKey,
@@ -180,7 +180,7 @@ func main() {
 
 			certMgr := autocert.Manager{
 				Prompt:     autocert.AcceptTOS,
-				HostPolicy: autocert.HostWhitelist(url.Host),
+				HostPolicy: autocert.HostWhitelist(hostnames(url, gatewayIPv4, gatewayIPv6)...),
 				Cache:      autocert.DirCache("/tmp/rdpgw"),
 			}
 			cfg.GetCertificate = certMgr.GetCertificate
@@ -349,4 +349,45 @@ func main() {
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}
+}
+
+// familyGatewayAddresses returns the per address family gateway
+// addresses. They only apply when the PAA token is bound to the client ip
+// (caps.tokenauth and security.verifyclientip). Without that binding a
+// client that downloads over IPv6 can connect over IPv4, and an IPv6-only
+// name would only break clients without a working IPv6 path.
+func familyGatewayAddresses(conf config.Configuration) (*url.URL, *url.URL) {
+	v4 := familyGatewayAddress("gatewayaddressipv4", conf.Server.GatewayAddressIPv4)
+	v6 := familyGatewayAddress("gatewayaddressipv6", conf.Server.GatewayAddressIPv6)
+	if (v4 != nil || v6 != nil) && !(conf.Caps.TokenAuth && conf.Security.VerifyClientIp) {
+		log.Printf("Ignoring server.gatewayaddressipv4 and server.gatewayaddressipv6: " +
+			"they only apply when caps.tokenauth and security.verifyclientip are enabled")
+		return nil, nil
+	}
+	return v4, v6
+}
+
+// familyGatewayAddress parses an optional per address family gateway
+// address. It returns nil when the address is not set.
+func familyGatewayAddress(key string, address string) *url.URL {
+	if address == "" {
+		return nil
+	}
+	u, err := config.ParseGatewayAddress(address)
+	if err != nil || u.Host == "" {
+		log.Fatalf("server.%s: invalid gateway address %q", key, address)
+	}
+	return u
+}
+
+// hostnames returns the host names, without port, of the addresses that
+// are set
+func hostnames(addresses ...*url.URL) []string {
+	var names []string
+	for _, u := range addresses {
+		if u != nil {
+			names = append(names, u.Hostname())
+		}
+	}
+	return names
 }

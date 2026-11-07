@@ -192,3 +192,73 @@ func TestCheckPAACookieIsSelfContained(t *testing.T) {
 		t.Errorf("tunnel.User = %q, want %q", tun.User.UserName(), "alice")
 	}
 }
+
+// issue #180: a dual-stack client can download the rdp file over IPv6 and
+// reach the gateway over IPv4. The token is bound to the download address,
+// so that is refused; it stays refused, but the log names the cause.
+func TestCheckSessionClientIP(t *testing.T) {
+	SigningKey = []byte("5aa3a1568fe8421cd7e127d5ace28d2d")
+	HostSelection = "unsigned"
+	Hosts = []string{"rdp.example.com:3389"}
+	defer func() { VerifyClientIP = true }()
+
+	cases := []struct {
+		name     string
+		verify   bool
+		download string
+		tunnel   string
+		want     bool
+	}{
+		{"same ipv6", true, "2001:db8::10", "2001:db8::10", true},
+		{"same ipv4", true, "192.0.2.10", "192.0.2.10", true},
+		{"ipv6 download, ipv4 tunnel", true, "2001:db8::10", "192.0.2.10", false},
+		{"ipv4 download, ipv6 tunnel", true, "192.0.2.10", "2001:db8::10", false},
+		{"other ipv4", true, "192.0.2.10", "192.0.2.11", false},
+		{"no client ip on either side", true, "", "", false},
+		{"verification disabled", false, "2001:db8::10", "192.0.2.10", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			VerifyClientIP = tc.verify
+			issue := identity.NewUser()
+			issue.SetUserName("alice")
+			issue.SetAttribute(identity.AttrClientIp, tc.download)
+			token, err := GeneratePAAToken(context.WithValue(context.Background(), identity.CTXKey, issue),
+				"alice", "rdp.example.com:3389")
+			if err != nil {
+				t.Fatalf("GeneratePAAToken: %v", err)
+			}
+
+			id := identity.NewUser()
+			id.SetAttribute(identity.AttrClientIp, tc.tunnel)
+			ctx := context.WithValue(context.Background(), identity.CTXKey, id)
+			ctx = context.WithValue(ctx, protocol.CtxTunnel, &protocol.Tunnel{User: id})
+			if ok, err := CheckPAACookie(ctx, token); !ok {
+				t.Fatalf("CheckPAACookie: %v", err)
+			}
+			if got, _ := CheckSession(CheckHost)(ctx, "rdp.example.com:3389"); got != tc.want {
+				t.Errorf("CheckSession = %t, want %t", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestIPFamilyDiffers(t *testing.T) {
+	cases := []struct {
+		a, b string
+		want bool
+	}{
+		{"192.0.2.10", "2001:db8::10", true},
+		{"2001:db8::10", "192.0.2.10", true},
+		{"192.0.2.10", "192.0.2.11", false},
+		{"2001:db8::10", "2001:db8::11", false},
+		{"::ffff:192.0.2.10", "192.0.2.10", false},
+		{"not-an-ip", "192.0.2.10", false},
+		{"", "2001:db8::10", false},
+	}
+	for _, tc := range cases {
+		if got := ipFamilyDiffers(tc.a, tc.b); got != tc.want {
+			t.Errorf("ipFamilyDiffers(%q, %q) = %t, want %t", tc.a, tc.b, got, tc.want)
+		}
+	}
+}
