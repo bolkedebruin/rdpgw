@@ -238,7 +238,6 @@ func QueryInfo(ctx context.Context, tokenString string, issuer string) (string, 
 		log.Printf("Cannot get token %s", err)
 		return "", errors.New("cannot get token")
 	}
-	err = token.Claims(QuerySigningKey, &standard)
 	if err = token.Claims(QuerySigningKey, &standard); err != nil {
 		log.Printf("cannot verify signature %s", err)
 		return "", errors.New("cannot verify signature")
