@@ -329,7 +329,10 @@ func sanitizeRdpValue(field, v string) string {
 	b.Grow(len(v))
 	for i := 0; i < len(v); i++ {
 		c := v[i]
-		if c < 0x20 || c == 0x7f {
+		// When using enable_token_login in XRDP, 0x1f is used to split the received username
+		// and treat the last part as a password. Can be used with pam_jwt to authenticate
+		// users based on their RDPGW token.
+		if c != 0x1f && (c < 0x20 || c == 0x7f) {
 			continue
 		}
 		b.WriteByte(c)
