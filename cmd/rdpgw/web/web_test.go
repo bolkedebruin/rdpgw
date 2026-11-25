@@ -332,6 +332,24 @@ func TestHandler_HandleDownload_RdpOverrides(t *testing.T) {
 			wantContain: []string{"alternate shell:s:explorer.exe\r\n"},
 		},
 		{
+			name:        "redirection server name is not emitted by default",
+			wantStatus:  http.StatusOK,
+			wantMissing: []string{"use redirection server name"},
+		},
+		{
+			name:        "redirection server name from template is kept",
+			template:    "use redirection server name:i:1\r\n",
+			wantStatus:  http.StatusOK,
+			wantContain: []string{"use redirection server name:i:1\r\n"},
+		},
+		{
+			name:        "redirection server name override applies",
+			query:       "?useredirectionservername=1",
+			allow:       []string{"use redirection server name"},
+			wantStatus:  http.StatusOK,
+			wantContain: []string{"use redirection server name:i:1\r\n"},
+		},
+		{
 			name:        "url override cannot escape authoritative server fields",
 			query:       "?username=evil@attacker",
 			allow:       []string{"username"}, // operator footgun: still must not leak past server set

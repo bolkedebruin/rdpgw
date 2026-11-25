@@ -45,6 +45,7 @@ type RdpSettings struct {
 	GatewayAccessToken                    string `rdp:"gatewayaccesstoken"`
 	PromptCredentialsOnce                 bool   `rdp:"promptcredentialonce" default:"true"`
 	AuthenticationLevel                   int    `rdp:"authentication level" default:"3"`
+	UseRedirectionServerName              bool   `rdp:"use redirection server name" default:"false"`
 	EnableCredSSPSupport                  bool   `rdp:"enablecredsspsupport" default:"true"`
 	EnableRdsAasAuth                      bool   `rdp:"enablerdsaadauth" default:"false"`
 	DisableConnectionSharing              bool   `rdp:"disableconnectionsharing" default:"false"`

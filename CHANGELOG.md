@@ -45,3 +45,6 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 - `Server.TrustedProxies` (`[]string`, CIDR, default empty).
 - `Server.AllowedDestinationPorts` (`[]int`, default `[3389]`).
 - `Server.AllowPrivateDestinations` (`bool`, default `false`).
+- The `use redirection server name` RDP setting is now kept when set in the
+  `Client.Defaults` template and can be listed in `client.rdpoverridablekeys`.
+  It was silently dropped before. It is not emitted unless configured.
