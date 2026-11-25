@@ -392,6 +392,31 @@ The official Microsoft IOS and Android clients seem also more flexible.
 Third party clients like [FreeRDP](https://www.freerdp.com) might also provide more
 flexibility.
 
+### GNOME Remote Desktop (remote login)
+GNOME Remote Desktop in remote login mode (the GDM login screen, e.g. on Fedora)
+hands the connection over to the user's session after login using an RDP server
+redirection. Some clients (for example the Windows App on macOS) only complete
+that handover when the RDP file contains `use redirection server name:i:1`;
+without it the session can end on a black screen or a misleading error such as
+an expired password.
+
+rdpgw does not add this setting by default. Put it in the RDP template referenced
+by `Client.Defaults`:
+
+```yaml
+Client:
+  defaults: /etc/rdpgw/default.rdp
+```
+
+```
+use redirection server name:i:1
+```
+
+The rest of the generated file (gateway, host, username and token) is still filled
+in by rdpgw. Alternatively, add `use redirection server name` to
+`client.rdpoverridablekeys` and let users request
+`/connect?useredirectionservername=1`.
+
 ## TODO
 * Improve Web Interface
 
